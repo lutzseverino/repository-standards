@@ -32,8 +32,7 @@ move together. A repository using `standards-version: 1` may adopt releases
 
 ## Publish a standards change
 
-After the one-time bootstrap exception, standards changes use the normal issue
-and pull-request workflow.
+Standards changes use the normal issue and pull-request workflow.
 
 1. Change the normative document, profile, managed file, schema, or tool.
 2. Update tests and examples.

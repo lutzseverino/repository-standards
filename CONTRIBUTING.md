@@ -51,9 +51,3 @@ the implementation.
 
 Run the canonical validation command documented by this repository. CI must
 pass before squash merge. Delete the branch after merge.
-
-## Bootstrap exception
-
-The initial adoption of the shared repository standards may be pushed directly
-to `main` to avoid artificial migration churn. This one-time exception does not
-apply to subsequent work.
