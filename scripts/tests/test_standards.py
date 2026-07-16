@@ -34,7 +34,9 @@ class StandardsTests(unittest.TestCase):
     def base_manifest(self) -> dict:
         return {
             "standards-version": 1,
-            "standards-release": "1.0.0",
+            "standards-release": (standards_root() / "VERSION").read_text(
+                encoding="utf-8"
+            ).strip(),
             "profiles": ["common", "node-npm", "vite-react"],
             "variables": {},
             "local-fragments": {},

@@ -7,6 +7,13 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-16
+
+### Fixed
+
+- Build Java 17-compatible Paper plugins on JDK 21 so Google Java Format 1.35
+  can run in CI and release workflows.
+
 ## [1.0.0] - 2026-07-16
 
 ### Added
