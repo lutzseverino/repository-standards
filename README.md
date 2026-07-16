@@ -29,7 +29,7 @@ Each participating repository carries `.repository-standards.json`:
 ```json
 {
   "standards-version": 1,
-  "standards-release": "1.0.2",
+  "standards-release": "1.0.3",
   "profiles": ["common", "vite-react", "pnpm-workspace"],
   "variables": {},
   "local-fragments": {
@@ -92,21 +92,6 @@ python3 -m unittest discover -s scripts/tests -v
 Profiles are additive. For example, a pnpm monorepo containing Vite apps and a
 Spring service can select `common`, `pnpm-workspace`, `vite-react`, and
 `spring-boot`, plus `documentation` when it carries the standard docs tree.
-
-## Bootstrap policy
-
-The initial standards rollout may be pushed directly to `main` to avoid
-creating artificial issue and pull-request churn across existing repositories.
-That is a documented one-time bootstrap exception. After adoption, the normal
-flow is:
-
-```text
-issue -> typed branch -> conventional commits -> pull request -> CI/review
-      -> squash merge -> delete branch
-```
-
-See [Repository workflow](standards/repository-workflow.md) for the complete
-contract.
 
 ## Maintenance and rollout
 

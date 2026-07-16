@@ -7,6 +7,13 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-16
+
+### Changed
+
+- Removed completed bootstrap-exception commentary from normative workflow and
+  contribution guidance.
+
 ## [1.0.2] - 2026-07-16
 
 ### Fixed

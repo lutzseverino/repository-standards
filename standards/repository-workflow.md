@@ -11,10 +11,6 @@ Material behavior, architecture, release, and tooling changes start with an
 issue. Automated dependency updates and genuinely trivial typo fixes are
 explicit exceptions.
 
-The initial adoption of these standards across existing repositories may be
-pushed directly to `main`. This is a one-time bootstrap exception, not the
-steady-state workflow.
-
 ## Issue
 
 Use the project-task form for planned changes. Its sections are Context,

@@ -1,6 +1,6 @@
 # YAML is optional and requires PyYAML. JSON is the dependency-free default.
 standards-version: 1
-standards-release: 1.0.2
+standards-release: 1.0.3
 profiles:
   - common
   - node-npm
