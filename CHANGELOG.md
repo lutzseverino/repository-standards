@@ -7,6 +7,13 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-16
+
+### Fixed
+
+- Exempt Dependabot pull requests by their stable PR author rather than the
+  event actor, which may be a maintainer after an update-branch operation.
+
 ## [1.0.1] - 2026-07-16
 
 ### Fixed

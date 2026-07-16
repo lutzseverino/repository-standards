@@ -15,11 +15,11 @@ TITLE = re.compile(
 )
 ISSUE = re.compile(r"(?im)^Closes #[1-9][0-9]*\s*$")
 HEADINGS = ("Summary", "Motivation", "Impact", "Validation")
-EXEMPT_ACTORS = {"dependabot[bot]"}
+EXEMPT_AUTHORS = {"dependabot[bot]"}
 
 
-def validate(branch: str, title: str, body: str, actor: str) -> list[str]:
-    if actor in EXEMPT_ACTORS:
+def validate(branch: str, title: str, body: str, author: str) -> list[str]:
+    if author in EXEMPT_AUTHORS:
         return []
     errors: list[str] = []
     if not BRANCH.fullmatch(branch):
@@ -41,7 +41,7 @@ def main() -> int:
         os.environ.get("PR_BRANCH", ""),
         os.environ.get("PR_TITLE", ""),
         os.environ.get("PR_BODY", ""),
-        os.environ.get("PR_ACTOR", ""),
+        os.environ.get("PR_AUTHOR", ""),
     )
     if errors:
         print("Pull-request policy failed:", file=sys.stderr)

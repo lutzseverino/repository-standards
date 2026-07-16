@@ -29,7 +29,7 @@ Each participating repository carries `.repository-standards.json`:
 ```json
 {
   "standards-version": 1,
-  "standards-release": "1.0.1",
+  "standards-release": "1.0.2",
   "profiles": ["common", "vite-react", "pnpm-workspace"],
   "variables": {},
   "local-fragments": {
