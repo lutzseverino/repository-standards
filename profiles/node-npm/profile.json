@@ -1,0 +1,8 @@
+{
+  "name": "node-npm",
+  "description": "Standalone npm install-unit conventions",
+  "extends": [],
+  "files": [
+    {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 20}
+  ]
+}

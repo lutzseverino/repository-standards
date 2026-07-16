@@ -1,0 +1,20 @@
+# YAML is optional and requires PyYAML. JSON is the dependency-free default.
+standards-version: 1
+standards-release: 1.0.0
+profiles:
+  - common
+  - node-npm
+  - vite-react
+variables: {}
+local-fragments:
+  .gitignore:
+    - .repository-standards/gitignore.local
+repository-owned:
+  - README.md
+  - LICENSE
+  - docs/**
+  - src/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/ci.yml
+  - .github/workflows/release.yml

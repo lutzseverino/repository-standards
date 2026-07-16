@@ -1,0 +1,7 @@
+# Maven and Paper plugin builds
+target/
+*.class
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
+run/

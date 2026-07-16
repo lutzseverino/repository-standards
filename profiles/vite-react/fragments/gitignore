@@ -1,0 +1,5 @@
+# Vite and frontend tests
+dist/
+coverage/
+*.tsbuildinfo
+.vite/

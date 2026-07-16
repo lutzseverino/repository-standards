@@ -1,0 +1,14 @@
+{
+  "name": "documentation",
+  "description": "Exact shared documentation templates",
+  "extends": [],
+  "files": [
+    {"mode": "exact", "source": "files/docs/_templates/README.md", "target": "docs/_templates/README.md"},
+    {"mode": "exact", "source": "files/docs/_templates/index.template.md", "target": "docs/_templates/index.template.md"},
+    {"mode": "exact", "source": "files/docs/_templates/tutorial.template.md", "target": "docs/_templates/tutorial.template.md"},
+    {"mode": "exact", "source": "files/docs/_templates/how-to.template.md", "target": "docs/_templates/how-to.template.md"},
+    {"mode": "exact", "source": "files/docs/_templates/reference.template.md", "target": "docs/_templates/reference.template.md"},
+    {"mode": "exact", "source": "files/docs/_templates/explanation.template.md", "target": "docs/_templates/explanation.template.md"},
+    {"mode": "exact", "source": "files/docs/_templates/decision.template.md", "target": "docs/_templates/decision.template.md"}
+  ]
+}

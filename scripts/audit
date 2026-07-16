@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from lib.standards import audit_main
+
+
+if __name__ == "__main__":
+    raise SystemExit(audit_main())

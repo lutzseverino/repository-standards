@@ -1,0 +1,8 @@
+{
+  "name": "vite-react",
+  "description": "React, Vite, TypeScript, Biome, ESLint, and Vitest baseline",
+  "extends": [],
+  "files": [
+    {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 30}
+  ]
+}

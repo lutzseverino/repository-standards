@@ -1,0 +1,8 @@
+{
+  "name": "tauri",
+  "description": "Tauri and Rust desktop application baseline",
+  "extends": [],
+  "files": [
+    {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 50}
+  ]
+}

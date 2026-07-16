@@ -1,0 +1,25 @@
+{
+  "standards-version": 1,
+  "standards-release": "1.0.0",
+  "profiles": [
+    "common"
+  ],
+  "variables": {},
+  "local-fragments": {
+    ".gitignore": [
+      ".repository-standards/gitignore.local"
+    ]
+  },
+  "repository-owned": [
+    ".repository-standards.json",
+    "README.md",
+    "CHANGELOG.md",
+    "VERSION",
+    "standards/**",
+    "profiles/**",
+    "schema/**",
+    "examples/**",
+    "scripts/**",
+    ".github/workflows/ci.yml"
+  ]
+}

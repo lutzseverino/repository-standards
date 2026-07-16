@@ -1,0 +1,68 @@
+name: Project task
+description: Plan a behavior, architecture, release, documentation, or tooling change.
+title: "[Area] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for making the intended outcome and boundaries explicit.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What exists today, and what problem or opportunity motivates this work?
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What observable outcome should this work produce?
+    validations:
+      required: true
+  - type: textarea
+    id: included
+    attributes:
+      label: Included scope
+      description: List the work and boundaries included in this issue.
+      placeholder: "- Included outcome"
+    validations:
+      required: true
+  - type: textarea
+    id: excluded
+    attributes:
+      label: Excluded scope
+      description: List nearby work that is intentionally excluded.
+      placeholder: "- Excluded follow-up"
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Architecture notes
+      description: Record constraints, boundaries, dependencies, and important trade-offs. Write None if not applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use observable, testable completion criteria.
+      placeholder: "- [ ] Observable criterion"
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: List automated and manual checks that demonstrate completion.
+      placeholder: "- [ ] `canonical check command`"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add links, sketches, follow-ups, or other useful context. Write None if not applicable.
+    validations:
+      required: false

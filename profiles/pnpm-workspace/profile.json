@@ -1,0 +1,8 @@
+{
+  "name": "pnpm-workspace",
+  "description": "pnpm workspace and install-unit conventions",
+  "extends": [],
+  "files": [
+    {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 20}
+  ]
+}

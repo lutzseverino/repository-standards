@@ -1,0 +1,36 @@
+{
+  "standards-version": 1,
+  "standards-release": "1.0.0",
+  "profiles": [
+    "common",
+    "documentation",
+    "pnpm-workspace",
+    "vite-react",
+    "spring-boot"
+  ],
+  "variables": {},
+  "local-fragments": {
+    ".gitignore": [
+      ".repository-standards/gitignore.local"
+    ]
+  },
+  "repository-owned": [
+    "README.md",
+    "LICENSE",
+    "docs/README.md",
+    "docs/decisions/**",
+    "docs/explanation/**",
+    "docs/how-to/**",
+    "docs/reference/**",
+    "docs/tutorials/**",
+    "src/**",
+    "apps/**",
+    "services/**",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "pom.xml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml"
+  ]
+}
