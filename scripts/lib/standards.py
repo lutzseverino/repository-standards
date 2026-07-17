@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import fnmatch
+import html
 import json
 import re
 import sys
@@ -13,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 
-SUPPORTED_STANDARDS_VERSION = 1
+SUPPORTED_STANDARDS_VERSION = 2
 MANIFEST_NAMES = (
     ".repository-standards.json",
     ".repository-standards.yml",
@@ -23,6 +24,23 @@ VARIABLE_PATTERN = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
 SEMVER_PATTERN = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+)
+MARKDOWN_H1_PATTERN = re.compile(r"^#(?!#)\s+(.+?)\s*$", re.MULTILINE)
+CENTERED_WRAPPER_PATTERN = re.compile(
+    r"<(?:div|p)\b[^>]*\balign\s*=\s*[\"']?center[\"']?[^>]*>",
+    re.IGNORECASE,
+)
+HTML_H1_PATTERN = re.compile(r"<h1(?:\s[^>]*)?>.*?</h1>", re.IGNORECASE | re.DOTALL)
+BADGE_PATTERN = re.compile(r"(?:img\.shields\.io|/badge\.svg(?:[?#)]|$))", re.IGNORECASE)
+DOCS_LINK_PATTERN = re.compile(
+    r"\]\((?:\./)?docs/README\.md(?:#[^ )]+)?(?:\s+[\"'][^\"']*[\"'])?\)"
+)
+DIATAXIS_CATEGORIES = (
+    "tutorials",
+    "how-to",
+    "reference",
+    "explanation",
+    "decisions",
 )
 
 
@@ -56,6 +74,14 @@ class Result:
     origins: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class BoundaryResult:
+    path: str
+    boundary_type: str
+    status: str
+    messages: tuple[str, ...]
+
+
 def standards_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -67,6 +93,15 @@ def _relative_path(value: Any, field: str) -> str:
     if path.is_absolute() or ".." in path.parts or "." in path.parts:
         raise StandardsError(f"{field} must stay within the repository: {value!r}")
     return path.as_posix()
+
+
+def _boundary_path(value: Any, field: str) -> str:
+    if value == ".":
+        return "."
+    normalized = _relative_path(value, field)
+    if value != normalized or any(character in normalized for character in "*?["):
+        raise StandardsError(f"{field} must be a normalized concrete directory: {value!r}")
+    return normalized
 
 
 def _read_data(path: Path) -> dict[str, Any]:
@@ -124,6 +159,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         "standards-version",
         "standards-release",
         "profiles",
+        "boundaries",
         "variables",
         "local-fragments",
         "repository-owned",
@@ -150,6 +186,54 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         raise StandardsError("profiles must be a non-empty list of names")
     if len(profiles) != len(set(profiles)):
         raise StandardsError("profiles must not contain duplicates")
+
+    boundaries = manifest.get("boundaries")
+    if not isinstance(boundaries, list) or not boundaries:
+        raise StandardsError("boundaries must be a non-empty list")
+    normalized_boundaries: list[dict[str, str]] = []
+    boundary_paths: set[str] = set()
+    for index, boundary in enumerate(boundaries):
+        field = f"boundaries[{index}]"
+        if not isinstance(boundary, dict):
+            raise StandardsError(f"{field} must be an object")
+        unknown_boundary_fields = sorted(set(boundary) - {"path", "type", "title"})
+        if unknown_boundary_fields:
+            raise StandardsError(
+                f"{field} has unknown fields: {', '.join(unknown_boundary_fields)}"
+            )
+        path_value = _boundary_path(boundary.get("path"), f"{field}.path")
+        boundary_type = boundary.get("type")
+        if boundary_type not in {"repository", "collection", "project"}:
+            raise StandardsError(
+                f"{field}.type must be repository, collection, or project"
+            )
+        title = boundary.get("title")
+        if not isinstance(title, str) or not title.strip():
+            raise StandardsError(f"{field}.title must be a non-empty string")
+        if path_value in boundary_paths:
+            raise StandardsError(f"boundary paths must be unique: {path_value!r}")
+        boundary_paths.add(path_value)
+        normalized_boundaries.append(
+            {"path": path_value, "type": boundary_type, "title": title}
+        )
+
+    repository_boundaries = [
+        boundary
+        for boundary in normalized_boundaries
+        if boundary["type"] == "repository"
+    ]
+    if len(repository_boundaries) != 1 or repository_boundaries[0]["path"] != ".":
+        raise StandardsError(
+            "boundaries must contain exactly one repository boundary at '.'"
+        )
+    root_boundary = next(
+        (boundary for boundary in normalized_boundaries if boundary["path"] == "."),
+        None,
+    )
+    if root_boundary is None or root_boundary["type"] != "repository":
+        raise StandardsError("the boundary at '.' must have type repository")
+    if "documentation" not in profiles:
+        raise StandardsError("standards-version 2 boundaries require the documentation profile")
 
     variables = manifest.get("variables", {})
     if not isinstance(variables, dict) or not all(
@@ -182,6 +266,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
 
     manifest["local-fragments"] = normalized_fragments
     manifest["variables"] = variables
+    manifest["boundaries"] = normalized_boundaries
     return path, manifest
 
 
@@ -392,6 +477,169 @@ def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:
     return results
 
 
+def _boundary_target(boundary_path: str, child: str) -> str:
+    if boundary_path == ".":
+        return child
+    return (PurePosixPath(boundary_path) / child).as_posix()
+
+
+def _read_boundary_text(repository: Path, relative_path: str) -> tuple[str | None, str | None]:
+    target = repository / relative_path
+    resolved = target.resolve(strict=False)
+    try:
+        resolved.relative_to(repository)
+    except ValueError:
+        return None, f"{relative_path} escapes the repository through a symlink"
+    if target.is_symlink():
+        return None, f"{relative_path} must not be a symlink"
+    if not target.exists():
+        return None, f"{relative_path} is missing"
+    if not target.is_file():
+        return None, f"{relative_path} is not a regular file"
+    try:
+        return target.read_text(encoding="utf-8"), None
+    except UnicodeDecodeError:
+        return None, f"{relative_path} is not valid UTF-8"
+    except OSError as exc:
+        return None, f"cannot read {relative_path}: {exc}"
+
+
+def _check_root_readme(text: str, title: str) -> list[str]:
+    errors: list[str] = []
+    lines = text.splitlines()
+    if not lines or lines[0] != '<div align="center">':
+        errors.append('README.md must begin with <div align="center">')
+    closing_index = text.find("</div>")
+    if closing_index < 0:
+        errors.append("README.md centered header must end with </div>")
+        header = text
+    else:
+        header = text[:closing_index]
+    expected_h1 = f"<h1>{html.escape(title, quote=False)}</h1>"
+    expected_h1_line = f"  {expected_h1}"
+    html_h1s = HTML_H1_PATTERN.findall(text)
+    if (
+        html_h1s != [expected_h1]
+        or expected_h1_line not in header.splitlines()
+    ):
+        errors.append(
+            f"README.md must contain exactly one canonical centered header title: "
+            f"{expected_h1_line}"
+        )
+    return errors
+
+
+def _check_internal_readme(text: str, relative_path: str, title: str) -> list[str]:
+    errors: list[str] = []
+    lines = text.splitlines()
+    expected_h1 = f"# {title}"
+    if not lines or lines[0] != expected_h1:
+        errors.append(f"{relative_path} must begin with {expected_h1!r}")
+    markdown_h1s = MARKDOWN_H1_PATTERN.findall(text)
+    if markdown_h1s != [title]:
+        errors.append(f"{relative_path} must contain exactly one Markdown H1: {expected_h1}")
+    if CENTERED_WRAPPER_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain a centered wrapper")
+    if HTML_H1_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain an HTML H1")
+    if BADGE_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain badges")
+    return errors
+
+
+def _check_docs_readme(text: str, relative_path: str) -> list[str]:
+    errors: list[str] = []
+    lines = text.splitlines()
+    if not lines or lines[0] != "# Documentation":
+        errors.append(f"{relative_path} must begin with '# Documentation'")
+    markdown_h1s = MARKDOWN_H1_PATTERN.findall(text)
+    if markdown_h1s != ["Documentation"]:
+        errors.append(
+            f"{relative_path} must contain exactly one Markdown H1: # Documentation"
+        )
+    if CENTERED_WRAPPER_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain a centered wrapper")
+    if HTML_H1_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain an HTML H1")
+    if BADGE_PATTERN.search(text):
+        errors.append(f"{relative_path} must not contain badges")
+    return errors
+
+
+def _check_empty_documentation_categories(
+    repository: Path, boundary_path: str
+) -> list[str]:
+    errors: list[str] = []
+    docs_root = repository / _boundary_target(boundary_path, "docs")
+    for category in DIATAXIS_CATEGORIES:
+        category_path = docs_root / category
+        if not category_path.is_dir():
+            continue
+        authored_files = [
+            candidate
+            for candidate in category_path.rglob("*")
+            if candidate.is_file()
+            and candidate.relative_to(category_path).as_posix() != "README.md"
+        ]
+        if not authored_files:
+            relative_category = category_path.relative_to(repository).as_posix()
+            errors.append(
+                f"{relative_category} has no authored content; remove it until needed"
+            )
+    return errors
+
+
+def inspect_boundaries(
+    repository: Path, boundaries: Iterable[dict[str, str]]
+) -> list[BoundaryResult]:
+    repository = repository.resolve()
+    results: list[BoundaryResult] = []
+    for boundary in boundaries:
+        boundary_path = boundary["path"]
+        boundary_type = boundary["type"]
+        title = boundary["title"]
+        messages: list[str] = []
+
+        readme_path = _boundary_target(boundary_path, "README.md")
+        readme_text, readme_error = _read_boundary_text(repository, readme_path)
+        if readme_error:
+            messages.append(readme_error)
+        elif boundary_type == "repository":
+            messages.extend(_check_root_readme(readme_text or "", title))
+        else:
+            messages.extend(_check_internal_readme(readme_text or "", readme_path, title))
+
+        if boundary_type in {"repository", "project"}:
+            docs_path = _boundary_target(boundary_path, "docs/README.md")
+            docs_text, docs_error = _read_boundary_text(repository, docs_path)
+            if docs_error:
+                messages.append(docs_error)
+            else:
+                messages.extend(_check_docs_readme(docs_text or "", docs_path))
+            if readme_text is not None and not DOCS_LINK_PATTERN.search(readme_text):
+                messages.append(f"{readme_path} must link to docs/README.md")
+            messages.extend(
+                _check_empty_documentation_categories(repository, boundary_path)
+            )
+
+        if boundary_type == "project":
+            templates_path = _boundary_target(boundary_path, "docs/_templates")
+            if (repository / templates_path).exists() or (repository / templates_path).is_symlink():
+                messages.append(
+                    f"{templates_path} must not exist; templates are managed only at docs/_templates"
+                )
+
+        results.append(
+            BoundaryResult(
+                boundary_path,
+                boundary_type,
+                "invalid" if messages else "ok",
+                tuple(messages),
+            )
+        )
+    return results
+
+
 def _text_diff(result: Result) -> str:
     if result.actual is None:
         actual_text = ""
@@ -461,6 +709,10 @@ def audit_main(argv: list[str] | None = None) -> int:
         return 2
 
     drift = [result for result in results if result.status != "ok"]
+    boundary_results = inspect_boundaries(repository, manifest["boundaries"])
+    invalid_boundaries = [
+        result for result in boundary_results if result.status != "ok"
+    ]
     if args.json_output:
         print(
             json.dumps(
@@ -469,7 +721,7 @@ def audit_main(argv: list[str] | None = None) -> int:
                     "standards-version": manifest["standards-version"],
                     "standards-release": manifest["standards-release"],
                     "profiles": manifest["profiles"],
-                    "clean": not drift,
+                    "clean": not drift and not invalid_boundaries,
                     "files": [
                         {
                             "path": result.target,
@@ -477,6 +729,15 @@ def audit_main(argv: list[str] | None = None) -> int:
                             "origins": list(result.origins),
                         }
                         for result in results
+                    ],
+                    "boundaries": [
+                        {
+                            "path": result.path,
+                            "type": result.boundary_type,
+                            "status": result.status,
+                            "messages": list(result.messages),
+                        }
+                        for result in boundary_results
                     ],
                 },
                 indent=2,
@@ -487,7 +748,17 @@ def audit_main(argv: list[str] | None = None) -> int:
             marker = "OK" if result.status == "ok" else result.status.upper()
             print(f"{marker:8} {result.target}")
         print(f"\n{len(results) - len(drift)} clean, {len(drift)} requiring synchronization")
-    return 1 if drift else 0
+        print()
+        for result in boundary_results:
+            marker = "OK" if result.status == "ok" else result.status.upper()
+            print(f"{marker:8} boundary {result.path} ({result.boundary_type})")
+            for message in result.messages:
+                print(f"         - {message}")
+        print(
+            f"\n{len(boundary_results) - len(invalid_boundaries)} conforming, "
+            f"{len(invalid_boundaries)} invalid boundaries"
+        )
+    return 1 if drift or invalid_boundaries else 0
 
 
 def sync_main(argv: list[str] | None = None) -> int:

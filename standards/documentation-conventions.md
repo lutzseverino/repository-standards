@@ -1,12 +1,51 @@
 # Documentation conventions
 
-Code repositories use a Diataxis-oriented documentation tree when they carry
-more guidance than the root README can responsibly hold:
+Documentation belongs to the boundary that owns its subject.
+
+Every repository has a root `docs/` directory. Every independently built,
+deployed, published, or versioned project in a monorepo has its own `docs/`
+directory. Coupled implementation layers, generated trees, vendored code, and
+Git submodules do not become separate documentation boundaries merely because
+they contain a build manifest.
+
+For example:
+
+```text
+docs/                         # repository-wide documentation
+apps/web/docs/                # web application documentation
+packages/design/docs/         # design package documentation
+services/polity/docs/         # backend service documentation
+```
+
+Root documentation owns repository-wide development, architecture,
+integration, release processes, and cross-project decisions. Project
+documentation owns that project's behavior, contracts, architecture,
+operation, and consumer guidance. Place a document at the narrowest boundary
+that fully owns it and link across boundaries instead of duplicating it.
+
+## Documentation roots
+
+Every documentation root contains `README.md`. That index uses
+`# Documentation`, names its owning boundary in the opening paragraph, and
+links only content that exists.
+
+The repository root also owns the single canonical `docs/_templates/` set.
+Project documentation roots use those repository templates rather than
+duplicating `_templates/`. The documentation profile manages the canonical set
+exactly; indexes and authored documents remain repository-owned.
+
+The repository or project README links its local documentation index from
+`## Documentation`. Repository-wide documentation may link every declared
+project index to make the monorepo navigable.
+
+## Diataxis organization
+
+Use a Diataxis-oriented tree as documentation earns each category:
 
 ```text
 docs/
 ├── README.md
-├── _templates/
+├── _templates/              # repository root only
 ├── decisions/
 ├── explanation/
 ├── how-to/
@@ -20,36 +59,32 @@ docs/
 - Explanation documents build understanding and discuss trade-offs.
 - Decisions record durable architectural choices and their consequences.
 
-The tree is a baseline, not a demand for empty directories. Add a category when
-the repository has content for it. A repository with a purpose-built knowledge
-model, such as a Codex skill using `skill/references`, may document that model
-instead.
-
-Repositories using this tree select the `documentation` profile. Its seven
-files under `docs/_templates` are exact managed files; indexes, document lists,
-and authored documents remain repository-owned.
+The categories are a vocabulary, not a demand for empty directories. Create a
+category and its index when the boundary has real content for it. Specialized
+knowledge models may remain authoritative—for example, a Codex skill keeps its
+runtime guidance in `skill/references`—while the repository still provides a
+root documentation index for maintainers.
 
 ## Indexes
 
-`docs/README.md` explains the local documentation scope and links documents by
-type. Directory indexes use a left-aligned title, a short purpose statement,
-and concise entries in the form `Title: description`.
+Directory indexes use a left-aligned title, a short purpose statement, and
+concise entries in the form `Title: description`. Document lists describe
+actual content and do not contain placeholder entries for future documents.
 
-Indexes and document lists are repository-owned because they describe actual
-content. The standards repository provides examples and wording conventions,
-but the sync tool does not overwrite them.
+Indexes and document lists remain repository-owned because their contents are
+specific to the boundary. The standards repository provides examples and
+wording conventions, but synchronization does not overwrite them.
 
 ## Templates
 
-Document templates should prompt for audience, purpose, prerequisites, and
-validation where relevant. Remove prompt text when publishing a document. Keep
-decision records immutable after acceptance except for status and links to a
-superseding decision.
+Document templates prompt for audience, purpose, prerequisites, and validation
+where relevant. Remove prompt text when publishing a document. Keep decision
+records immutable after acceptance except for status and links to a superseding
+decision.
 
 ## Writing
 
-- Use sentence case for new authored headings; preserve the exact managed
-  template wording during the v1 cohesion rollout.
+- Use sentence case for new authored headings.
 - Prefer short paragraphs and executable examples.
 - State versions only when behavior depends on them.
 - Link to primary sources for external contracts.

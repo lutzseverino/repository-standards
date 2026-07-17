@@ -4,10 +4,10 @@
   "title": "Repository standards manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["standards-version", "standards-release", "profiles", "repository-owned"],
+  "required": ["standards-version", "standards-release", "profiles", "boundaries", "repository-owned"],
   "properties": {
     "$schema": {"type": "string", "format": "uri-reference"},
-    "standards-version": {"const": 1},
+    "standards-version": {"const": 2},
     "standards-release": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
@@ -17,6 +17,23 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+    },
+    "boundaries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "type", "title"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?:\\.|(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[*?\\[])[^/]+(?:/[^/]+)*)$"
+          },
+          "type": {"enum": ["repository", "collection", "project"]},
+          "title": {"type": "string", "minLength": 1}
+        }
+      }
     },
     "variables": {
       "type": "object",

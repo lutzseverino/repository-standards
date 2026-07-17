@@ -7,6 +7,22 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-17
+
+### Added
+
+- Declared repository, collection, and project README boundaries with
+  executable presentation and documentation-navigation checks.
+- Required repository and project documentation roots for manifest version 2.
+- Project-agnostic examples for collection, project, and documentation indexes.
+
+### Changed
+
+- Established one canonical managed Diataxis template library per repository;
+  monorepo projects keep scoped documentation without duplicating templates.
+- Bumped the repository manifest compatibility version to 2 for required
+  boundary declarations.
+
 ## [1.0.3] - 2026-07-16
 
 ### Changed

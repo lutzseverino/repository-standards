@@ -1,6 +1,10 @@
 # README conventions
 
-## Root README
+A README describes the boundary represented by its directory. Repository,
+collection, project, and documentation boundaries use related but distinct
+presentations.
+
+## Repository README
 
 The repository root is the public front door. Center only its compact identity
 header:
@@ -32,19 +36,45 @@ After the header, write repository-specific content. Prefer this shared tail:
 4. License
 
 The license section is last. Do not force empty or irrelevant sections merely
-to match the outline.
+to match the outline. Every repository README links its repository
+documentation from `## Documentation`.
 
-## Internal READMEs
+## Nested READMEs
 
-Internal READMEs use plain, left-aligned Markdown with no badges. The H1 names
-the boundary described at that level:
+Nested READMEs use plain, left-aligned Markdown with no badges or HTML identity
+header. Their first line is one Markdown H1 naming the current boundary. They
+do not reproduce repository-wide badges, support, license, or setup material.
 
-- `services/README.md` uses `# Services` because it is a directory index.
-- `services/polity/README.md` uses `# Polity Service` because it describes a
-  leaf service.
+The manifest declares significant README boundaries:
 
-Internal pages should link upward or to the root documentation index where that
-helps navigation, but should not reproduce the root repository identity shell.
+- `collection` is an index of sibling boundaries, such as `# Applications`,
+  `# Packages`, or `# Services`;
+- `project` is an independently built, deployed, published, or versioned
+  workspace boundary, such as `# Polity Web` or `# Polity Service`.
+
+A collection README briefly defines the collection and links its direct
+children. It includes shared development instructions only when they apply at
+the collection boundary.
+
+A project README leads with the project's identity and scope. It contains only
+sections meaningful to that project and always includes `## Documentation`
+linking `docs/README.md`. Development, validation, contracts, architecture, and
+deployment remain optional project-owned sections.
+
+Other nested READMEs may document source, asset, generated, or specification
+directories without becoming declared project boundaries. They follow the same
+left-aligned, badge-free presentation.
+
+## Documentation indexes
+
+Every repository and declared project owns `docs/README.md`. It begins with
+`# Documentation`, identifies the boundary in its opening paragraph, and links
+only documentation sections or documents that exist. The path already carries
+the project identity, so headings such as `# Polity Service Documentation` are
+not used.
+
+See [Documentation conventions](documentation-conventions.md) for placement,
+Diataxis organization, and cross-boundary ownership.
 
 ## Content rules
 
@@ -52,5 +82,6 @@ helps navigation, but should not reproduce the root repository identity shell.
 - Keep setup commands executable and use the repository's declared package or
   build manager.
 - Prefer links to detailed documentation over duplicating operational guides.
+- Link across boundaries instead of copying the same guidance.
 - Do not advertise a release, deployment, or quality gate that does not exist.
 - Keep generated output, version numbers, and screenshots current or omit them.

@@ -9,4 +9,5 @@ and body conventions executable.
 It intentionally does not own the product README, license, security policy,
 build manifests, main CI workflow, release workflow, or documentation indexes.
 Those artifacts either require repository-specific facts or differ by
-ecosystem.
+ecosystem. The standards audit still validates the presentation and navigation
+of README and documentation boundaries declared by the repository manifest.

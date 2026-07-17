@@ -28,20 +28,34 @@ Each participating repository carries `.repository-standards.json`:
 
 ```json
 {
-  "standards-version": 1,
-  "standards-release": "1.0.3",
-  "profiles": ["common", "vite-react", "pnpm-workspace"],
+  "standards-version": 2,
+  "standards-release": "1.1.0",
+  "profiles": ["common", "documentation", "vite-react", "pnpm-workspace"],
+  "boundaries": [
+    {"path": ".", "type": "repository", "title": "Product"},
+    {"path": "apps", "type": "collection", "title": "Applications"},
+    {"path": "apps/web", "type": "project", "title": "Product Web"}
+  ],
   "variables": {},
   "local-fragments": {
     ".gitignore": [".repository-standards/gitignore.local"]
   },
-  "repository-owned": ["README.md", "LICENSE", "docs/**", "src/**"]
+  "repository-owned": [
+    "README.md",
+    "LICENSE",
+    "docs/README.md",
+    "docs/how-to/**",
+    "apps/**",
+    "src/**"
+  ]
 }
 ```
 
 The manifest is the ownership boundary. Files emitted by selected profiles are
 managed. Paths listed under `repository-owned` cannot be emitted by a profile.
-Everything else remains untouched.
+Everything else remains untouched. Declared boundaries make repository-owned
+README and documentation structure auditable without making their prose a
+managed copy.
 
 JSON is canonical because the tools can read it with the Python standard
 library. YAML manifests are also accepted when PyYAML is installed. The JSON
@@ -91,7 +105,12 @@ python3 -m unittest discover -s scripts/tests -v
 
 Profiles are additive. For example, a pnpm monorepo containing Vite apps and a
 Spring service can select `common`, `pnpm-workspace`, `vite-react`, and
-`spring-boot`, plus `documentation` when it carries the standard docs tree.
+`spring-boot`, plus `documentation` for its repository and project docs roots.
+
+## Documentation
+
+See the [documentation index](docs/README.md) for the standards guides,
+boundary conventions, and canonical authoring templates.
 
 ## Maintenance and rollout
 
@@ -103,7 +122,7 @@ A standards change is reviewed here, recorded in `CHANGELOG.md`, assigned a
 semantic release, and tagged. Adoption is then deliberate: check out that
 release, update each target manifest's `standards-release`, preview with
 `scripts/sync`, apply the managed changes, run the repository's own gate, and
-audit again. There is no automatic or scheduled rollout in v1.
+audit again. There is no automatic or scheduled rollout.
 
 See [Maintenance and rollout](standards/maintenance-and-rollout.md) for the
 versioning and adoption procedure.
@@ -111,5 +130,6 @@ versioning and adoption procedure.
 ## Scope of automation
 
 The tools deliberately do not rewrite product READMEs, build manifests, source
-trees, release workflows, or documentation indexes. Those files are audited
-against the written standards and migrated with repository-aware judgment.
+trees, release workflows, or documentation indexes. README and documentation
+boundaries are structurally audited while their content is maintained with
+repository-aware judgment.

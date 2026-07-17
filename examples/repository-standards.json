@@ -1,12 +1,24 @@
 {
-  "standards-version": 1,
-  "standards-release": "1.0.3",
+  "standards-version": 2,
+  "standards-release": "1.1.0",
   "profiles": [
     "common",
     "documentation",
     "pnpm-workspace",
     "vite-react",
     "spring-boot"
+  ],
+  "boundaries": [
+    {
+      "path": ".",
+      "type": "repository",
+      "title": "Example Repository"
+    },
+    {
+      "path": "services/example",
+      "type": "project",
+      "title": "Example Service"
+    }
   ],
   "variables": {},
   "local-fragments": {

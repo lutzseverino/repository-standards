@@ -1,10 +1,15 @@
 # YAML is optional and requires PyYAML. JSON is the dependency-free default.
-standards-version: 1
-standards-release: 1.0.3
+standards-version: 2
+standards-release: 1.1.0
 profiles:
   - common
+  - documentation
   - node-npm
   - vite-react
+boundaries:
+  - path: "."
+    type: repository
+    title: Product Name
 variables: {}
 local-fragments:
   .gitignore:
@@ -12,7 +17,12 @@ local-fragments:
 repository-owned:
   - README.md
   - LICENSE
-  - docs/**
+  - docs/README.md
+  - docs/decisions/**
+  - docs/explanation/**
+  - docs/how-to/**
+  - docs/reference/**
+  - docs/tutorials/**
   - src/**
   - package.json
   - package-lock.json
