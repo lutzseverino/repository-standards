@@ -12,6 +12,12 @@ A selected profile declares its managed targets in `profile.json`. Duplicate
 exact or template targets are rejected. Multiple compose fragments may share a
 target and are ordered first by `order`, then by profile selection order.
 
+`.github/dependabot.yml` is the one structured managed target. It is rendered
+deterministically from `dependency-updates` because concatenated YAML fragments
+cannot safely express one shared `version` and `updates` document. Profiles may
+describe ecosystem expectations, but the manifest declares concrete install
+unit directories.
+
 `repository-owned` patterns are hard guards. A plan fails before reading or
 writing targets if a managed target matches one. Use forward-slash paths and
 shell-style patterns such as `docs/**`.

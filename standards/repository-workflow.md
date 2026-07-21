@@ -66,13 +66,33 @@ Follow-ups only when earned.
 CI must pass. Review is encouraged where it adds value. The solo-maintainer
 baseline requires a pull request but zero mandatory approvals.
 
+## Validation gate
+
+Each repository documents one canonical local validation command. That command
+is the complete merge-readiness gate; do not hide additional required checks
+behind a second, stronger `quality` or similarly named command.
+
+CI may split the canonical gate into parallel jobs, but those jobs must
+collectively run every constituent check. Repository-specific tests, static
+analysis, dependency hygiene, generated-artifact checks, and integration setup
+remain repository-owned. Ecosystem profiles define the portable baseline.
+
+Branch protection depends on two stable, namespaced status contexts:
+
+- `CI / Required` aggregates every repository-owned required job;
+- `PR Policy / Validate` enforces the managed pull-request contract.
+
+Internal CI jobs use names such as `CI / JavaScript` or `CI / Service` but are
+not direct branch-protection contracts. Repositories may reorganize those jobs
+without coordinating live settings when the aggregate remains stable.
+
 ## Merge and repository settings
 
 - allow squash merge only;
 - use the pull-request title as the squash title;
 - use the pull-request body as the squash message;
 - automatically delete merged branches;
-- require the `CI` and `PR Policy` checks before merge;
+- require `CI / Required` and `PR Policy / Validate` before merge;
 - require pull requests for `main`, with zero mandatory approvals;
 - prevent force pushes and deletion of `main`;
 - keep Issues enabled;

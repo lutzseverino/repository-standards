@@ -13,13 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  required:
+    name: CI / Required
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Compile tooling
         run: python3 -m compileall -q scripts
+      - name: Validate workflows
+        run: python3 .github/scripts/check-workflows.py
       - name: Run tests
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Audit this repository

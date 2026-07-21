@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  required:
+    name: CI / Required
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository

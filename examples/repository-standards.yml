@@ -1,6 +1,6 @@
 # YAML is optional and requires PyYAML. JSON is the dependency-free default.
-standards-version: 2
-standards-release: 1.1.0
+standards-version: 3
+standards-release: 2.0.0
 profiles:
   - common
   - documentation
@@ -10,6 +10,30 @@ boundaries:
   - path: "."
     type: repository
     title: Product Name
+dependency-updates:
+  - ecosystem: github-actions
+    directory: /
+    schedule: weekly
+  - ecosystem: npm
+    directory: /
+    schedule: weekly
+github:
+  repository: example/product
+  default-branch: main
+  settings:
+    delete-branch-on-merge: true
+    allow-squash-merge: true
+    allow-merge-commit: false
+    allow-rebase-merge: false
+  ruleset:
+    name: Protect main
+    required-status-checks: [CI / Required, PR Policy / Validate]
+    require-current-branch: true
+    required-approvals: 0
+    allowed-merge-methods: [squash]
+    prevent-deletion: true
+    prevent-force-push: true
+    allow-bypass-actors: false
 variables: {}
 local-fragments:
   .gitignore:
