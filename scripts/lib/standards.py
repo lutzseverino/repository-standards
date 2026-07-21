@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 
-SUPPORTED_STANDARDS_VERSION = 2
+SUPPORTED_STANDARDS_VERSION = 3
 MANIFEST_NAMES = (
     ".repository-standards.json",
     ".repository-standards.yml",
@@ -42,6 +42,8 @@ DIATAXIS_CATEGORIES = (
     "explanation",
     "decisions",
 )
+DEPENDENCY_ECOSYSTEMS = {"github-actions", "maven", "npm"}
+DEPENDENCY_INTERVALS = {"daily", "weekly", "monthly"}
 
 
 class StandardsError(Exception):
@@ -160,6 +162,8 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         "standards-release",
         "profiles",
         "boundaries",
+        "dependency-updates",
+        "github",
         "variables",
         "local-fragments",
         "repository-owned",
@@ -233,7 +237,141 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     if root_boundary is None or root_boundary["type"] != "repository":
         raise StandardsError("the boundary at '.' must have type repository")
     if "documentation" not in profiles:
-        raise StandardsError("standards-version 2 boundaries require the documentation profile")
+        raise StandardsError("standards-version 3 boundaries require the documentation profile")
+
+    dependency_updates = manifest.get("dependency-updates")
+    if not isinstance(dependency_updates, list) or not dependency_updates:
+        raise StandardsError("dependency-updates must be a non-empty list")
+    normalized_updates: list[dict[str, str]] = []
+    update_keys: set[tuple[str, str]] = set()
+    for index, update in enumerate(dependency_updates):
+        field = f"dependency-updates[{index}]"
+        if not isinstance(update, dict):
+            raise StandardsError(f"{field} must be an object")
+        unknown_update_fields = sorted(
+            set(update) - {"ecosystem", "directory", "schedule"}
+        )
+        if unknown_update_fields:
+            raise StandardsError(
+                f"{field} has unknown fields: {', '.join(unknown_update_fields)}"
+            )
+        ecosystem = update.get("ecosystem")
+        if ecosystem not in DEPENDENCY_ECOSYSTEMS:
+            raise StandardsError(
+                f"{field}.ecosystem must be github-actions, maven, or npm"
+            )
+        directory = update.get("directory")
+        if not isinstance(directory, str) or not re.fullmatch(
+            r"/(?:[^/]+(?:/[^/]+)*)?", directory
+        ):
+            raise StandardsError(
+                f"{field}.directory must be an absolute repository directory"
+            )
+        if any(part in {".", ".."} for part in directory.removeprefix("/").split("/")):
+            raise StandardsError(f"{field}.directory must not contain dot segments")
+        schedule = update.get("schedule")
+        if schedule not in DEPENDENCY_INTERVALS:
+            raise StandardsError(f"{field}.schedule must be daily, weekly, or monthly")
+        key = (ecosystem, directory)
+        if key in update_keys:
+            raise StandardsError(
+                f"dependency update ecosystem and directory pairs must be unique: {key!r}"
+            )
+        update_keys.add(key)
+        normalized_updates.append(
+            {"ecosystem": ecosystem, "directory": directory, "schedule": schedule}
+        )
+
+    github = manifest.get("github")
+    if github is not None:
+        if not isinstance(github, dict):
+            raise StandardsError("github must be an object")
+        required_github_fields = {
+            "repository",
+            "default-branch",
+            "settings",
+            "ruleset",
+        }
+        if set(github) != required_github_fields:
+            raise StandardsError(
+                "github must define repository, default-branch, settings, and ruleset"
+            )
+        repository_name = github.get("repository")
+        if not isinstance(repository_name, str) or not re.fullmatch(
+            r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository_name
+        ):
+            raise StandardsError("github.repository must be an owner/repository name")
+        default_branch = github.get("default-branch")
+        if not isinstance(default_branch, str) or not default_branch:
+            raise StandardsError("github.default-branch must be a non-empty string")
+        settings = github.get("settings")
+        required_settings = {
+            "delete-branch-on-merge",
+            "allow-squash-merge",
+            "allow-merge-commit",
+            "allow-rebase-merge",
+        }
+        if not isinstance(settings, dict) or set(settings) != required_settings:
+            raise StandardsError(
+                "github.settings must define delete-branch-on-merge, "
+                "allow-squash-merge, allow-merge-commit, and allow-rebase-merge"
+            )
+        if not all(isinstance(value, bool) for value in settings.values()):
+            raise StandardsError("github.settings values must be booleans")
+        ruleset = github.get("ruleset")
+        if ruleset is not None:
+            required_ruleset = {
+                "name",
+                "required-status-checks",
+                "require-current-branch",
+                "required-approvals",
+                "allowed-merge-methods",
+                "prevent-deletion",
+                "prevent-force-push",
+                "allow-bypass-actors",
+            }
+            if not isinstance(ruleset, dict) or set(ruleset) != required_ruleset:
+                raise StandardsError(
+                    "github.ruleset must define the complete branch-protection contract"
+                )
+            if not isinstance(ruleset["name"], str) or not ruleset["name"]:
+                raise StandardsError("github.ruleset.name must be a non-empty string")
+            checks = ruleset["required-status-checks"]
+            if (
+                not isinstance(checks, list)
+                or not checks
+                or not all(isinstance(check, str) and check for check in checks)
+                or len(checks) != len(set(checks))
+            ):
+                raise StandardsError(
+                    "github.ruleset.required-status-checks must be a non-empty unique list"
+                )
+            approvals = ruleset["required-approvals"]
+            if not isinstance(approvals, int) or isinstance(approvals, bool) or approvals < 0:
+                raise StandardsError(
+                    "github.ruleset.required-approvals must be a non-negative integer"
+                )
+            merge_methods = ruleset["allowed-merge-methods"]
+            if (
+                not isinstance(merge_methods, list)
+                or not merge_methods
+                or not all(
+                    method in {"merge", "rebase", "squash"}
+                    for method in merge_methods
+                )
+                or len(merge_methods) != len(set(merge_methods))
+            ):
+                raise StandardsError(
+                    "github.ruleset.allowed-merge-methods must be a non-empty unique list"
+                )
+            boolean_rules = {
+                "require-current-branch",
+                "prevent-deletion",
+                "prevent-force-push",
+                "allow-bypass-actors",
+            }
+            if not all(isinstance(ruleset[key], bool) for key in boolean_rules):
+                raise StandardsError("github.ruleset boolean fields must be booleans")
 
     variables = manifest.get("variables", {})
     if not isinstance(variables, dict) or not all(
@@ -267,6 +405,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     manifest["local-fragments"] = normalized_fragments
     manifest["variables"] = variables
     manifest["boundaries"] = normalized_boundaries
+    manifest["dependency-updates"] = normalized_updates
     return path, manifest
 
 
@@ -393,6 +532,22 @@ def _matches_owned(target: str, patterns: Iterable[str]) -> str | None:
     return None
 
 
+def _render_dependabot(updates: list[dict[str, str]]) -> bytes:
+    lines = ["version: 2", "updates:"]
+    for update in updates:
+        lines.extend(
+            [
+                f"  - package-ecosystem: {update['ecosystem']}",
+                f"    directory: {update['directory']}",
+                "    schedule:",
+                f"      interval: {update['schedule']}",
+                "    commit-message:",
+                "      prefix: chore",
+            ]
+        )
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[PlannedFile]:
     root = root.resolve()
     repository = repository.resolve()
@@ -448,7 +603,25 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
                 origins.append(f"repository:{local_value}")
             content = _join_fragments(parts, target)
         planned.append(PlannedFile(target, content, tuple(origins)))
-    return planned
+    dependabot_target = ".github/dependabot.yml"
+    if dependabot_target in sources_by_target:
+        raise StandardsError(
+            "profiles must not manage .github/dependabot.yml; it is rendered from dependency-updates"
+        )
+    owned_pattern = _matches_owned(dependabot_target, manifest["repository-owned"])
+    if owned_pattern:
+        raise StandardsError(
+            f"managed target {dependabot_target!r} conflicts with repository-owned pattern "
+            f"{owned_pattern!r}"
+        )
+    planned.append(
+        PlannedFile(
+            dependabot_target,
+            _render_dependabot(manifest["dependency-updates"]),
+            ("manifest:dependency-updates",),
+        )
+    )
+    return sorted(planned, key=lambda item: item.target)
 
 
 def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:

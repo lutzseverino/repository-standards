@@ -28,14 +28,38 @@ Each participating repository carries `.repository-standards.json`:
 
 ```json
 {
-  "standards-version": 2,
-  "standards-release": "1.1.0",
+  "standards-version": 3,
+  "standards-release": "2.0.0",
   "profiles": ["common", "documentation", "vite-react", "pnpm-workspace"],
   "boundaries": [
     {"path": ".", "type": "repository", "title": "Product"},
     {"path": "apps", "type": "collection", "title": "Applications"},
     {"path": "apps/web", "type": "project", "title": "Product Web"}
   ],
+  "dependency-updates": [
+    {"ecosystem": "github-actions", "directory": "/", "schedule": "weekly"},
+    {"ecosystem": "npm", "directory": "/", "schedule": "weekly"}
+  ],
+  "github": {
+    "repository": "example/product",
+    "default-branch": "main",
+    "settings": {
+      "delete-branch-on-merge": true,
+      "allow-squash-merge": true,
+      "allow-merge-commit": false,
+      "allow-rebase-merge": false
+    },
+    "ruleset": {
+      "name": "Protect main",
+      "required-status-checks": ["CI / Required", "PR Policy / Validate"],
+      "require-current-branch": true,
+      "required-approvals": 0,
+      "allowed-merge-methods": ["squash"],
+      "prevent-deletion": true,
+      "prevent-force-push": true,
+      "allow-bypass-actors": false
+    }
+  },
   "variables": {},
   "local-fragments": {
     ".gitignore": [".repository-standards/gitignore.local"]
@@ -74,6 +98,7 @@ Requires Python 3.11 or later.
 
 ```sh
 scripts/audit /path/to/repository
+scripts/audit-live /path/to/repository
 scripts/sync /path/to/repository
 scripts/sync --write /path/to/repository
 ```
@@ -81,6 +106,11 @@ scripts/sync --write /path/to/repository
 `audit` reports drift and exits non-zero. `sync` previews the same plan and
 unified diffs. `sync --write` changes managed targets only. It refuses a plan
 that conflicts with a `repository-owned` path.
+
+`audit-live` is deliberately separate: it requires an authenticated GitHub CLI
+and compares declared repository settings and rulesets without mutating them.
+Repositories that cannot use rulesets may declare `"ruleset": null` while
+retaining auditable repository settings.
 
 Run the test suite with:
 
@@ -122,7 +152,7 @@ A standards change is reviewed here, recorded in `CHANGELOG.md`, assigned a
 semantic release, and tagged. Adoption is then deliberate: check out that
 release, update each target manifest's `standards-release`, preview with
 `scripts/sync`, apply the managed changes, run the repository's own gate, and
-audit again. There is no automatic or scheduled rollout.
+audit again. Product CI never requires access to this private repository.
 
 See [Maintenance and rollout](standards/maintenance-and-rollout.md) for the
 versioning and adoption procedure.
@@ -130,6 +160,7 @@ versioning and adoption procedure.
 ## Scope of automation
 
 The tools deliberately do not rewrite product READMEs, build manifests, source
-trees, release workflows, or documentation indexes. README and documentation
-boundaries are structurally audited while their content is maintained with
-repository-aware judgment.
+trees, release workflows, or documentation indexes. They do render Dependabot
+configuration from structured manifest data and vend exact policy workflows.
+README and documentation boundaries are structurally audited while their
+content is maintained with repository-aware judgment.

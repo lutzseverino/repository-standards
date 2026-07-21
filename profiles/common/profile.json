@@ -11,8 +11,8 @@
     {"mode": "exact", "source": "files/.github/ISSUE_TEMPLATE/project-task.yml", "target": ".github/ISSUE_TEMPLATE/project-task.yml"},
     {"mode": "exact", "source": "files/.github/ISSUE_TEMPLATE/bug-report.yml", "target": ".github/ISSUE_TEMPLATE/bug-report.yml"},
     {"mode": "exact", "source": "files/.github/pull_request_template.md", "target": ".github/pull_request_template.md"},
-    {"mode": "exact", "source": "files/.github/dependabot.yml", "target": ".github/dependabot.yml"},
     {"mode": "exact", "source": "files/.github/scripts/check-pr-policy.py", "target": ".github/scripts/check-pr-policy.py"},
+    {"mode": "exact", "source": "files/.github/scripts/check-workflows.py", "target": ".github/scripts/check-workflows.py"},
     {"mode": "exact", "source": "files/.github/workflows/pr-policy.yml", "target": ".github/workflows/pr-policy.yml"},
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 0}
   ]

@@ -14,9 +14,9 @@ private repository.
 ## Two versions with different jobs
 
 `standards-version` is an integer compatibility version for the repository
-manifest and audit/sync protocol. Version `1` means the current field names,
-profile format, ownership rules, and rendering behavior. Increment it only for
-an incompatible manifest or tooling contract.
+manifest and audit/sync protocol. Version `3` includes boundary declarations,
+structured dependency updates, and optional live GitHub contracts. Increment
+it only for an incompatible manifest or tooling contract.
 
 `standards-release` is the exact semantic version of this repository's content,
 also stored in `VERSION` and represented by a Git tag such as `v1.0.0`. Increment
@@ -27,8 +27,8 @@ it whenever managed content or normative guidance changes:
 - major: intentionally incompatible family convention or migration.
 
 The standards release major and the manifest compatibility integer need not
-move together. A repository using `standards-version: 1` may adopt releases
-`1.0.0`, `1.1.0`, and later compatible content releases.
+move together. Repositories remain pinned to older tags until they deliberately
+adopt a compatible manifest and content release.
 
 ## Publish a standards change
 
@@ -53,6 +53,8 @@ Rollout is deliberate and repository-aware:
 6. Apply any repository-owned migration required by the written guidance.
 7. Run the target repository's canonical check and CI.
 8. Run the standards audit once more and commit the self-contained result.
+9. If the manifest declares GitHub settings, run `scripts/audit-live` after any
+   coordinated ruleset migration.
 
 The sync tool never deploys, commits, pushes, opens pull requests, changes
 GitHub settings, or schedules later work. Those actions remain explicit rollout
@@ -68,3 +70,12 @@ against newer or older content.
 Teams may run audits locally or in CI after making the private standards source
 available. Target repository CI must not require private-source access for its
 ordinary build and test gate.
+
+Live audits require `gh` authentication and repository-settings visibility.
+They are read-only and intentionally separate from offline managed-file audits.
+
+The scheduled `Standards Audit` workflow covers participating repositories
+accessible with its repository token. Private repositories owned elsewhere are
+excluded until a dedicated read-only GitHub App or fine-grained token is
+configured; personal maintainer tokens must not be reused as automation
+credentials.

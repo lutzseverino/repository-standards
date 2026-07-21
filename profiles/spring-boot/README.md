@@ -1,6 +1,6 @@
 # Spring Boot profile
 
-The v1 shared baseline is Java 21, Spring Boot 4.0.6, Maven Wrapper, and
+The shared baseline is Java 21, Spring Boot 4.0.6, Maven Wrapper, and
 Spotless using Google Java Format. Lombok, MapStruct, OpenAPI generation,
 Surefire, and generated-source integration should align where used; domain
 dependencies and earned checks remain repository-specific.
@@ -14,3 +14,5 @@ distribution and its checksum. The canonical local gate is normally:
 
 Multi-module repositories may add explicit frontend or integration jobs while
 retaining one workflow named `CI`.
+
+Declare a `maven` dependency-update entry for each independent Maven root.

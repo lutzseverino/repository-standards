@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from lib.github_settings import inspect_live_github
+from lib.standards import StandardsError, load_manifest
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Audit live GitHub repository settings")
+    parser.add_argument("repository", help="repository checkout to audit")
+    parser.add_argument("--manifest", help="manifest path, relative to repository")
+    parser.add_argument("--json", action="store_true", dest="json_output")
+    args = parser.parse_args()
+    repository = Path(args.repository).expanduser().resolve()
+    try:
+        _, manifest = load_manifest(repository, args.manifest)
+        contract = manifest.get("github")
+        if contract is None:
+            raise StandardsError("manifest does not declare a github contract")
+        errors = inspect_live_github(contract)
+    except StandardsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json_output:
+        print(
+            json.dumps(
+                {
+                    "repository": contract["repository"],
+                    "clean": not errors,
+                    "errors": errors,
+                },
+                indent=2,
+            )
+        )
+    elif errors:
+        print(f"Live GitHub settings drift for {contract['repository']}:")
+        for error in errors:
+            print(f"- {error}")
+    else:
+        print(f"Live GitHub settings conform for {contract['repository']}.")
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

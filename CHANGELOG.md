@@ -7,6 +7,32 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-21
+
+### Added
+
+- Added structured dependency-update declarations and deterministic Dependabot
+  rendering.
+- Added optional live GitHub settings contracts with a read-only authenticated
+  auditor.
+- Added a checksum-verified, pinned actionlint launcher for managed and
+  repository-owned workflows.
+- Added scheduled file, workflow, and live-settings drift audits for accessible
+  participating repositories.
+
+### Changed
+
+- Defined one complete canonical validation gate and required split CI jobs to
+  cover all of its constituent checks.
+- Standardized the externally required checks as `CI / Required` and
+  `PR Policy / Validate`; product jobs remain internal to their repositories.
+- Made the pnpm CI example derive its pnpm version from the repository-owned
+  `packageManager` declaration.
+- Expanded shared pull-request policy tests to cover the complete valid and
+  invalid human pull-request contracts.
+- Bumped the manifest compatibility version to 3 for structured dependency
+  updates and live GitHub declarations.
+
 ## [1.1.0] - 2026-07-17
 
 ### Added

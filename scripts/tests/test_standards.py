@@ -42,7 +42,7 @@ class StandardsTests(unittest.TestCase):
 
     def base_manifest(self) -> dict:
         return {
-            "standards-version": 2,
+            "standards-version": 3,
             "standards-release": (standards_root() / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
@@ -53,6 +53,18 @@ class StandardsTests(unittest.TestCase):
                     "type": "repository",
                     "title": "Test Repository",
                 }
+            ],
+            "dependency-updates": [
+                {
+                    "ecosystem": "github-actions",
+                    "directory": "/",
+                    "schedule": "weekly",
+                },
+                {
+                    "ecosystem": "npm",
+                    "directory": "/",
+                    "schedule": "weekly",
+                },
             ],
             "variables": {},
             "local-fragments": {},
@@ -146,10 +158,64 @@ class StandardsTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         _, loaded = load_manifest(repository)
         plan = build_plan(standards_root(), repository, loaded)
-        self.assertEqual(len(plan), 7)
-        self.assertTrue(
-            all(item.target.startswith("docs/_templates/") for item in plan)
+        documentation_targets = [
+            item.target for item in plan if item.target.startswith("docs/_templates/")
+        ]
+        self.assertEqual(len(documentation_targets), 7)
+
+    def test_dependabot_is_rendered_from_structured_manifest_updates(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        _, manifest = load_manifest(repository)
+        plan = build_plan(standards_root(), repository, manifest)
+        dependabot = next(
+            item for item in plan if item.target == ".github/dependabot.yml"
         )
+        rendered = dependabot.content.decode("utf-8")
+        self.assertIn("package-ecosystem: github-actions", rendered)
+        self.assertIn("package-ecosystem: npm", rendered)
+        self.assertEqual(rendered.count("directory: /"), 2)
+
+    def test_dependency_updates_reject_missing_and_unsafe_declarations(self) -> None:
+        missing = self.base_manifest()
+        del missing["dependency-updates"]
+        temporary, repository = self.create_repository(missing)
+        try:
+            with self.assertRaisesRegex(
+                StandardsError, "dependency-updates must be a non-empty list"
+            ):
+                load_manifest(repository)
+        finally:
+            temporary.cleanup()
+
+        unsafe = self.base_manifest()
+        unsafe["dependency-updates"][0]["directory"] = "/../outside"
+        temporary, repository = self.create_repository(unsafe)
+        try:
+            with self.assertRaisesRegex(StandardsError, "must not contain dot segments"):
+                load_manifest(repository)
+        finally:
+            temporary.cleanup()
+
+    def test_github_contract_requires_an_explicit_ruleset_decision(self) -> None:
+        manifest = self.base_manifest()
+        manifest["github"] = {
+            "repository": "owner/example",
+            "default-branch": "main",
+            "settings": {
+                "delete-branch-on-merge": True,
+                "allow-squash-merge": True,
+                "allow-merge-commit": False,
+                "allow-rebase-merge": False,
+            },
+        }
+        temporary, repository = self.create_repository(manifest)
+        self.addCleanup(temporary.cleanup)
+        with self.assertRaisesRegex(
+            StandardsError,
+            "github must define repository, default-branch, settings, and ruleset",
+        ):
+            load_manifest(repository)
 
     def test_boundary_manifest_contract_is_enforced(self) -> None:
         invalid_manifests: list[tuple[str, dict, str]] = []

@@ -1,0 +1,68 @@
+name: Standards Audit
+
+on:
+  schedule:
+    - cron: "41 7 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standards-audit
+  cancel-in-progress: false
+
+jobs:
+  repository:
+    name: Standards Audit / ${{ matrix.repository }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        repository:
+          - lutzseverino/cardo
+          - lutzseverino/minecraft-setup-manager
+          - lutzseverino/minecraft-setup-protocol
+          - lutzseverino/minecraft-setup-publisher
+          - lutzseverino/minecraft-stream-guard
+          - lutzseverino/minecraft-stream-guard-site
+          - lutzseverino/polity
+          - lutzseverino/repository-standards
+    steps:
+      - name: Check out audit tooling
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check out target repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ matrix.repository }}
+          path: target
+      - name: Read adopted standards release
+        id: manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("target/.repository-standards.json").read_text(encoding="utf-8")
+          )
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              print(f"release={manifest['standards-release']}", file=output)
+              print(f"version={manifest['standards-version']}", file=output)
+          PY
+      - name: Check out adopted standards release
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: lutzseverino/repository-standards
+          ref: v${{ steps.manifest.outputs.release }}
+          path: adopted-standards
+      - name: Audit managed standards
+        run: adopted-standards/scripts/audit target
+      - name: Validate target workflows
+        run: |
+          cd target
+          python3 ../profiles/common/files/.github/scripts/check-workflows.py
+      - name: Audit live GitHub settings
+        if: steps.manifest.outputs.version == '3'
+        run: scripts/audit-live target
