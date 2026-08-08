@@ -1,6 +1,6 @@
 {
-  "standards-version": 3,
-  "standards-release": "2.0.0",
+  "standards-version": 4,
+  "standards-release": "3.0.0",
   "profiles": [
     "common",
     "documentation",
@@ -36,7 +36,7 @@
     },
     "ruleset": {
       "name": "Protect main",
-      "required-status-checks": ["CI / Required", "PR Policy / Validate"],
+      "required-status-checks": ["CI / Required"],
       "require-current-branch": true,
       "required-approvals": 0,
       "allowed-merge-methods": ["squash"],
@@ -54,8 +54,10 @@
   "repository-owned": [
     "README.md",
     "LICENSE",
+    "CONTEXT.md",
     "docs/README.md",
-    "docs/decisions/**",
+    "docs/agents/domain.md",
+    "docs/adr/**",
     "docs/explanation/**",
     "docs/how-to/**",
     "docs/reference/**",

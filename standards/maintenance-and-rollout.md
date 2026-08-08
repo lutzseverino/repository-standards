@@ -14,9 +14,10 @@ private repository.
 ## Two versions with different jobs
 
 `standards-version` is an integer compatibility version for the repository
-manifest and audit/sync protocol. Version `3` includes boundary declarations,
-structured dependency updates, and optional live GitHub contracts. Increment
-it only for an incompatible manifest or tooling contract.
+manifest and audit/sync protocol. Version `4` includes boundary declarations,
+structured dependency updates, required live GitHub contracts, profile-owned
+required labels, and managed absence. Increment it only for an incompatible
+manifest or tooling contract.
 
 `standards-release` is the exact semantic version of this repository's content,
 also stored in `VERSION` and represented by a Git tag such as `v1.0.0`. Increment
@@ -39,7 +40,7 @@ Standards changes use the normal issue and pull-request workflow.
 3. Record the user-visible change under `Unreleased` in `CHANGELOG.md`.
 4. Choose the next semantic release and update `VERSION`.
 5. Move changelog entries into the dated release section.
-6. Merge only after CI and PR Policy pass, then tag the merged commit.
+6. Merge only after CI passes, then tag the merged commit.
 
 ## Adopt a standards release
 
@@ -48,13 +49,16 @@ Rollout is deliberate and repository-aware:
 1. Check out the intended `repository-standards` release tag.
 2. Update the target's `standards-release` manifest field.
 3. Run `scripts/audit /path/to/target` to inspect current drift.
-4. Run `scripts/sync /path/to/target` and review the preview.
-5. Run `scripts/sync --write /path/to/target` to update managed files.
+4. Run `scripts/sync /path/to/target` and review every write and managed
+   deletion in the preview.
+5. Run `scripts/sync --write /path/to/target` to update managed files and remove
+   exact paths declared absent.
 6. Apply any repository-owned migration required by the written guidance.
-7. Run the target repository's canonical check and CI.
-8. Run the standards audit once more and commit the self-contained result.
-9. If the manifest declares GitHub settings, run `scripts/audit-live` after any
-   coordinated ruleset migration.
+7. Provision the canonical GitHub labels when the common profile is selected.
+8. Run the target repository's canonical check and CI.
+9. Run the standards audit once more and commit the self-contained result.
+10. If the manifest declares GitHub settings, run `scripts/audit-live` after
+    label and ruleset migration.
 
 The sync tool never deploys, commits, pushes, opens pull requests, changes
 GitHub settings, or schedules later work. Those actions remain explicit rollout

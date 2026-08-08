@@ -9,4 +9,5 @@ type.
 - [How-to guides](how-to/README.md): task-oriented instructions.
 - [Reference](reference/README.md): precise technical information.
 - [Explanation](explanation/README.md): concepts, context, and trade-offs.
-- [Decisions](decisions/README.md): durable architectural decisions.
+- [Architectural decision records](adr/README.md): durable architectural
+  decisions.

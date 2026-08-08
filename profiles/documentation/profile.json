@@ -9,6 +9,7 @@
     {"mode": "exact", "source": "files/docs/_templates/how-to.template.md", "target": "docs/_templates/how-to.template.md"},
     {"mode": "exact", "source": "files/docs/_templates/reference.template.md", "target": "docs/_templates/reference.template.md"},
     {"mode": "exact", "source": "files/docs/_templates/explanation.template.md", "target": "docs/_templates/explanation.template.md"},
-    {"mode": "exact", "source": "files/docs/_templates/decision.template.md", "target": "docs/_templates/decision.template.md"}
+    {"mode": "exact", "source": "files/docs/_templates/adr.template.md", "target": "docs/_templates/adr.template.md"},
+    {"mode": "absent", "target": "docs/_templates/decision.template.md"}
   ]
 }

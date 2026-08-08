@@ -18,9 +18,11 @@ from lib.standards import (  # noqa: E402
     _render_template,
     audit_main,
     build_plan,
+    collect_required_labels,
     inspect,
     inspect_boundaries,
     load_manifest,
+    load_profiles,
     standards_root,
     write,
 )
@@ -42,7 +44,7 @@ class StandardsTests(unittest.TestCase):
 
     def base_manifest(self) -> dict:
         return {
-            "standards-version": 3,
+            "standards-version": 4,
             "standards-release": (standards_root() / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
@@ -66,6 +68,17 @@ class StandardsTests(unittest.TestCase):
                     "schedule": "weekly",
                 },
             ],
+            "github": {
+                "repository": "owner/example",
+                "default-branch": "main",
+                "settings": {
+                    "delete-branch-on-merge": True,
+                    "allow-squash-merge": True,
+                    "allow-merge-commit": False,
+                    "allow-rebase-merge": False,
+                },
+                "ruleset": None,
+            },
             "variables": {},
             "local-fragments": {},
             "repository-owned": [
@@ -83,9 +96,13 @@ class StandardsTests(unittest.TestCase):
         plan = build_plan(standards_root(), repository, manifest)
         initial = inspect(repository, plan)
         self.assertTrue(initial)
-        self.assertTrue(all(result.status == "missing" for result in initial))
+        self.assertTrue(
+            all(result.status in {"missing", "ok"} for result in initial)
+        )
+        changed = [result for result in initial if result.status != "ok"]
+        self.assertTrue(changed)
 
-        self.assertEqual(write(repository, initial), len(initial))
+        self.assertEqual(write(repository, initial), len(changed))
         final = inspect(repository, plan)
         self.assertTrue(all(result.status == "ok" for result in final))
 
@@ -117,6 +134,34 @@ class StandardsTests(unittest.TestCase):
         with self.assertRaisesRegex(StandardsError, "conflicts with repository-owned"):
             build_plan(standards_root(), repository, loaded)
 
+    def test_managed_absence_is_audited_and_removed(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        retired = repository / ".github/pull_request_template.md"
+        retired.parent.mkdir(parents=True)
+        retired.write_text("retired policy\n", encoding="utf-8")
+
+        _, loaded = load_manifest(repository)
+        plan = build_plan(standards_root(), repository, loaded)
+        initial = inspect(repository, plan)
+        result = next(
+            item
+            for item in initial
+            if item.target == ".github/pull_request_template.md"
+        )
+        self.assertEqual(result.status, "present")
+        self.assertEqual(result.mode, "absent")
+
+        self.assertEqual(write(repository, [result]), 1)
+        self.assertFalse(retired.exists())
+        final = inspect(repository, plan)
+        result = next(
+            item
+            for item in final
+            if item.target == ".github/pull_request_template.md"
+        )
+        self.assertEqual(result.status, "ok")
+
     def test_mismatched_standards_release_is_rejected(self) -> None:
         manifest = self.base_manifest()
         manifest["standards-release"] = "9.9.9"
@@ -138,6 +183,22 @@ class StandardsTests(unittest.TestCase):
         self.assertEqual(rendered.count("node_modules/"), 1)
         self.assertIn("# Protocol package outputs", rendered)
 
+    def test_common_profile_declares_the_canonical_required_labels(self) -> None:
+        profiles = load_profiles(standards_root(), ["common"])
+
+        self.assertEqual(
+            collect_required_labels(profiles),
+            (
+                "bug",
+                "enhancement",
+                "needs-info",
+                "needs-triage",
+                "ready-for-agent",
+                "ready-for-human",
+                "wontfix",
+            ),
+        )
+
     def test_managed_target_symlink_is_rejected(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
@@ -152,16 +213,24 @@ class StandardsTests(unittest.TestCase):
 
     def test_documentation_profile_manages_exactly_seven_templates(self) -> None:
         manifest = self.base_manifest()
-        manifest["profiles"] = ["documentation"]
+        manifest["profiles"] = ["common", "documentation"]
         manifest["repository-owned"] = ["docs/README.md", "docs/tutorials/**"]
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
         _, loaded = load_manifest(repository)
         plan = build_plan(standards_root(), repository, loaded)
         documentation_targets = [
-            item.target for item in plan if item.target.startswith("docs/_templates/")
+            item.target
+            for item in plan
+            if item.target.startswith("docs/_templates/") and item.mode != "absent"
         ]
         self.assertEqual(len(documentation_targets), 7)
+        retired = next(
+            item
+            for item in plan
+            if item.target == "docs/_templates/decision.template.md"
+        )
+        self.assertEqual(retired.mode, "absent")
 
     def test_dependabot_is_rendered_from_structured_manifest_updates(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
@@ -216,6 +285,29 @@ class StandardsTests(unittest.TestCase):
             "github must define repository, default-branch, settings, and ruleset",
         ):
             load_manifest(repository)
+
+    def test_manifest_requires_common_profile_and_github_contract(self) -> None:
+        missing_common = self.base_manifest()
+        missing_common["profiles"].remove("common")
+        temporary, repository = self.create_repository(missing_common)
+        try:
+            with self.assertRaisesRegex(
+                StandardsError, "requires the common profile"
+            ):
+                load_manifest(repository)
+        finally:
+            temporary.cleanup()
+
+        missing_github = self.base_manifest()
+        del missing_github["github"]
+        temporary, repository = self.create_repository(missing_github)
+        try:
+            with self.assertRaisesRegex(
+                StandardsError, "github contract is required"
+            ):
+                load_manifest(repository)
+        finally:
+            temporary.cleanup()
 
     def test_boundary_manifest_contract_is_enforced(self) -> None:
         invalid_manifests: list[tuple[str, dict, str]] = []
@@ -303,7 +395,9 @@ class StandardsTests(unittest.TestCase):
         self.assertEqual([result.status for result in results], ["ok", "ok", "ok"])
         plan = build_plan(standards_root(), repository, loaded)
         documentation_targets = [
-            item.target for item in plan if "/_templates/" in item.target
+            item.target
+            for item in plan
+            if "/_templates/" in item.target and item.mode != "absent"
         ]
         self.assertEqual(len(documentation_targets), 7)
         self.assertTrue(
@@ -380,6 +474,27 @@ class StandardsTests(unittest.TestCase):
         self.assertEqual(result.status, "invalid")
         self.assertIn(
             "docs/tutorials has no authored content; remove it until needed",
+            result.messages,
+        )
+
+    def test_empty_adr_category_is_rejected(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        self.write_file(
+            repository,
+            "README.md",
+            '<div align="center">\n  <h1>Test Repository</h1>\n</div>\n\n'
+            "See [documentation](docs/README.md).\n",
+        )
+        self.write_file(repository, "docs/README.md", "# Documentation\n")
+        self.write_file(repository, "docs/adr/README.md", "# ADRs\n")
+
+        _, loaded = load_manifest(repository)
+        result = inspect_boundaries(repository, loaded["boundaries"])[0]
+
+        self.assertEqual(result.status, "invalid")
+        self.assertIn(
+            "docs/adr has no authored content; remove it until needed",
             result.messages,
         )
 

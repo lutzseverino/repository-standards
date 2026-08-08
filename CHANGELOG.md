@@ -7,6 +7,53 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-08
+
+### Added
+
+- Added profile-owned canonical GitHub labels and read-only live label audits.
+- Added managed absence so audit detects retired policy files and synchronization
+  can preview and remove exact declared files.
+- Added repository-family agent configuration for the GitHub issue tracker and
+  canonical triage vocabulary.
+- Added `scripts/check` as this repository's complete local validation gate.
+
+### Changed
+
+- Replaced the issue-first workflow with the canonical manual Matt Pocock skills
+  flow for incoming requests, self-authored planning, and implementation through
+  a validated commit.
+- Separated manual GitHub delivery and tracker reconciliation from
+  implementation while retaining pull requests, CI, squash merge, Conventional
+  Commits, and branch deletion.
+- Changed branch names to `<type>/<short-kebab-slug>` so self-authored small work
+  does not require an issue.
+- Moved architectural decision records from `docs/decisions/` to `docs/adr/`
+  while retaining the remaining Diataxis documentation structure.
+- Bumped the manifest and synchronization compatibility version to `4`.
+- Required version 4 manifests to select `common` and `documentation` and to
+  declare the GitHub contract used by live label and repository audits.
+
+### Removed
+
+- Removed managed issue forms, the pull-request template, the pull-request
+  policy workflow and checker, and the `PR Policy / Validate` required status.
+
+### Migration
+
+- Update manifests to `standards-version: 4` and `standards-release: 3.0.0`.
+- Review the synchronization preview because write mode now removes exact paths
+  declared absent; repository-owned guards and symlink protections still apply.
+- Provision `bug`, `enhancement`, `needs-triage`, `needs-info`,
+  `ready-for-agent`, `ready-for-human`, and `wontfix`, then run
+  `scripts/audit-live`.
+- Create the repository-owned `docs/agents/domain.md` configuration and a
+  `CONTEXT.md` or `CONTEXT-MAP.md` only when the repository has resolved domain
+  language.
+- Replace `docs/_templates/decision.template.md` with
+  `docs/_templates/adr.template.md` and move authored decision records to
+  `docs/adr/`.
+
 ## [2.0.0] - 2026-07-21
 
 ### Added

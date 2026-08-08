@@ -12,8 +12,8 @@ and repository-family conventions.
   documentation placement, ownership, and Diataxis organization.
 - [Managed files](../standards/managed-files.md): synchronization modes and
   repository ownership guards.
-- [Repository workflow](../standards/repository-workflow.md): issue, branch,
-  commit, pull-request, and merge conventions.
+- [Repository workflow](../standards/repository-workflow.md): incoming-request,
+  planning, implementation, GitHub-delivery, and reconciliation conventions.
 - [Versioning and releases](../standards/versioning-and-releases.md): release
   and changelog policy.
 - [Maintenance and rollout](../standards/maintenance-and-rollout.md): standards
@@ -23,3 +23,23 @@ and repository-family conventions.
 
 Use the [canonical documentation templates](_templates/README.md) when adding
 standards documentation.
+
+## Architectural decision records
+
+- [Adopt one canonical skills workflow](adr/0001-adopt-one-canonical-skills-workflow.md):
+  replace the issue-first workflow while keeping manual GitHub delivery
+  separate from implementation.
+
+## Agent configuration
+
+- [Issue tracker](agents/issue-tracker.md): GitHub operations and relationship
+  conventions used by the planning skills.
+- [Triage labels](agents/triage-labels.md): canonical category and state label
+  mapping.
+- [Domain docs](agents/domain.md): repository-owned domain-document layout and
+  consumer rules.
+
+## Domain language
+
+- [Repository Standards context](../CONTEXT.md): canonical terms used by the
+  workflow, tooling, and documentation.

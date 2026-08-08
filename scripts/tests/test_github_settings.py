@@ -26,7 +26,6 @@ class GitHubSettingsTests(unittest.TestCase):
                 "name": "Protect main",
                 "required-status-checks": [
                     "CI / Required",
-                    "PR Policy / Validate",
                 ],
                 "require-current-branch": True,
                 "required-approvals": 0,
@@ -72,7 +71,6 @@ class GitHubSettingsTests(unittest.TestCase):
                             "strict_required_status_checks_policy": True,
                             "required_status_checks": [
                                 {"context": "CI / Required"},
-                                {"context": "PR Policy / Validate"},
                             ],
                         },
                     },
@@ -106,6 +104,61 @@ class GitHubSettingsTests(unittest.TestCase):
         responses["repos/owner/example/rulesets"] = []
         errors = inspect_live_github(self.contract(), responses.__getitem__)
         self.assertEqual(errors, ["github.ruleset 'Protect main' is missing"])
+
+    def test_missing_required_labels_are_reported_and_extra_labels_are_allowed(self) -> None:
+        responses = self.responses()
+        responses["repos/owner/example/labels?per_page=100&page=1"] = [
+            {"name": "bug"},
+            {"name": "enhancement"},
+            {"name": "needs-triage"},
+            {"name": "needs-info"},
+            {"name": "ready-for-agent"},
+            {"name": "ready-for-human"},
+            {"name": "repository-specific"},
+        ]
+        required = [
+            "bug",
+            "enhancement",
+            "needs-triage",
+            "needs-info",
+            "ready-for-agent",
+            "ready-for-human",
+            "wontfix",
+        ]
+
+        errors = inspect_live_github(
+            self.contract(),
+            responses.__getitem__,
+            required_labels=required,
+        )
+
+        self.assertEqual(errors, ["github required labels are missing: ['wontfix']"])
+
+    def test_required_labels_are_found_across_all_label_pages(self) -> None:
+        responses = self.responses()
+        responses["repos/owner/example/labels?per_page=100&page=1"] = [
+            {"name": f"extra-{index:03d}"} for index in range(100)
+        ]
+        required = [
+            "bug",
+            "enhancement",
+            "needs-triage",
+            "needs-info",
+            "ready-for-agent",
+            "ready-for-human",
+            "wontfix",
+        ]
+        responses["repos/owner/example/labels?per_page=100&page=2"] = [
+            {"name": name} for name in required
+        ]
+
+        errors = inspect_live_github(
+            self.contract(),
+            responses.__getitem__,
+            required_labels=required,
+        )
+
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

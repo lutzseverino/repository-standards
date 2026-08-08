@@ -16,6 +16,8 @@ owned by each repository.
 ## What belongs here
 
 - exact managed files that should be identical everywhere;
+- managed absences for retired files whose presence restores conflicting
+  behavior;
 - templates whose variables are explicit in a repository manifest;
 - composable fragments such as common and ecosystem `.gitignore` blocks;
 - written conventions that need human judgment;
@@ -28,8 +30,8 @@ Each participating repository carries `.repository-standards.json`:
 
 ```json
 {
-  "standards-version": 3,
-  "standards-release": "2.0.0",
+  "standards-version": 4,
+  "standards-release": "3.0.0",
   "profiles": ["common", "documentation", "vite-react", "pnpm-workspace"],
   "boundaries": [
     {"path": ".", "type": "repository", "title": "Product"},
@@ -51,7 +53,7 @@ Each participating repository carries `.repository-standards.json`:
     },
     "ruleset": {
       "name": "Protect main",
-      "required-status-checks": ["CI / Required", "PR Policy / Validate"],
+      "required-status-checks": ["CI / Required"],
       "require-current-branch": true,
       "required-approvals": 0,
       "allowed-merge-methods": ["squash"],
@@ -67,7 +69,10 @@ Each participating repository carries `.repository-standards.json`:
   "repository-owned": [
     "README.md",
     "LICENSE",
+    "CONTEXT.md",
     "docs/README.md",
+    "docs/agents/domain.md",
+    "docs/adr/**",
     "docs/how-to/**",
     "apps/**",
     "src/**"
@@ -80,6 +85,10 @@ managed. Paths listed under `repository-owned` cannot be emitted by a profile.
 Everything else remains untouched. Declared boundaries make repository-owned
 README and documentation structure auditable without making their prose a
 managed copy.
+
+Version 4 requires the `common` and `documentation` profiles and a GitHub
+contract. This keeps the family-wide workflow, agent configuration, required
+labels, repository settings, and documentation boundary auditable.
 
 JSON is canonical because the tools can read it with the Python standard
 library. YAML manifests are also accepted when PyYAML is installed. The JSON
@@ -108,14 +117,14 @@ unified diffs. `sync --write` changes managed targets only. It refuses a plan
 that conflicts with a `repository-owned` path.
 
 `audit-live` is deliberately separate: it requires an authenticated GitHub CLI
-and compares declared repository settings and rulesets without mutating them.
-Repositories that cannot use rulesets may declare `"ruleset": null` while
-retaining auditable repository settings.
+and compares required labels, declared repository settings, and rulesets
+without mutating them. Repositories that cannot use rulesets may declare
+`"ruleset": null` while retaining auditable repository settings and labels.
 
-Run the test suite with:
+Run the canonical validation gate with:
 
 ```sh
-python3 -m unittest discover -s scripts/tests -v
+scripts/check
 ```
 
 ## Profiles
@@ -152,7 +161,9 @@ A standards change is reviewed here, recorded in `CHANGELOG.md`, assigned a
 semantic release, and tagged. Adoption is then deliberate: check out that
 release, update each target manifest's `standards-release`, preview with
 `scripts/sync`, apply the managed changes, run the repository's own gate, and
-audit again. Product CI never requires access to this private repository.
+audit again. Product CI never requires access to this private repository. The
+common profile declares canonical GitHub labels for read-only live audit;
+provisioning remains manual.
 
 See [Maintenance and rollout](standards/maintenance-and-rollout.md) for the
 versioning and adoption procedure.
@@ -160,7 +171,8 @@ versioning and adoption procedure.
 ## Scope of automation
 
 The tools deliberately do not rewrite product READMEs, build manifests, source
-trees, release workflows, or documentation indexes. They do render Dependabot
-configuration from structured manifest data and vend exact policy workflows.
-README and documentation boundaries are structurally audited while their
-content is maintained with repository-aware judgment.
+trees, release workflows, or documentation indexes. They render Dependabot
+configuration from structured manifest data, manage repository-family agent
+configuration, and remove only exact paths explicitly declared absent. README
+and documentation boundaries are structurally audited while their content is
+maintained with repository-aware judgment.

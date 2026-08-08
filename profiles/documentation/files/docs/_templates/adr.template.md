@@ -18,7 +18,7 @@ State the chosen option clearly.
 - Tradeoff or cost
 - Follow-up work if any
 
-## Alternatives Considered
+## Alternatives considered
 
 - Option A and why it was not chosen
 - Option B and why it was not chosen
