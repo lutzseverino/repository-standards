@@ -47,6 +47,12 @@ A declared repository path that must not exist because its presence would
 restore retired or conflicting behavior.
 _Avoid_: Unmanaged path, optional file
 
+**Standards adoption**:
+The deliberate work that brings a participating repository into full
+conformance with a specific standards release, including repository content
+and its declared live GitHub contract.
+_Avoid_: File synchronization, standards update
+
 **Canonical validation**:
 The single complete command that determines whether a change is ready for
 GitHub delivery.
