@@ -1,16 +1,19 @@
 # Managed files and ownership
 
-The synchronization tool supports three file modes:
+The synchronization tool supports four file modes:
 
 - `exact`: copy the source bytes exactly;
 - `template`: replace `{{ variable_name }}` placeholders from manifest
   variables;
 - `compose`: concatenate ordered fragments targeting the same file, followed
-  by optional repository-local fragments.
+  by optional repository-local fragments;
+- `absent`: require an exact target path not to exist.
 
 A selected profile declares its managed targets in `profile.json`. Duplicate
 exact or template targets are rejected. Multiple compose fragments may share a
 target and are ordered first by `order`, then by profile selection order.
+Absent declarations have no source file and conflict with every other mode for
+the same target.
 
 `.github/dependabot.yml` is the one structured managed target. It is rendered
 deterministically from `dependency-updates` because concatenated YAML fragments
@@ -34,5 +37,8 @@ The common `.gitignore` is intentionally composed. A repository may keep
 earned local patterns in `.repository-standards/gitignore.local`; the target is
 then regenerated from standard fragments plus that repository-owned source.
 
-Synchronization never deletes files and never touches a path absent from the
-resolved managed plan.
+Synchronization writes only resolved managed targets. For an `absent` target,
+preview shows a deletion and `sync --write` deletes only that exact regular
+file. It does not delete directories, follow symlinks, remove parent
+directories, or delete paths that are merely absent from the resolved plan.
+Repository-owned guards apply to absent targets before inspection or writing.

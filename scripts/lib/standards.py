@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 
-SUPPORTED_STANDARDS_VERSION = 3
+SUPPORTED_STANDARDS_VERSION = 4
 MANIFEST_NAMES = (
     ".repository-standards.json",
     ".repository-standards.yml",
@@ -40,7 +40,7 @@ DIATAXIS_CATEGORIES = (
     "how-to",
     "reference",
     "explanation",
-    "decisions",
+    "adr",
 )
 DEPENDENCY_ECOSYSTEMS = {"github-actions", "maven", "npm"}
 DEPENDENCY_INTERVALS = {"daily", "weekly", "monthly"}
@@ -53,7 +53,7 @@ class StandardsError(Exception):
 @dataclass(frozen=True)
 class Source:
     mode: str
-    path: Path
+    path: Path | None
     target: str
     order: int
     profile: str
@@ -63,6 +63,7 @@ class Source:
 @dataclass(frozen=True)
 class PlannedFile:
     target: str
+    mode: str
     content: bytes
     origins: tuple[str, ...]
 
@@ -71,6 +72,7 @@ class PlannedFile:
 class Result:
     target: str
     status: str
+    mode: str
     expected: bytes
     actual: bytes | None
     origins: tuple[str, ...]
@@ -236,8 +238,12 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     )
     if root_boundary is None or root_boundary["type"] != "repository":
         raise StandardsError("the boundary at '.' must have type repository")
+    if "common" not in profiles:
+        raise StandardsError(
+            "standards-version 4 workflow requires the common profile"
+        )
     if "documentation" not in profiles:
-        raise StandardsError("standards-version 3 boundaries require the documentation profile")
+        raise StandardsError("standards-version 4 boundaries require the documentation profile")
 
     dependency_updates = manifest.get("dependency-updates")
     if not isinstance(dependency_updates, list) or not dependency_updates:
@@ -283,6 +289,8 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         )
 
     github = manifest.get("github")
+    if github is None:
+        raise StandardsError("standards-version 4 github contract is required")
     if github is not None:
         if not isinstance(github, dict):
             raise StandardsError("github must be an object")
@@ -430,12 +438,28 @@ def _load_profile(
     data = _read_data(path)
     if data.get("name") != name:
         raise StandardsError(f"{path}: name must be {name!r}")
-    unknown = sorted(set(data) - {"name", "description", "extends", "files"})
+    unknown = sorted(
+        set(data) - {"name", "description", "extends", "files", "github"}
+    )
     if unknown:
         raise StandardsError(f"{path}: unknown fields: {', '.join(unknown)}")
     parents = data.get("extends", [])
     if not isinstance(parents, list) or not all(isinstance(item, str) for item in parents):
         raise StandardsError(f"{path}: extends must be a list")
+    github = data.get("github", {})
+    if not isinstance(github, dict) or set(github) - {"required-labels"}:
+        raise StandardsError(
+            f"{path}: github must contain only required-labels"
+        )
+    required_labels = github.get("required-labels", [])
+    if (
+        not isinstance(required_labels, list)
+        or not all(isinstance(label, str) and label for label in required_labels)
+        or len(required_labels) != len(set(required_labels))
+    ):
+        raise StandardsError(
+            f"{path}: github.required-labels must be a unique list of names"
+        )
 
     visiting.add(name)
     for parent in parents:
@@ -451,6 +475,17 @@ def load_profiles(root: Path, selected: Iterable[str]) -> list[tuple[str, dict[s
     for name in selected:
         _load_profile(root, name, ordered, loaded, set())
     return ordered
+
+
+def collect_required_labels(
+    profiles: Iterable[tuple[str, dict[str, Any], Path]],
+) -> tuple[str, ...]:
+    labels = {
+        label
+        for _, data, _ in profiles
+        for label in data.get("github", {}).get("required-labels", [])
+    }
+    return tuple(sorted(labels))
 
 
 def collect_sources(
@@ -470,20 +505,33 @@ def collect_sources(
                     f"profile {name!r}: unknown file fields: {', '.join(unknown)}"
                 )
             mode = item.get("mode")
-            if mode not in {"exact", "template", "compose"}:
+            if mode not in {"exact", "template", "compose", "absent"}:
                 raise StandardsError(f"profile {name!r}: invalid file mode {mode!r}")
-            source_value = _relative_path(item.get("source"), f"profile {name} source")
             target = _relative_path(item.get("target"), f"profile {name} target")
             order = item.get("order", 0)
             if not isinstance(order, int):
                 raise StandardsError(f"profile {name!r}: order must be an integer")
-            source = (profile_dir / source_value).resolve()
-            try:
-                source.relative_to(profile_dir.resolve())
-            except ValueError as exc:
-                raise StandardsError(f"profile {name!r}: source escapes profile") from exc
-            if not source.is_file():
-                raise StandardsError(f"profile {name!r}: source not found: {source_value}")
+            if mode == "absent":
+                if "source" in item or "order" in item:
+                    raise StandardsError(
+                        f"profile {name!r}: absent files define only mode and target"
+                    )
+                source = None
+            else:
+                source_value = _relative_path(
+                    item.get("source"), f"profile {name} source"
+                )
+                source = (profile_dir / source_value).resolve()
+                try:
+                    source.relative_to(profile_dir.resolve())
+                except ValueError as exc:
+                    raise StandardsError(
+                        f"profile {name!r}: source escapes profile"
+                    ) from exc
+                if not source.is_file():
+                    raise StandardsError(
+                        f"profile {name!r}: source not found: {source_value}"
+                    )
             targets.setdefault(target, []).append(
                 Source(mode, source, target, order, name, profile_index)
             )
@@ -499,6 +547,8 @@ def collect_sources(
 
 
 def _render_template(source: Source, variables: dict[str, Any]) -> bytes:
+    if source.path is None:
+        raise StandardsError("absent files cannot be rendered as templates")
     try:
         template = source.path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -566,7 +616,12 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
     sources_by_target = collect_sources(profiles)
     local_fragments: dict[str, list[str]] = manifest["local-fragments"]
 
-    unknown_fragment_targets = sorted(set(local_fragments) - set(sources_by_target))
+    compose_targets = {
+        target
+        for target, sources in sources_by_target.items()
+        if sources[0].mode == "compose"
+    }
+    unknown_fragment_targets = sorted(set(local_fragments) - compose_targets)
     if unknown_fragment_targets:
         raise StandardsError(
             "local fragments require a managed compose target: "
@@ -582,15 +637,26 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
                 f"{owned_pattern!r}"
             )
         sources = sources_by_target[target]
-        origins = [f"{source.profile}:{source.path.name}" for source in sources]
-        if sources[0].mode == "exact":
+        origins = [
+            f"{source.profile}:{source.path.name if source.path else 'absence'}"
+            for source in sources
+        ]
+        if sources[0].mode == "absent":
+            content = b""
+        elif sources[0].mode == "exact":
+            assert sources[0].path is not None
             content = sources[0].path.read_bytes()
         elif sources[0].mode == "template":
             content = _render_template(sources[0], manifest["variables"])
         else:
             sources = sorted(sources, key=lambda item: (item.order, item.profile_index))
+            assert all(source.path is not None for source in sources)
             parts = [source.path.read_bytes() for source in sources]
-            origins = [f"{source.profile}:{source.path.name}" for source in sources]
+            origins = [
+                f"{source.profile}:{source.path.name}"
+                for source in sources
+                if source.path is not None
+            ]
             for local_value in local_fragments.get(target, []):
                 local_path = (repository / local_value).resolve()
                 try:
@@ -602,7 +668,9 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
                 parts.append(local_path.read_bytes())
                 origins.append(f"repository:{local_value}")
             content = _join_fragments(parts, target)
-        planned.append(PlannedFile(target, content, tuple(origins)))
+        planned.append(
+            PlannedFile(target, sources[0].mode, content, tuple(origins))
+        )
     dependabot_target = ".github/dependabot.yml"
     if dependabot_target in sources_by_target:
         raise StandardsError(
@@ -617,6 +685,7 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
     planned.append(
         PlannedFile(
             dependabot_target,
+            "generated",
             _render_dependabot(manifest["dependency-updates"]),
             ("manifest:dependency-updates",),
         )
@@ -636,17 +705,77 @@ def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:
             raise StandardsError(f"managed target escapes through a symlink: {item.target}") from exc
         if target.is_symlink():
             raise StandardsError(f"managed target must not be a symlink: {item.target}")
-        if not target.exists():
-            results.append(Result(item.target, "missing", item.content, None, item.origins))
+        if item.mode == "absent":
+            if not target.exists():
+                results.append(
+                    Result(item.target, "ok", item.mode, b"", None, item.origins)
+                )
+            elif not target.is_file():
+                results.append(
+                    Result(
+                        item.target,
+                        "present",
+                        item.mode,
+                        b"",
+                        None,
+                        item.origins,
+                    )
+                )
+            else:
+                try:
+                    actual = target.read_bytes()
+                except OSError as exc:
+                    raise StandardsError(
+                        f"cannot read managed target {item.target}: {exc}"
+                    ) from exc
+                results.append(
+                    Result(
+                        item.target,
+                        "present",
+                        item.mode,
+                        b"",
+                        actual,
+                        item.origins,
+                    )
+                )
+        elif not target.exists():
+            results.append(
+                Result(
+                    item.target,
+                    "missing",
+                    item.mode,
+                    item.content,
+                    None,
+                    item.origins,
+                )
+            )
         elif not target.is_file():
-            results.append(Result(item.target, "not-file", item.content, None, item.origins))
+            results.append(
+                Result(
+                    item.target,
+                    "not-file",
+                    item.mode,
+                    item.content,
+                    None,
+                    item.origins,
+                )
+            )
         else:
             try:
                 actual = target.read_bytes()
             except OSError as exc:
                 raise StandardsError(f"cannot read managed target {item.target}: {exc}") from exc
             status = "ok" if actual == item.content else "drift"
-            results.append(Result(item.target, status, item.content, actual, item.origins))
+            results.append(
+                Result(
+                    item.target,
+                    status,
+                    item.mode,
+                    item.content,
+                    actual,
+                    item.origins,
+                )
+            )
     return results
 
 
@@ -821,10 +950,13 @@ def _text_diff(result: Result) -> str:
             actual_text = result.actual.decode("utf-8")
         except UnicodeDecodeError:
             return f"Binary content differs for {result.target}\n"
-    try:
-        expected_text = result.expected.decode("utf-8")
-    except UnicodeDecodeError:
-        return f"Binary content differs for {result.target}\n"
+    if result.mode == "absent":
+        expected_text = ""
+    else:
+        try:
+            expected_text = result.expected.decode("utf-8")
+        except UnicodeDecodeError:
+            return f"Binary content differs for {result.target}\n"
     return "".join(
         difflib.unified_diff(
             actual_text.splitlines(keepends=True),
@@ -852,8 +984,11 @@ def write(repository: Path, results: Iterable[Result]) -> int:
         if target.exists() and not target.is_file():
             raise StandardsError(f"managed target is not a file: {result.target}")
         try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(result.expected)
+            if result.mode == "absent":
+                target.unlink()
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(result.expected)
         except OSError as exc:
             raise StandardsError(f"cannot write managed target {result.target}: {exc}") from exc
         changed += 1
@@ -899,6 +1034,7 @@ def audit_main(argv: list[str] | None = None) -> int:
                         {
                             "path": result.target,
                             "status": result.status,
+                            "mode": result.mode,
                             "origins": list(result.origins),
                         }
                         for result in results

@@ -46,7 +46,7 @@ Use a Diataxis-oriented tree as documentation earns each category:
 docs/
 ├── README.md
 ├── _templates/              # repository root only
-├── decisions/
+├── adr/
 ├── explanation/
 ├── how-to/
 ├── reference/
@@ -57,7 +57,7 @@ docs/
 - How-to guides solve a focused task for a reader who knows the context.
 - Reference documents describe exact interfaces, configuration, and behavior.
 - Explanation documents build understanding and discuss trade-offs.
-- Decisions record durable architectural choices and their consequences.
+- ADRs record durable architectural choices and their consequences.
 
 The categories are a vocabulary, not a demand for empty directories. Create a
 category and its index when the boundary has real content for it. Specialized
@@ -78,9 +78,8 @@ wording conventions, but synchronization does not overwrite them.
 ## Templates
 
 Document templates prompt for audience, purpose, prerequisites, and validation
-where relevant. Remove prompt text when publishing a document. Keep decision
-records immutable after acceptance except for status and links to a superseding
-decision.
+where relevant. Remove prompt text when publishing a document. Keep ADRs
+immutable after acceptance except for status and links to a superseding ADR.
 
 ## Writing
 

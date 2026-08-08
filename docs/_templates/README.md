@@ -8,7 +8,7 @@ Use these templates to keep documents consistent across repositories and contrib
 - [how-to.template.md](how-to.template.md)
 - [reference.template.md](reference.template.md)
 - [explanation.template.md](explanation.template.md)
-- [decision.template.md](decision.template.md)
+- [adr.template.md](adr.template.md)
 - [index.template.md](index.template.md)
 
 ## Writing Rules By Document Type
@@ -18,7 +18,7 @@ Use these templates to keep documents consistent across repositories and contrib
 - `how-to`: task-first instructions and verification
 - `reference`: factual, contract-first, and easy to scan
 - `explanation`: stable conceptual guidance, vocabulary, and rationale
-- `decision`: durable choice with context, consequences, and alternatives
+- `adr`: durable architectural choice with context, consequences, and alternatives
 
 ## Rules
 

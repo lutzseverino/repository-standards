@@ -1,6 +1,6 @@
 {
-  "standards-version": 3,
-  "standards-release": "2.0.0",
+  "standards-version": 4,
+  "standards-release": "3.0.0",
   "profiles": [
     "common",
     "documentation"
@@ -41,7 +41,10 @@
     "README.md",
     "CHANGELOG.md",
     "VERSION",
+    "CONTEXT.md",
     "docs/README.md",
+    "docs/agents/domain.md",
+    "docs/adr/**",
     "standards/**",
     "profiles/**",
     "schema/**",

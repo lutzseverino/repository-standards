@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from .standards import StandardsError
 
@@ -121,7 +121,10 @@ def _compare_ruleset(
 
 
 def inspect_live_github(
-    contract: dict[str, Any], fetch_json: JsonFetcher = gh_json
+    contract: dict[str, Any],
+    fetch_json: JsonFetcher = gh_json,
+    *,
+    required_labels: Iterable[str] = (),
 ) -> list[str]:
     repository = contract["repository"]
     repository_data = fetch_json(f"repos/{repository}")
@@ -132,6 +135,30 @@ def inspect_live_github(
             f"expected {contract['default-branch']!r}"
         )
     errors.extend(_compare_settings(contract["settings"], repository_data))
+
+    required_label_names = set(required_labels)
+    if required_label_names:
+        actual_label_names: set[str] = set()
+        page = 1
+        while True:
+            labels = fetch_json(
+                f"repos/{repository}/labels?per_page=100&page={page}"
+            )
+            if not isinstance(labels, list):
+                raise StandardsError("GitHub labels API must return a list")
+            actual_label_names.update(
+                label["name"]
+                for label in labels
+                if isinstance(label, dict)
+                and isinstance(label.get("name"), str)
+                and label["name"]
+            )
+            if len(labels) < 100:
+                break
+            page += 1
+        missing_labels = sorted(required_label_names - actual_label_names)
+        if missing_labels:
+            errors.append(f"github required labels are missing: {missing_labels!r}")
 
     expected_ruleset = contract.get("ruleset")
     if expected_ruleset is None:

@@ -4,10 +4,10 @@
   "title": "Repository standards manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["standards-version", "standards-release", "profiles", "boundaries", "dependency-updates", "repository-owned"],
+  "required": ["standards-version", "standards-release", "profiles", "boundaries", "dependency-updates", "github", "repository-owned"],
   "properties": {
     "$schema": {"type": "string", "format": "uri-reference"},
-    "standards-version": {"const": 3},
+    "standards-version": {"const": 4},
     "standards-release": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
@@ -16,7 +16,11 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+      "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "allOf": [
+        {"contains": {"const": "common"}},
+        {"contains": {"const": "documentation"}}
+      ]
     },
     "boundaries": {
       "type": "array",
