@@ -65,4 +65,6 @@ jobs:
           python3 ../profiles/common/files/.github/scripts/check-workflows.py
       - name: Audit live GitHub settings
         if: steps.manifest.outputs.version == '4'
-        run: scripts/audit-live target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: adopted-standards/scripts/audit-live target
