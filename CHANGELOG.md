@@ -7,6 +7,11 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Name every managed deletion in synchronization previews, including empty
+  files, and report non-file managed absences as blocked.
+
 ## [3.0.0] - 2026-08-08
 
 ### Added

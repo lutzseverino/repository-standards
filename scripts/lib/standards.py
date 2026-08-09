@@ -714,7 +714,7 @@ def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:
                 results.append(
                     Result(
                         item.target,
-                        "present",
+                        "not-file",
                         item.mode,
                         b"",
                         None,
@@ -942,7 +942,29 @@ def inspect_boundaries(
     return results
 
 
-def _text_diff(result: Result) -> str:
+def _preview_text(result: Result) -> str:
+    if result.mode == "absent":
+        if result.status == "not-file":
+            return (
+                f"BLOCKED  {result.target} "
+                "(managed absence requires a regular file)\n"
+            )
+        deletion = f"DELETE   {result.target}\n"
+        if not result.actual:
+            return deletion
+        try:
+            actual_text = result.actual.decode("utf-8")
+        except UnicodeDecodeError:
+            return deletion
+        return deletion + "".join(
+            difflib.unified_diff(
+                actual_text.splitlines(keepends=True),
+                [],
+                fromfile=f"a/{result.target}",
+                tofile=f"b/{result.target}",
+            )
+        )
+
     if result.actual is None:
         actual_text = ""
     else:
@@ -950,13 +972,10 @@ def _text_diff(result: Result) -> str:
             actual_text = result.actual.decode("utf-8")
         except UnicodeDecodeError:
             return f"Binary content differs for {result.target}\n"
-    if result.mode == "absent":
-        expected_text = ""
-    else:
-        try:
-            expected_text = result.expected.decode("utf-8")
-        except UnicodeDecodeError:
-            return f"Binary content differs for {result.target}\n"
+    try:
+        expected_text = result.expected.decode("utf-8")
+    except UnicodeDecodeError:
+        return f"Binary content differs for {result.target}\n"
     return "".join(
         difflib.unified_diff(
             actual_text.splitlines(keepends=True),
@@ -1087,7 +1106,25 @@ def sync_main(argv: list[str] | None = None) -> int:
             print(f"All managed files are current in {repository}")
             return 0
         for result in drift:
-            print(_text_diff(result), end="")
+            print(_preview_text(result), end="")
+        blockers = [
+            result
+            for result in drift
+            if result.mode == "absent" and result.status == "not-file"
+        ]
+        if blockers:
+            changes = len(drift) - len(blockers)
+            if changes:
+                print(
+                    f"\nPreview: {changes} managed file(s) would change; "
+                    f"{len(blockers)} blocked path(s) require attention."
+                )
+            else:
+                print(
+                    f"\nPreview blocked: {len(blockers)} managed path(s) "
+                    "require attention."
+                )
+            return 2
         print(f"\nPreview: {len(drift)} managed file(s) would change. Re-run with --write.")
         return 1
     except StandardsError as exc:
