@@ -64,5 +64,5 @@ jobs:
           cd target
           python3 ../profiles/common/files/.github/scripts/check-workflows.py
       - name: Audit live GitHub settings
-        if: steps.manifest.outputs.version == '3'
+        if: steps.manifest.outputs.version == '4'
         run: scripts/audit-live target

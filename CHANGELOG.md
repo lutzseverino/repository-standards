@@ -7,6 +7,11 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Name every managed deletion in synchronization previews, including empty
+  files, and report non-file managed absences as blocked.
+
 ## [3.0.0] - 2026-08-08
 
 ### Added
@@ -16,6 +21,7 @@ and standards releases use semantic versioning.
   can preview and remove exact declared files.
 - Added repository-family agent configuration for the GitHub issue tracker and
   canonical triage vocabulary.
+- Added canonical language for complete standards adoption.
 - Added `scripts/check` as this repository's complete local validation gate.
 
 ### Changed
@@ -38,6 +44,11 @@ and standards releases use semantic versioning.
 
 - Removed managed issue forms, the pull-request template, the pull-request
   policy workflow and checker, and the `PR Policy / Validate` required status.
+
+### Fixed
+
+- Run scheduled live GitHub audits for manifest compatibility version `4`,
+  matching the contract required by this release.
 
 ### Migration
 

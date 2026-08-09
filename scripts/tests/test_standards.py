@@ -24,6 +24,7 @@ from lib.standards import (  # noqa: E402
     load_manifest,
     load_profiles,
     standards_root,
+    sync_main,
     write,
 )
 
@@ -161,6 +162,90 @@ class StandardsTests(unittest.TestCase):
             if item.target == ".github/pull_request_template.md"
         )
         self.assertEqual(result.status, "ok")
+
+    def test_sync_preview_names_every_managed_deletion(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        _, loaded = load_manifest(repository)
+        plan = build_plan(standards_root(), repository, loaded)
+        write(repository, inspect(repository, plan))
+        retired = repository / ".github/pull_request_template.md"
+
+        cases = (
+            (b"", False),
+            (b"retired policy\n", True),
+            (b"\xff", False),
+        )
+        for content, has_diff in cases:
+            with self.subTest(content=content):
+                retired.write_bytes(content)
+                output = StringIO()
+                with redirect_stdout(output):
+                    exit_code = sync_main([str(repository)])
+                preview = output.getvalue()
+
+                self.assertEqual(exit_code, 1)
+                self.assertIn(
+                    "DELETE   .github/pull_request_template.md\n",
+                    preview,
+                )
+                if has_diff:
+                    self.assertIn(
+                        "--- a/.github/pull_request_template.md\n",
+                        preview,
+                    )
+                    self.assertIn("-retired policy\n", preview)
+                else:
+                    self.assertNotIn(
+                        "--- a/.github/pull_request_template.md\n",
+                        preview,
+                    )
+
+    def test_sync_preview_reports_blocked_managed_absence(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        _, loaded = load_manifest(repository)
+        plan = build_plan(standards_root(), repository, loaded)
+        write(repository, inspect(repository, plan))
+        retired_file = repository / ".github/pull_request_template.md"
+        blocked_path = repository / ".github/workflows/pr-policy.yml"
+        retired_file.touch()
+        blocked_path.mkdir(parents=True)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            exit_code = sync_main([str(repository)])
+        preview = output.getvalue()
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn(
+            "DELETE   .github/pull_request_template.md\n",
+            preview,
+        )
+        self.assertIn(
+            "BLOCKED  .github/workflows/pr-policy.yml "
+            "(managed absence requires a regular file)\n",
+            preview,
+        )
+        self.assertIn(
+            "Preview: 1 managed file(s) would change; "
+            "1 blocked path(s) require attention.\n",
+            preview,
+        )
+        self.assertTrue(blocked_path.is_dir())
+
+        retired_file.unlink()
+        output = StringIO()
+        with redirect_stdout(output):
+            exit_code = sync_main([str(repository)])
+        blocked_preview = output.getvalue()
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn(
+            "Preview blocked: 1 managed path(s) require attention.\n",
+            blocked_preview,
+        )
+        self.assertNotIn("would change", blocked_preview)
 
     def test_mismatched_standards_release_is_rejected(self) -> None:
         manifest = self.base_manifest()
