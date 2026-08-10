@@ -11,6 +11,8 @@ and standards releases use semantic versioning.
 
 - Name every managed deletion in synchronization previews, including empty
   files, and report non-file managed absences as blocked.
+- Authenticate scheduled live audits and run them from each repository's
+  adopted standards release.
 
 ## [3.0.0] - 2026-08-08
 
