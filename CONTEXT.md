@@ -5,9 +5,21 @@ Canonical language for the conventions shared by participating repositories.
 ## Language
 
 **Canonical workflow**:
-The single change process expected of every participating repository. It is a
-family-wide standard, not a selectable alternative.
+The repository-owned change process expected of every participating
+repository. It composes pinned external skill contracts with family-wide
+policy; it is not an upstream workflow or a selectable alternative.
 _Avoid_: Workflow option, workflow profile
+
+**Response language**:
+English by default for agent responses, regardless of the language used to
+address the agent. Another language is appropriate when the subject itself
+requires it, such as quoted documents or translation content.
+_Avoid_: Input language, English-only content
+
+**Standard skill bundle**:
+A pinned, explicitly inventoried set of repository-agnostic agent skills
+distributed to every participating repository through the common profile.
+_Avoid_: Global skill installation, every upstream skill
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting
@@ -20,12 +32,14 @@ as an incoming request.
 _Avoid_: Incoming request
 
 **Specification readiness**:
-The condition in which work needs no further triage before implementation can
-be considered.
+The condition in which work is sufficiently specified for an agent to take and
+implement autonomously. It does not imply that this standards repository
+selects or starts the work.
 _Avoid_: Dispatch, execution state
 
 **Dispatch**:
-The decision to begin implementation of ready work.
+The external act of selecting ready work and starting implementation, performed
+manually today and potentially by a separate automation system in the future.
 _Avoid_: Specification readiness, `ready-for-agent`
 
 **Implementation**:
@@ -64,6 +78,6 @@ the default branch.
 _Avoid_: Implementation, dispatch
 
 **Agent configuration**:
-Repository-local documentation that tells installed skills where tracked work
+Repository-local documentation that tells standard skills where tracked work
 and domain documentation live and which triage labels to use.
 _Avoid_: Vendored skill, agent implementation

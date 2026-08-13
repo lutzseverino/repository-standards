@@ -31,7 +31,7 @@ Each participating repository carries `.repository-standards.json`:
 ```json
 {
   "standards-version": 4,
-  "standards-release": "3.0.0",
+  "standards-release": "3.1.0",
   "profiles": ["common", "documentation", "vite-react", "pnpm-workspace"],
   "boundaries": [
     {"path": ".", "type": "repository", "title": "Product"},
@@ -87,8 +87,9 @@ README and documentation structure auditable without making their prose a
 managed copy.
 
 Version 4 requires the `common` and `documentation` profiles and a GitHub
-contract. This keeps the family-wide workflow, agent configuration, required
-labels, repository settings, and documentation boundary auditable.
+contract. This keeps the family-wide workflow, repository-local agent skills,
+agent configuration, required labels, repository settings, and documentation
+boundary auditable.
 
 JSON is canonical because the tools can read it with the Python standard
 library. YAML manifests are also accepted when PyYAML is installed. The JSON
@@ -131,6 +132,7 @@ scripts/check
 
 | Profile | Use |
 | --- | --- |
+| `agent-skills` | Standard repository-local agent skills; inherited by `common` |
 | `common` | Every participating repository |
 | `documentation` | Repositories using the shared Diataxis documentation set |
 | `node-npm` | Standalone npm install units |
@@ -154,8 +156,9 @@ boundary conventions, and canonical authoring templates.
 ## Maintenance and rollout
 
 Participating repositories have no runtime or build dependency on this private
-repository. Managed outputs are vendored into each repository, so its build,
-CI, contribution workflow, and public history remain self-contained.
+repository. Managed outputs, including standard agent skills, are vendored into
+each repository, so its build, CI, contribution workflow, and public history
+remain self-contained.
 
 A standards change is reviewed here, recorded in `CHANGELOG.md`, assigned a
 semantic release, and tagged. Adoption is then deliberate: check out that

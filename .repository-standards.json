@@ -1,6 +1,6 @@
 {
   "standards-version": 4,
-  "standards-release": "3.0.0",
+  "standards-release": "3.1.0",
   "profiles": [
     "common",
     "documentation"

@@ -10,7 +10,16 @@ package or build manager and run its documented canonical validation command.
 Prefer durable rules in tests, tooling, and documentation over instructions
 that exist only in agent context.
 
+Respond in English regardless of the language used to address you. Use another
+language when explicitly requested or when the content itself requires it,
+such as quotations, translations, localized content, or language-specific
+documentation.
+
 ## Agent skills
+
+The repository skill setup is complete. Use the configuration below. Run
+`setup-matt-pocock-skills` only when deliberately switching issue trackers or
+rebuilding the configuration from scratch.
 
 ### Issue tracker
 
