@@ -505,7 +505,7 @@ def collect_sources(
                     f"profile {name!r}: unknown file fields: {', '.join(unknown)}"
                 )
             mode = item.get("mode")
-            if mode not in {"exact", "template", "compose", "absent"}:
+            if mode not in {"exact", "template", "compose", "absent", "tree"}:
                 raise StandardsError(f"profile {name!r}: invalid file mode {mode!r}")
             target = _relative_path(item.get("target"), f"profile {name} target")
             order = item.get("order", 0)
@@ -521,13 +521,70 @@ def collect_sources(
                 source_value = _relative_path(
                     item.get("source"), f"profile {name} source"
                 )
-                source = (profile_dir / source_value).resolve()
+                source_candidate = profile_dir
+                if mode == "tree":
+                    for part in PurePosixPath(source_value).parts:
+                        source_candidate /= part
+                        if source_candidate.is_symlink():
+                            raise StandardsError(
+                                f"profile {name!r}: tree source must not be a symlink: "
+                                f"{source_value}"
+                            )
+                else:
+                    source_candidate /= source_value
+                source = source_candidate.resolve()
                 try:
                     source.relative_to(profile_dir.resolve())
                 except ValueError as exc:
                     raise StandardsError(
                         f"profile {name!r}: source escapes profile"
                     ) from exc
+                if mode == "tree":
+                    if "order" in item:
+                        raise StandardsError(
+                            f"profile {name!r}: tree files define only mode, source, and target"
+                        )
+                    if not source.is_dir():
+                        raise StandardsError(
+                            f"profile {name!r}: tree source not found: {source_value}"
+                        )
+                    tree_entries = sorted(source.rglob("*"))
+                    if not tree_entries:
+                        raise StandardsError(
+                            f"profile {name!r}: tree source is empty: {source_value}"
+                        )
+                    managed_files = 0
+                    for tree_file in tree_entries:
+                        if tree_file.is_symlink():
+                            raise StandardsError(
+                                f"profile {name!r}: tree source contains a symlink: "
+                                f"{tree_file.relative_to(source).as_posix()}"
+                            )
+                        if tree_file.is_dir():
+                            continue
+                        if not tree_file.is_file():
+                            raise StandardsError(
+                                f"profile {name!r}: tree source contains a non-file: "
+                                f"{tree_file.relative_to(source).as_posix()}"
+                            )
+                        relative = tree_file.relative_to(source).as_posix()
+                        tree_target = (PurePosixPath(target) / relative).as_posix()
+                        targets.setdefault(tree_target, []).append(
+                            Source(
+                                "exact",
+                                tree_file,
+                                tree_target,
+                                0,
+                                name,
+                                profile_index,
+                            )
+                        )
+                        managed_files += 1
+                    if not managed_files:
+                        raise StandardsError(
+                            f"profile {name!r}: tree source has no files: {source_value}"
+                        )
+                    continue
                 if not source.is_file():
                     raise StandardsError(
                         f"profile {name!r}: source not found: {source_value}"

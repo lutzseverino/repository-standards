@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "bundles": [
+    {
+      "name": "mattpocock-skills",
+      "source": "https://github.com/mattpocock/skills",
+      "revision": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+      "upstream-manifest": ".claude-plugin/plugin.json",
+      "license": "MIT",
+      "skills": [
+        "ask-matt",
+        "code-review",
+        "codebase-design",
+        "diagnosing-bugs",
+        "domain-modeling",
+        "grill-me",
+        "grill-with-docs",
+        "grilling",
+        "handoff",
+        "implement",
+        "improve-codebase-architecture",
+        "prototype",
+        "research",
+        "resolving-merge-conflicts",
+        "setup-matt-pocock-skills",
+        "tdd",
+        "teach",
+        "to-questionnaire",
+        "to-spec",
+        "to-tickets",
+        "triage",
+        "wait-what",
+        "wayfinder",
+        "wizard",
+        "writing-for-agents"
+      ]
+    }
+  ]
+}

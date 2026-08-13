@@ -83,3 +83,7 @@ accessible with its repository token. Private repositories owned elsewhere are
 excluded until a dedicated read-only GitHub App or fine-grained token is
 configured; personal maintainer tokens must not be reused as automation
 credentials.
+
+The scheduled audit validates each repository against its adopted release. It
+does not announce that a newer standards release is available; release
+discovery and adoption remain separate maintenance work.

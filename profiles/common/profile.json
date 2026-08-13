@@ -1,7 +1,7 @@
 {
   "name": "common",
   "description": "Exact repository-wide community and editor conventions",
-  "extends": [],
+  "extends": ["agent-skills"],
   "github": {
     "required-labels": [
       "bug",

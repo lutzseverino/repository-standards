@@ -7,12 +7,38 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-13
+
+### Added
+
+- Distribute the official pinned `mattpocock-skills` bundle as repository-local
+  managed files, with an explicit inventory and upstream license.
+- Add managed tree expansion for exact profile-owned file collections.
+- Set English as the default agent response language while permitting explicit
+  and content-driven language changes.
+
+### Changed
+
+- Define the canonical repository workflow as family-owned orchestration around
+  Matt Pocock's skill contracts, with entry points for ready and unresolved
+  work.
+- Define `ready-for-agent` as autonomous implementation readiness while keeping
+  work selection and startup outside this repository's scope.
+
 ### Fixed
 
 - Name every managed deletion in synchronization previews, including empty
   files, and report non-file managed absences as blocked.
 - Authenticate scheduled live audits and run them from each repository's
   adopted standards release.
+
+### Migration
+
+- Update each target manifest to `standards-release: 3.1.0`, preview the
+  synchronization, and commit the new `.agents/` inventory, license, and skill
+  files with the other managed changes.
+- Keep repository-local skills that do not collide with standard skill names;
+  synchronized repositories do not need to run `setup-matt-pocock-skills`.
 
 ## [3.0.0] - 2026-08-08
 

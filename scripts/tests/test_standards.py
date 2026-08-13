@@ -19,6 +19,7 @@ from lib.standards import (  # noqa: E402
     audit_main,
     build_plan,
     collect_required_labels,
+    collect_sources,
     inspect,
     inspect_boundaries,
     load_manifest,
@@ -106,6 +107,133 @@ class StandardsTests(unittest.TestCase):
         self.assertEqual(write(repository, initial), len(changed))
         final = inspect(repository, plan)
         self.assertTrue(all(result.status == "ok" for result in final))
+
+    def test_common_profile_sets_the_default_response_language(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+
+        agents = " ".join(
+            (repository / "AGENTS.md").read_text(encoding="utf-8").split()
+        )
+        self.assertIn(
+            "Respond in English regardless of the language used to address you.",
+            agents,
+        )
+        self.assertIn(
+            "Use another language when explicitly requested or when the content "
+            "itself requires it",
+            agents,
+        )
+
+    def test_common_profile_installs_the_official_matt_pocock_skill_bundle(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        expected_skills = (
+            "ask-matt",
+            "code-review",
+            "codebase-design",
+            "diagnosing-bugs",
+            "domain-modeling",
+            "grill-me",
+            "grill-with-docs",
+            "grilling",
+            "handoff",
+            "implement",
+            "improve-codebase-architecture",
+            "prototype",
+            "research",
+            "resolving-merge-conflicts",
+            "setup-matt-pocock-skills",
+            "tdd",
+            "teach",
+            "to-questionnaire",
+            "to-spec",
+            "to-tickets",
+            "triage",
+            "wait-what",
+            "wayfinder",
+            "wizard",
+            "writing-for-agents",
+        )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+
+        installed_skills = tuple(
+            sorted(
+                path.parent.name
+                for path in (repository / ".agents/skills").glob("*/SKILL.md")
+            )
+        )
+        self.assertEqual(installed_skills, expected_skills)
+
+        inventory = json.loads(
+            (repository / ".agents/standard-skills.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(inventory["version"], 1)
+        self.assertEqual(len(inventory["bundles"]), 1)
+        bundle = inventory["bundles"][0]
+        self.assertEqual(bundle["name"], "mattpocock-skills")
+        self.assertEqual(bundle["source"], "https://github.com/mattpocock/skills")
+        self.assertEqual(
+            bundle["revision"],
+            "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+        )
+        self.assertEqual(tuple(sorted(bundle["skills"])), expected_skills)
+        license_text = (
+            repository / ".agents/licenses/mattpocock-skills.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("MIT License", license_text)
+        self.assertIn("Copyright (c) 2026 Matt Pocock", license_text)
+
+    def test_audit_reports_standard_skill_drift(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        self.write_file(
+            repository,
+            "README.md",
+            '<div align="center">\n  <h1>Test Repository</h1>\n</div>\n\n'
+            "See [documentation](docs/README.md).\n",
+        )
+        self.write_file(repository, "docs/README.md", "# Documentation\n")
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        skill = repository / ".agents/skills/implement/SKILL.md"
+        skill.write_text("changed locally\n", encoding="utf-8")
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(audit_main([str(repository), "--json"]), 1)
+        payload = json.loads(output.getvalue())
+        result = next(
+            item
+            for item in payload["files"]
+            if item["path"] == ".agents/skills/implement/SKILL.md"
+        )
+        self.assertEqual(result["status"], "drift")
+
+    def test_repository_local_skills_can_coexist_with_the_standard_bundle(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        local_skill = repository / ".agents/skills/local-only/SKILL.md"
+        local_skill.parent.mkdir()
+        local_skill.write_text("# Local skill\n", encoding="utf-8")
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main([str(repository)]), 0)
+        self.assertTrue(local_skill.is_file())
 
     def test_local_gitignore_fragment_is_preserved(self) -> None:
         manifest = self.base_manifest()
@@ -267,6 +395,33 @@ class StandardsTests(unittest.TestCase):
         rendered = gitignore.content.decode("utf-8")
         self.assertEqual(rendered.count("node_modules/"), 1)
         self.assertIn("# Protocol package outputs", rendered)
+
+    def test_tree_profile_rejects_a_symlinked_source_directory(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        profile = Path(temporary.name)
+        source = profile / "source"
+        source.mkdir()
+        (source / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+        (profile / "linked-source").symlink_to(source, target_is_directory=True)
+        profiles = [
+            (
+                "agent-skills",
+                {
+                    "files": [
+                        {
+                            "mode": "tree",
+                            "source": "linked-source",
+                            "target": ".agents/skills",
+                        }
+                    ]
+                },
+                profile,
+            )
+        ]
+
+        with self.assertRaisesRegex(StandardsError, "tree source must not be a symlink"):
+            collect_sources(profiles)
 
     def test_common_profile_declares_the_canonical_required_labels(self) -> None:
         profiles = load_profiles(standards_root(), ["common"])

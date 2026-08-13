@@ -1,0 +1,10 @@
+{
+  "name": "agent-skills",
+  "description": "Exact repository-local standard agent skill bundles",
+  "extends": [],
+  "files": [
+    {"mode": "tree", "source": "files/.agents/skills", "target": ".agents/skills"},
+    {"mode": "exact", "source": "files/.agents/standard-skills.json", "target": ".agents/standard-skills.json"},
+    {"mode": "exact", "source": "files/.agents/licenses/mattpocock-skills.txt", "target": ".agents/licenses/mattpocock-skills.txt"}
+  ]
+}

@@ -13,9 +13,13 @@ the repository from the current clone.
 - Apply or remove labels with `gh issue edit`.
 - Close delivered work with `gh issue close`.
 
-Incoming requests begin unlabelled and pass through `/triage`. Self-authored
+Incoming requests begin unlabelled and pass through `triage`. Self-authored
 specifications and implementation tickets use the planning workflow in
 `CONTRIBUTING.md` and do not pass through triage.
+
+A `ready-for-agent` issue is sufficiently specified for autonomous
+implementation. Selecting it and starting an agent remain external dispatch
+actions.
 
 Pull requests are not an incoming-request or triage surface.
 
