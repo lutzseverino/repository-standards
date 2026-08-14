@@ -2,11 +2,12 @@
 
 Select this profile in every participating repository. It owns exact editor,
 Git attribute, agent, contribution, GitHub issue-tracker, triage-label, blank
-issue-intake, and workflow-validation files, inherits the standard
-repository-local agent skills, and supplies the first `.gitignore` fragment. It
-declares the required GitHub labels for live audit and declares retired
-issue-form and pull-request-policy files absent. Dependabot configuration is
-rendered from the manifest's structured dependency-update declarations.
+issue-intake, and workflow-validation files, inherits the upstream standard and
+family-owned lifecycle skill bundles, and supplies the first `.gitignore`
+fragment. It declares the required GitHub labels for live audit and
+synchronization and declares retired issue-form and pull-request-policy files
+absent. Dependabot configuration is rendered from the manifest's structured
+dependency-update declarations.
 
 It intentionally does not own the product README, license, security policy,
 build manifests, main CI workflow, release workflow, domain documentation, or

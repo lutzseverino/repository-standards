@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from lib.github_settings import GitHubCliTransport, plan_live_github
+from lib.standards import (
+    StandardsError,
+    collect_required_labels,
+    load_manifest,
+    load_profiles,
+    standards_root,
+)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Preview or write the declared live GitHub contract"
+    )
+    parser.add_argument("repository", help="repository checkout to synchronize")
+    parser.add_argument("--manifest", help="manifest path, relative to repository")
+    parser.add_argument("--write", action="store_true", help="apply planned operations")
+    args = parser.parse_args()
+    repository = Path(args.repository).expanduser().resolve()
+    try:
+        _, manifest = load_manifest(repository, args.manifest)
+        profiles = load_profiles(standards_root(), manifest["profiles"])
+        contract = manifest["github"]
+        transport = GitHubCliTransport()
+        operations = plan_live_github(
+            contract,
+            transport,
+            required_labels=collect_required_labels(profiles),
+        )
+    except StandardsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if not operations:
+        print(f"Live GitHub contract is current for {contract['repository']}.")
+        return 0
+    for operation in operations:
+        print(operation.description)
+    if not args.write:
+        print(
+            f"\nPreview: {len(operations)} live operation(s) would be applied. "
+            "Re-run with --write."
+        )
+        return 1
+    try:
+        for index, operation in enumerate(operations):
+            transport.request(operation.method, operation.endpoint, operation.payload)
+    except StandardsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print("Completed operations:", file=sys.stderr)
+        if index:
+            for completed in operations[:index]:
+                print(f"- {completed.description}", file=sys.stderr)
+        else:
+            print("- none", file=sys.stderr)
+        print("Remaining operations:", file=sys.stderr)
+        for remaining in operations[index:]:
+            print(f"- {remaining.description}", file=sys.stderr)
+        return 2
+    print(f"\nApplied {len(operations)} live operation(s) to {contract['repository']}.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -114,6 +114,8 @@ scripts/audit /path/to/repository
 scripts/audit-live /path/to/repository
 scripts/sync /path/to/repository
 scripts/sync --write /path/to/repository
+scripts/sync-live /path/to/repository
+scripts/sync-live --write /path/to/repository
 ```
 
 `audit` reports drift and exits non-zero. `sync` previews the same plan and
@@ -121,9 +123,19 @@ unified diffs. `sync --write` changes managed targets only. It refuses a plan
 that conflicts with a `repository-owned` path.
 
 `audit-live` is deliberately separate: it requires an authenticated GitHub CLI
-and compares required labels, declared repository settings, and rulesets
-without mutating them. Repositories that cannot use rulesets may declare
-`"ruleset": null` while retaining auditable repository settings and labels.
+and compares required labels, declared repository settings, and rulesets.
+`sync-live` previews that same declared contract and `sync-live --write` applies
+only the required labels, settings, and named ruleset. Extra labels and
+undeclared live resources remain untouched. Repositories that cannot use
+rulesets may declare `"ruleset": null` while retaining auditable repository
+settings and labels.
+
+Participating repositories receive the user-invoked
+`adopt-repository-standards` skill. Give it an exact stable version for a
+reproducible adoption, or omit the version to select the latest stable GitHub
+Release. It previews offline and live changes, applies them with that release's
+own tools, runs the repository's canonical validation and both audits, and
+leaves the prepared changes uncommitted.
 
 Run the canonical validation gate with:
 
@@ -136,6 +148,7 @@ scripts/check
 | Profile | Use |
 | --- | --- |
 | `agent-skills` | Standard repository-local agent skills; inherited by `common` |
+| `repository-lifecycle-skills` | Family-owned adoption skills; inherited by `common` |
 | `common` | Every participating repository |
 | `documentation` | Repositories using the shared Diataxis documentation set |
 | `node-npm` | Standalone npm install units |
@@ -168,9 +181,10 @@ semantic release, and tagged. Every pushed stable tag publishes a GitHub
 Release with notes from its matching changelog section. Consumers can inspect
 the public release history and check out an exact stable tag without private
 credentials. Adoption remains deliberate: update the target manifest's
-`standards-release`, preview with `scripts/sync`, apply the managed changes, run
-the repository's own gate, and audit again. The common profile declares
-canonical GitHub labels for read-only live audit; provisioning remains manual.
+`standards-release` through the user-invoked lifecycle skill, review its offline
+and live previews, and let it prepare the changes with the exact release's own
+tools. The introducing release uses the documented manual bootstrap because
+older repositories do not yet contain the skill.
 
 See [Maintenance and rollout](standards/maintenance-and-rollout.md) for the
 versioning and adoption procedure.
@@ -180,8 +194,9 @@ versioning and adoption procedure.
 The tools deliberately do not rewrite product READMEs, build manifests, source
 trees, release workflows, or documentation indexes. They render Dependabot
 configuration from structured manifest data, manage repository-family agent
-configuration, and remove only exact paths explicitly declared absent. README
-and documentation boundaries are structurally audited while their content is
+configuration, remove only exact paths explicitly declared absent, and mutate
+only the live GitHub resources declared by the manifest and profiles. README and
+documentation boundaries are structurally audited while their content is
 maintained with repository-aware judgment.
 
 ## License

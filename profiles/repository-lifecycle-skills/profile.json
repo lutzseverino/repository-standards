@@ -1,0 +1,10 @@
+{
+  "name": "repository-lifecycle-skills",
+  "description": "Repository-family-owned lifecycle skills",
+  "extends": [],
+  "files": [
+    {"mode": "tree", "source": "files/.agents/skills", "target": ".agents/skills"},
+    {"mode": "exact", "source": "files/.agents/repository-lifecycle-skills.json", "target": ".agents/repository-lifecycle-skills.json"},
+    {"mode": "exact", "source": "files/.agents/licenses/repository-lifecycle-skills.txt", "target": ".agents/licenses/repository-lifecycle-skills.txt"}
+  ]
+}

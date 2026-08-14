@@ -28,10 +28,13 @@ standards documentation.
 
 - [Adopt one canonical skills workflow](adr/0001-adopt-one-canonical-skills-workflow.md):
   historical decision that replaced the issue-first workflow and separated
-  GitHub delivery; superseded in part by ADR 0002.
+  GitHub delivery; superseded in part by ADR 0002 and ADR 0003.
 - [Own the workflow and distribute pinned agent skills](adr/0002-own-workflow-and-distribute-agent-skills.md):
   distinguish repository policy from upstream skill contracts and distribute
   the pinned official skill bundle.
+- [Distribute dependency-free repository lifecycle skills](adr/0003-distribute-dependency-free-repository-lifecycle-skills.md):
+  ship family-owned adoption and repository-creation operations without
+  coupling them to a planning, implementation, or delivery workflow.
 
 ## Agent configuration
 
