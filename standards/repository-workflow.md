@@ -12,9 +12,12 @@ upstream.
 
 The common profile distributes the official 25-skill bundle as exact
 repository-local files with source, revision, inventory, and license metadata.
-It also supplies the deterministic repository configuration that the skills
-consume, so participating repositories do not need to run
-`setup-matt-pocock-skills` after synchronization.
+It separately distributes the family-owned repository lifecycle bundle with
+its own inventory and license. Lifecycle skills perform one user-invoked
+standards operation and compose with, but do not select, the surrounding
+workflow. The common profile also supplies the deterministic repository
+configuration that the standard skills consume, so participating repositories
+do not need to run `setup-matt-pocock-skills` after synchronization.
 
 Skill names below omit the agent-specific invocation prefix. Use the active
 agent's syntax, such as `$implement` in Codex.

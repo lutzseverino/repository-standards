@@ -69,26 +69,25 @@ stable tag.
 
 ## Adopt a standards release
 
-Rollout is deliberate and repository-aware:
+Invoke `adopt-repository-standards VERSION` in the participating repository for
+an exact stable release, or omit `VERSION` to select the latest stable GitHub
+Release. The skill requires a clean Git tree, obtains an isolated checkout of
+the exact tag, and uses that release's own tooling. It previews offline writes
+and deletions plus live labels, settings, and the named ruleset before applying
+them. The adoption is prepared only after the target's canonical validation and
+the release's offline and live audits pass.
 
-1. Check out the intended `repository-standards` release tag.
-2. Update the target's `standards-release` manifest field.
-3. Run `scripts/audit /path/to/target` to inspect current drift.
-4. Run `scripts/sync /path/to/target` and review every write and managed
-   deletion in the preview.
-5. Run `scripts/sync --write /path/to/target` to update managed files and remove
-   exact paths declared absent.
-6. Apply any repository-owned migration required by the written guidance.
-7. Provision the canonical GitHub labels when the common profile is selected.
-8. Run the target repository's canonical check and CI.
-9. Run the standards audit once more and commit the self-contained result.
-10. If the manifest declares GitHub settings, run `scripts/audit-live` after
-    label and ruleset migration.
+The skill leaves successful changes uncommitted and leaves the surrounding
+workflow and GitHub delivery to the user. Repository-owned conflicts and
+migrations stay explicit. Live application is idempotent; a partial failure
+reports completed and remaining operations and preserves the applied state for
+a safe rerun.
 
-The sync tool never deploys, commits, pushes, opens pull requests, changes
-GitHub settings, or schedules later work. Those actions remain explicit rollout
-steps. A future orchestrator may automate preparation, but it must preserve the
-same review and ownership boundaries.
+The release that first introduces the lifecycle bundle requires one manual
+bootstrap. Check out that exact standards tag, update the target manifest,
+preview and apply `scripts/sync`, preview and apply `scripts/sync-live`, then run
+the target's canonical validation plus `scripts/audit` and `scripts/audit-live`.
+Later releases use the installed adoption skill.
 
 ## Drift checks
 
@@ -101,7 +100,8 @@ Target repository CI remains self-contained for its ordinary build and test
 gate.
 
 Live audits require `gh` authentication and repository-settings visibility.
-They are read-only and intentionally separate from offline managed-file audits.
+Live writes additionally require Issues and Administration write permissions.
+Both operations remain intentionally separate from offline managed-file work.
 
 The scheduled `Standards Audit` workflow covers participating repositories
 accessible with its repository token. Repositories owned elsewhere are

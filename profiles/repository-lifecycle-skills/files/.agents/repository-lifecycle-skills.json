@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "bundle": {
+    "name": "repository-lifecycle-skills",
+    "source": "https://github.com/lutzseverino/repository-standards",
+    "license": "MIT",
+    "skills": [
+      "adopt-repository-standards"
+    ]
+  }
+}

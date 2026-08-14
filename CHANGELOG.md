@@ -9,6 +9,11 @@ and standards releases use semantic versioning.
 
 ### Added
 
+- Distribute the dependency-free `adopt-repository-standards` lifecycle skill
+  with previewed offline and live synchronization, exact-release tooling,
+  complete validation, and uncommitted handoff.
+- Add idempotent live preview and write commands for required labels,
+  repository settings, and the manifest's named ruleset.
 - Distribute session-level discovery of newer stable standards releases with a
   bounded silent check and one portable adoption notice.
 - Add dependency-free changelog validation and stable release-note extraction.

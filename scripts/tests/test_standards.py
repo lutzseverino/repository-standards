@@ -210,7 +210,10 @@ responses.
                 for path in (repository / ".agents/skills").glob("*/SKILL.md")
             )
         )
-        self.assertEqual(installed_skills, expected_skills)
+        self.assertEqual(
+            tuple(skill for skill in installed_skills if skill in expected_skills),
+            expected_skills,
+        )
 
         inventory = json.loads(
             (repository / ".agents/standard-skills.json").read_text(encoding="utf-8")
@@ -225,11 +228,51 @@ responses.
             "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
         )
         self.assertEqual(tuple(sorted(bundle["skills"])), expected_skills)
+        self.assertNotIn("adopt-repository-standards", bundle["skills"])
         license_text = (
             repository / ".agents/licenses/mattpocock-skills.txt"
         ).read_text(encoding="utf-8")
         self.assertIn("MIT License", license_text)
         self.assertIn("Copyright (c) 2026 Matt Pocock", license_text)
+
+    def test_common_profile_installs_the_family_owned_lifecycle_skill_bundle(
+        self,
+    ) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+
+        skill = repository / ".agents/skills/adopt-repository-standards/SKILL.md"
+        runner = repository / ".agents/skills/adopt-repository-standards/scripts/adopt"
+        self.assertTrue(skill.is_file())
+        self.assertTrue(runner.is_file())
+        skill_text = skill.read_text(encoding="utf-8")
+        self.assertIn("name: adopt-repository-standards", skill_text)
+        self.assertIn("disable-model-invocation: true", skill_text)
+
+        inventory = json.loads(
+            (
+                repository / ".agents/repository-lifecycle-skills.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(inventory["version"], 1)
+        self.assertEqual(inventory["bundle"]["name"], "repository-lifecycle-skills")
+        self.assertEqual(
+            inventory["bundle"]["source"],
+            "https://github.com/lutzseverino/repository-standards",
+        )
+        self.assertEqual(inventory["bundle"]["license"], "MIT")
+        self.assertEqual(
+            inventory["bundle"]["skills"], ["adopt-repository-standards"]
+        )
+        license_text = (
+            repository / ".agents/licenses/repository-lifecycle-skills.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("MIT License", license_text)
+        self.assertIn("Copyright (c) 2026 Lutz Severino", license_text)
 
     def test_audit_reports_standard_skill_drift(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
