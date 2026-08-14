@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+release_tag="${1:?usage: scripts/publish-release vMAJOR.MINOR.PATCH}"
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+tag_type="$(git cat-file -t "refs/tags/$release_tag")"
+if [[ "$tag_type" != "tag" ]]; then
+  echo "error: release tag must be annotated: $release_tag" >&2
+  exit 1
+fi
+
+if ! git merge-base --is-ancestor "$release_tag" origin/main; then
+  echo "error: tagged commit is not on origin/main: $release_tag" >&2
+  exit 1
+fi
+
+ci_passed="$(
+  gh api "repos/$GITHUB_REPOSITORY/commits/$release_tag/check-runs" \
+    --jq 'any(.check_runs[]; .name == "CI / Required" and .conclusion == "success")'
+)"
+if [[ "$ci_passed" != "true" ]]; then
+  echo "error: tagged commit has no successful CI / Required check: $release_tag" >&2
+  exit 1
+fi
+
+release_notes_file="$(mktemp)"
+trap 'rm -f "$release_notes_file"' EXIT
+"$script_directory/changelog" release-notes --tag "$release_tag" > "$release_notes_file"
+
+gh release create "$release_tag" --verify-tag \
+  --title "$release_tag" --notes-file "$release_notes_file"

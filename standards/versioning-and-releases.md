@@ -7,8 +7,10 @@ packages. Before `1.0.0`, document compatibility expectations explicitly; a
 zero major version does not make breaking changes harmless.
 
 Non-published repositories, websites, and operational skill packages do not
-need artificial release numbers. They still use Conventional Commits and a
-changelog when operators need a durable record of change.
+need artificial release numbers or a changelog. They still use Conventional
+Commits. A repository opts into the changelog contract by declaring the exact
+`CHANGELOG.md` path under `repository-owned`; canonical audit then validates
+its structure.
 
 ## Release source
 
@@ -29,8 +31,19 @@ known limitations. A generated commit list may supplement but not replace that
 information for material releases.
 
 Keep a changelog when the repository has consumers who need to compare
-versions. Use `Unreleased` as the staging section and link issue or pull-request
-context where useful.
+versions. The accepted structure is deterministic:
+
+- exactly one root `# Changelog` title;
+- exactly one `## [Unreleased]` section, before every release;
+- release headings in newest-first semantic-version and ISO-date order, using
+  `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`;
+- `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, and
+  `Migration` categories only;
+- no duplicate or empty categories; omit a category until it has content;
+- optional reference-style comparison links.
+
+Link issue or pull-request context where useful. Repositories without
+versioned consumers may omit `CHANGELOG.md` entirely.
 
 ## Actions policy
 

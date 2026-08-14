@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Validate changelogs and produce stable GitHub Release notes."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from lib.changelog import ChangelogError, release_notes, validate_changelog
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate changelogs and produce stable release notes"
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("repository", nargs="?", default=".")
+    release_parser = subparsers.add_parser("release-notes")
+    release_parser.add_argument("--tag", required=True)
+    release_parser.add_argument("repository", nargs="?", default=".")
+    args = parser.parse_args(argv)
+
+    repository = Path(args.repository).expanduser().resolve()
+    try:
+        if args.command == "validate":
+            validate_changelog(repository / "CHANGELOG.md")
+        else:
+            notes = release_notes(repository, args.tag)
+    except ChangelogError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.command == "validate":
+        print("CHANGELOG.md is valid")
+    else:
+        print(notes, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
