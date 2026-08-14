@@ -9,6 +9,8 @@ and standards releases use semantic versioning.
 
 ### Added
 
+- Distribute session-level discovery of newer stable standards releases with a
+  bounded silent check and one portable adoption notice.
 - Add dependency-free changelog validation and stable release-note extraction.
 - Publish stable tags through a GitHub Release workflow after validating the
   tag, source version, and matching changelog section.
