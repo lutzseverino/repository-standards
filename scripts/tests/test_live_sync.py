@@ -100,7 +100,7 @@ class LiveSyncCommandTests(unittest.TestCase):
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "standards-version": 4,
+            "standards-version": 5,
             "standards-release": (ROOT / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
@@ -152,6 +152,20 @@ class LiveSyncCommandTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def test_manifest_rejects_bypass_actors_before_github_access(self) -> None:
+        manifest = self.manifest()
+        manifest["github"]["ruleset"]["allow-bypass-actors"] = True
+        (self.repository / ".repository-standards.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+
+        result = self.run_sync_live()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("does not support bypass actors", result.stderr)
+        self.assertIn("set allow-bypass-actors to false", result.stderr)
+        self.assertNotIn("FAKE_GITHUB_STATE", result.stderr)
 
     def test_preview_reports_declared_changes_without_writing(self) -> None:
         extra_ruleset = {

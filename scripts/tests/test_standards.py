@@ -4,7 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -46,7 +46,7 @@ class StandardsTests(unittest.TestCase):
 
     def base_manifest(self) -> dict:
         return {
-            "standards-version": 4,
+            "standards-version": 5,
             "standards-release": (standards_root() / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
@@ -533,6 +533,23 @@ responses.
         (repository / ".editorconfig").symlink_to(outside)
         with self.assertRaisesRegex(StandardsError, "symlink"):
             inspect(repository, plan)
+
+    def test_sync_rejects_a_symlinked_managed_target_ancestor(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        linked_skills = repository / "linked-skills"
+        linked_skills.mkdir()
+        (repository / ".agents").mkdir()
+        (repository / ".agents/skills").symlink_to(
+            linked_skills, target_is_directory=True
+        )
+
+        errors = StringIO()
+        with redirect_stderr(errors):
+            result = sync_main([str(repository)])
+
+        self.assertEqual(result, 2)
+        self.assertIn("managed target ancestor must not be a symlink", errors.getvalue())
 
     def test_documentation_profile_manages_exactly_seven_templates(self) -> None:
         manifest = self.base_manifest()

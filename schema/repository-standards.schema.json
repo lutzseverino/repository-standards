@@ -7,7 +7,7 @@
   "required": ["standards-version", "standards-release", "profiles", "boundaries", "dependency-updates", "github", "repository-owned"],
   "properties": {
     "$schema": {"type": "string", "format": "uri-reference"},
-    "standards-version": {"const": 4},
+    "standards-version": {"const": 5},
     "standards-release": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
@@ -99,7 +99,7 @@
                 },
                 "prevent-deletion": {"type": "boolean"},
                 "prevent-force-push": {"type": "boolean"},
-                "allow-bypass-actors": {"type": "boolean"}
+                "allow-bypass-actors": {"const": false}
               }
             }
           ]

@@ -14,14 +14,16 @@ source.
 ## Two versions with different jobs
 
 `standards-version` is an integer compatibility version for the repository
-manifest and audit/sync protocol. Version `4` includes boundary declarations,
-structured dependency updates, required live GitHub contracts, profile-owned
-required labels, and managed absence. Increment it only for an incompatible
-manifest or tooling contract.
+manifest and audit/sync protocol. Version `5` includes boundary declarations,
+structured dependency updates, required live GitHub contracts without bypass
+actors, profile-owned required labels, and managed absence. Increment it only
+for an incompatible manifest or tooling contract.
 
-`standards-release` is the exact semantic version of this repository's content,
-also stored in `VERSION` and represented by a Git tag such as `v1.0.0`. Increment
-it whenever managed content or normative guidance changes:
+`standards-release` is the exact semantic version of published repository
+content, also stored in `VERSION` and represented by a Git tag such as
+`v1.0.0`. Changes accumulate under `Unreleased` while `VERSION` continues to
+identify the latest stable release. Release preparation increments it once for
+all accumulated managed-content and normative-guidance changes:
 
 - patch: clarification or backward-compatible managed-file correction;
 - minor: new backward-compatible standard, profile, or managed artifact;
@@ -33,14 +35,18 @@ adopt a compatible manifest and content release.
 
 ## Publish a standards change
 
-Standards changes use the normal issue and pull-request workflow.
+Standards changes use the normal issue and pull-request workflow:
 
 1. Change the normative document, profile, managed file, schema, or tool.
 2. Update tests and examples.
 3. Record the user-visible change under `Unreleased` in `CHANGELOG.md`.
-4. Choose the next semantic release and update `VERSION`.
-5. Move changelog entries into the dated release section.
-6. Merge only after CI passes, then push an annotated stable tag for the merged
+4. Merge only after CI passes.
+
+Prepare a release in a separate change after the intended changes accumulate:
+
+1. Choose the next semantic release and update `VERSION`.
+2. Move the `Unreleased` entries into the dated release section.
+3. Merge only after CI passes, then push an annotated stable tag for the merged
    commit. The release workflow validates the tag, `VERSION`, and matching
    changelog release before publishing its section as the GitHub Release body.
 
@@ -51,21 +57,21 @@ its existing history and author metadata.
 
 If a stable tag exists but GitHub Release creation failed, keep the tag fixed.
 For a transient GitHub or runner failure, rerun the failed workflow. If the
-tagged inputs are coherent but release automation itself cannot be rerun,
-check out the tag and use the same validator before creating the release:
+release automation itself cannot be rerun, fetch the current remote state and
+route recovery through the same complete publication gate:
 
 ```sh
+git fetch origin main --tags
 git checkout vMAJOR.MINOR.PATCH
-notes_file="$(mktemp)"
-scripts/changelog release-notes --tag vMAJOR.MINOR.PATCH > "$notes_file"
-gh release create vMAJOR.MINOR.PATCH --verify-tag \
-  --title vMAJOR.MINOR.PATCH --notes-file "$notes_file"
+GITHUB_REPOSITORY=OWNER/REPOSITORY \
+  scripts/publish-release vMAJOR.MINOR.PATCH
 ```
 
-Remove the temporary notes file afterward. If validation reports incoherent
-tag, `VERSION`, or changelog inputs, do not work around it and do not retarget
-the tag. Correct the source on `main`, assign a new version, and publish a new
-stable tag.
+Replace `OWNER/REPOSITORY` with the repository's GitHub name. The publisher
+requires an annotated tag on `origin/main`, a successful `CI / Required` check,
+and coherent tag, `VERSION`, and changelog inputs before it creates the release.
+If any gate fails, do not work around it and do not retarget the tag. Correct the
+source on `main`, assign a new version, and publish a new stable tag.
 
 ## Adopt a standards release
 
@@ -112,3 +118,8 @@ credentials.
 The scheduled audit validates each repository against its adopted release. It
 does not announce that a newer standards release is available; release
 discovery and adoption remain separate maintenance work.
+
+The standards source is the one development-time exception: while changes are
+still under `Unreleased`, its scheduled job uses current `main` tooling against
+the current source checkout. Every participating target continues to use the
+exact stable tooling named by its manifest.

@@ -16,7 +16,7 @@ from typing import Any, Iterable
 from .changelog import ChangelogError, SEMVER, validate_changelog
 
 
-SUPPORTED_STANDARDS_VERSION = 4
+SUPPORTED_STANDARDS_VERSION = 5
 MANIFEST_NAMES = (
     ".repository-standards.json",
     ".repository-standards.yml",
@@ -246,10 +246,10 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         raise StandardsError("the boundary at '.' must have type repository")
     if "common" not in profiles:
         raise StandardsError(
-            "standards-version 4 workflow requires the common profile"
+            "standards-version 5 workflow requires the common profile"
         )
     if "documentation" not in profiles:
-        raise StandardsError("standards-version 4 boundaries require the documentation profile")
+        raise StandardsError("standards-version 5 boundaries require the documentation profile")
 
     dependency_updates = manifest.get("dependency-updates")
     if not isinstance(dependency_updates, list) or not dependency_updates:
@@ -296,7 +296,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
 
     github = manifest.get("github")
     if github is None:
-        raise StandardsError("standards-version 4 github contract is required")
+        raise StandardsError("standards-version 5 github contract is required")
     if github is not None:
         if not isinstance(github, dict):
             raise StandardsError("github must be an object")
@@ -386,6 +386,11 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
             }
             if not all(isinstance(ruleset[key], bool) for key in boolean_rules):
                 raise StandardsError("github.ruleset boolean fields must be booleans")
+            if ruleset["allow-bypass-actors"]:
+                raise StandardsError(
+                    "standards-version 5 does not support bypass actors; "
+                    "set allow-bypass-actors to false before adopting this contract"
+                )
 
     variables = manifest.get("variables", {})
     if not isinstance(variables, dict) or not all(
@@ -756,18 +761,31 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
     return sorted(planned, key=lambda item: item.target)
 
 
+def _validate_managed_target(repository: Path, target: Path, relative: str) -> None:
+    ancestor = repository
+    for part in target.relative_to(repository).parts[:-1]:
+        ancestor /= part
+        if ancestor.is_symlink():
+            raise StandardsError(
+                f"managed target ancestor must not be a symlink: {relative}"
+            )
+    resolved = target.resolve(strict=False)
+    try:
+        resolved.relative_to(repository)
+    except ValueError as exc:
+        raise StandardsError(
+            f"managed target escapes through a symlink: {relative}"
+        ) from exc
+    if target.is_symlink():
+        raise StandardsError(f"managed target must not be a symlink: {relative}")
+
+
 def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:
     repository = repository.resolve()
     results: list[Result] = []
     for item in plan:
         target = repository / item.target
-        resolved = target.resolve(strict=False)
-        try:
-            resolved.relative_to(repository)
-        except ValueError as exc:
-            raise StandardsError(f"managed target escapes through a symlink: {item.target}") from exc
-        if target.is_symlink():
-            raise StandardsError(f"managed target must not be a symlink: {item.target}")
+        _validate_managed_target(repository, target, item.target)
         if item.mode == "absent":
             if not target.exists():
                 results.append(
@@ -1068,13 +1086,7 @@ def write(repository: Path, results: Iterable[Result]) -> int:
         if result.status == "ok":
             continue
         target = repository / result.target
-        resolved = target.resolve(strict=False)
-        try:
-            resolved.relative_to(repository)
-        except ValueError as exc:
-            raise StandardsError(f"managed target escapes through a symlink: {result.target}") from exc
-        if target.is_symlink():
-            raise StandardsError(f"managed target must not be a symlink: {result.target}")
+        _validate_managed_target(repository, target, result.target)
         if target.exists() and not target.is_file():
             raise StandardsError(f"managed target is not a file: {result.target}")
         try:

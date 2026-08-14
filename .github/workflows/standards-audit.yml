@@ -52,19 +52,29 @@ jobs:
               print(f"version={manifest['standards-version']}", file=output)
           PY
       - name: Check out adopted standards release
+        if: matrix.repository != github.repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: lutzseverino/repository-standards
           ref: v${{ steps.manifest.outputs.release }}
           path: adopted-standards
+      - name: Audit repository standards source
+        if: matrix.repository == github.repository
+        run: scripts/audit target
       - name: Audit managed standards
+        if: matrix.repository != github.repository
         run: adopted-standards/scripts/audit target
       - name: Validate target workflows
         run: |
           cd target
           python3 ../profiles/common/files/.github/scripts/check-workflows.py
       - name: Audit live GitHub settings
-        if: steps.manifest.outputs.version == '4'
+        if: matrix.repository != github.repository && (steps.manifest.outputs.version == '4' || steps.manifest.outputs.version == '5')
         env:
           GH_TOKEN: ${{ github.token }}
         run: adopted-standards/scripts/audit-live target
+      - name: Audit source live GitHub settings
+        if: matrix.repository == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/audit-live target

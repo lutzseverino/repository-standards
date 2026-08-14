@@ -8,6 +8,107 @@ is_stable_release() {
         | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 }
 
+read_json_release() {
+    awk '
+        BEGIN { depth = 0; state = "root" }
+        {
+            for (cursor = 1; cursor <= length($0); cursor++) {
+                character = substr($0, cursor, 1)
+                if (in_string) {
+                    if (escaped) {
+                        token = token character
+                        escaped = 0
+                    } else if (character == "\\") {
+                        escaped = 1
+                    } else if (character == "\"") {
+                        in_string = 0
+                        if (role == "key") {
+                            key = token
+                            state = "colon"
+                        } else if (role == "value") {
+                            if (key == "standards-release") {
+                                release = token
+                                releases++
+                            }
+                            state = "after-value"
+                        }
+                        role = ""
+                    } else {
+                        token = token character
+                    }
+                    continue
+                }
+                if (character == "{") {
+                    depth++
+                    if (depth == 1) state = "key"
+                } else if (character == "}") {
+                    depth--
+                } else if (character == "," && depth == 1) {
+                    state = "key"
+                } else if (character == ":" && depth == 1 && state == "colon") {
+                    state = "value"
+                } else if (character == "\"") {
+                    in_string = 1
+                    token = ""
+                    if (depth == 1 && state == "key") role = "key"
+                    else if (depth == 1 && state == "value") role = "value"
+                    else role = "other"
+                }
+            }
+        }
+        END { if (releases == 1) print release }
+    ' "$1"
+}
+
+read_yaml_release() {
+    awk '
+        {
+            lines[NR] = $0
+            if ($0 ~ /^[[:space:]]*$/ || $0 ~ /^[[:space:]]*(#|---|\.\.\.)/) next
+            match($0, /^ */)
+            indentation = RLENGTH
+            content = substr($0, indentation + 1)
+            separator = index(content, ":")
+            if (!separator) next
+            key = substr(content, 1, separator - 1)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+            if (!length(key)) next
+            if (!root_found || indentation < root_indentation) {
+                root_indentation = indentation
+                root_found = 1
+            }
+        }
+        END {
+            for (line_number = 1; line_number <= NR; line_number++) {
+                line = lines[line_number]
+                match(line, /^ */)
+                indentation = RLENGTH
+                if (!root_found || indentation != root_indentation) continue
+                content = substr(line, indentation + 1)
+                separator = index(content, ":")
+                if (!separator) continue
+                key = substr(content, 1, separator - 1)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+            if (key != "standards-release" && key != "\047standards-release\047" \
+                    && key != "\"standards-release\"") continue
+                value = substr(content, separator + 1)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+#.*$/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                if ((substr(value, 1, 1) == "\"" \
+                    && substr(value, length(value), 1) == "\"") \
+                    || (substr(value, 1, 1) == "\047" \
+                        && substr(value, length(value), 1) == "\047")) {
+                    value = substr(value, 2, length(value) - 2)
+                }
+                release = value
+                releases++
+            }
+            if (releases == 1) print release
+        }
+    ' "$1"
+}
+
 read_adopted_release() {
     manifest=""
     for candidate in \
@@ -22,13 +123,10 @@ read_adopted_release() {
     done
     [ -n "$manifest" ] || return 1
 
-    release=$(
-        sed -n \
-            -e 's/.*"standards-release"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-            -e "s/^[[:space:]]*standards-release[[:space:]]*:[[:space:]]*['\"]\{0,1\}\([^'\"[:space:]#]*\)['\"]\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p" \
-            "$manifest" 2>/dev/null \
-            | sed -n '1p'
-    ) || return 1
+    case $manifest in
+        *.json) release=$(read_json_release "$manifest") || return 1 ;;
+        *) release=$(read_yaml_release "$manifest") || return 1 ;;
+    esac
     is_stable_release "$release" || return 1
     printf '%s\n' "$release"
 }

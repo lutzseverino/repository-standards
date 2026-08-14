@@ -27,7 +27,7 @@ class ReleaseDiscoveryTests(unittest.TestCase):
             encoding="utf-8"
         ).strip()
         self.manifest = {
-            "standards-version": 4,
+            "standards-version": 5,
             "standards-release": self.release,
             "profiles": ["common", "documentation"],
             "boundaries": [
@@ -196,6 +196,39 @@ printf '%s' "$DISCOVERY_FINAL_URL"
         self.assertEqual(malformed.stdout, "")
         self.assertEqual(malformed.stderr, "")
         self.assertEqual(self.request_count(), 0)
+
+    def test_manifest_release_is_read_only_from_the_top_level_field(self) -> None:
+        manifest_path = self.repository / ".repository-standards.json"
+        manifest_path.write_text(
+            '''{
+  "metadata": {"standards-release": "9.9.9"},
+  "standards-release":
+    "3.1.0"
+}
+''',
+            encoding="utf-8",
+        )
+
+        json_result = self.run_discovery(
+            "https://github.com/lutzseverino/repository-standards/releases/tag/v3.2.0"
+        )
+
+        manifest_path.unlink()
+        (self.repository / ".repository-standards.yml").write_text(
+            '''  "standards-release": "3.1.0"
+  metadata:
+    standards-release: 9.9.9
+''',
+            encoding="utf-8",
+        )
+        yaml_result = self.run_discovery(
+            "https://github.com/lutzseverino/repository-standards/releases/tag/v3.2.0"
+        )
+
+        for result in (json_result, yaml_result):
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "3.2.0\n")
+            self.assertEqual(result.stderr, "")
 
     def test_failed_request_and_invalid_final_urls_remain_silent(self) -> None:
         failed = self.run_discovery("", curl_exit=22)
