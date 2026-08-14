@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
+from .changelog import ChangelogError, SEMVER, validate_changelog
+
 
 SUPPORTED_STANDARDS_VERSION = 4
 MANIFEST_NAMES = (
@@ -21,10 +23,7 @@ MANIFEST_NAMES = (
     ".repository-standards.yaml",
 )
 VARIABLE_PATTERN = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
-SEMVER_PATTERN = re.compile(
-    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
-)
+SEMVER_PATTERN = re.compile(rf"^{SEMVER}$")
 MARKDOWN_H1_PATTERN = re.compile(r"^#(?!#)\s+(.+?)\s*$", re.MULTILINE)
 CENTERED_WRAPPER_PATTERN = re.compile(
     r"<(?:div|p)\b[^>]*\balign\s*=\s*[\"']?center[\"']?[^>]*>",
@@ -82,6 +81,13 @@ class Result:
 class BoundaryResult:
     path: str
     boundary_type: str
+    status: str
+    messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DocumentResult:
+    path: str
     status: str
     messages: tuple[str, ...]
 
@@ -999,6 +1005,18 @@ def inspect_boundaries(
     return results
 
 
+def inspect_repository_owned_documents(
+    repository: Path, repository_owned: Iterable[str]
+) -> list[DocumentResult]:
+    if "CHANGELOG.md" not in repository_owned:
+        return []
+    try:
+        validate_changelog(repository / "CHANGELOG.md")
+    except ChangelogError as exc:
+        return [DocumentResult("CHANGELOG.md", "invalid", (str(exc),))]
+    return [DocumentResult("CHANGELOG.md", "ok", ())]
+
+
 def _preview_text(result: Result) -> str:
     if result.mode == "absent":
         if result.status == "not-file":
@@ -1097,6 +1115,12 @@ def audit_main(argv: list[str] | None = None) -> int:
     invalid_boundaries = [
         result for result in boundary_results if result.status != "ok"
     ]
+    document_results = inspect_repository_owned_documents(
+        repository, manifest["repository-owned"]
+    )
+    invalid_documents = [
+        result for result in document_results if result.status != "ok"
+    ]
     if args.json_output:
         print(
             json.dumps(
@@ -1105,7 +1129,7 @@ def audit_main(argv: list[str] | None = None) -> int:
                     "standards-version": manifest["standards-version"],
                     "standards-release": manifest["standards-release"],
                     "profiles": manifest["profiles"],
-                    "clean": not drift and not invalid_boundaries,
+                    "clean": not drift and not invalid_boundaries and not invalid_documents,
                     "files": [
                         {
                             "path": result.target,
@@ -1123,6 +1147,14 @@ def audit_main(argv: list[str] | None = None) -> int:
                             "messages": list(result.messages),
                         }
                         for result in boundary_results
+                    ],
+                    "documents": [
+                        {
+                            "path": result.path,
+                            "status": result.status,
+                            "messages": list(result.messages),
+                        }
+                        for result in document_results
                     ],
                 },
                 indent=2,
@@ -1143,7 +1175,18 @@ def audit_main(argv: list[str] | None = None) -> int:
             f"\n{len(boundary_results) - len(invalid_boundaries)} conforming, "
             f"{len(invalid_boundaries)} invalid boundaries"
         )
-    return 1 if drift or invalid_boundaries else 0
+        if document_results:
+            print()
+            for result in document_results:
+                marker = "OK" if result.status == "ok" else result.status.upper()
+                print(f"{marker:8} document {result.path}")
+                for message in result.messages:
+                    print(f"         - {message}")
+            print(
+                f"\n{len(document_results) - len(invalid_documents)} conforming, "
+                f"{len(invalid_documents)} invalid repository-owned documents"
+            )
+    return 1 if drift or invalid_boundaries or invalid_documents else 0
 
 
 def sync_main(argv: list[str] | None = None) -> int:

@@ -790,6 +790,37 @@ class StandardsTests(unittest.TestCase):
         self.assertFalse(payload["clean"])
         self.assertEqual(payload["boundaries"][0]["status"], "invalid")
 
+    def test_repository_owned_changelog_opts_into_structural_audit(self) -> None:
+        manifest = self.base_manifest()
+        manifest["repository-owned"].append("CHANGELOG.md")
+        temporary, repository = self.create_repository(manifest)
+        self.addCleanup(temporary.cleanup)
+        self.write_file(
+            repository,
+            "README.md",
+            '<div align="center">\n  <h1>Test Repository</h1>\n</div>\n\n'
+            "See [documentation](docs/README.md).\n",
+        )
+        self.write_file(repository, "docs/README.md", "# Documentation\n")
+        self.write_file(repository, "CHANGELOG.md", "# Changes\n")
+        _, loaded = load_manifest(repository)
+        plan = build_plan(standards_root(), repository, loaded)
+        write(repository, inspect(repository, plan))
+
+        output = StringIO()
+        with redirect_stdout(output):
+            exit_code = audit_main([str(repository), "--json"])
+        payload = json.loads(output.getvalue())
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["clean"])
+        self.assertEqual(payload["documents"][0]["path"], "CHANGELOG.md")
+        self.assertEqual(payload["documents"][0]["status"], "invalid")
+        self.assertIn(
+            "root '# Changelog' title",
+            payload["documents"][0]["messages"][0],
+        )
+
     def test_template_requires_and_renders_variables(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sample.tmpl"

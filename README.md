@@ -3,9 +3,11 @@
   <p>Conventions, profiles, and synchronization tooling for repositories maintained by Lutz Severino.</p>
 
   [![CI](https://github.com/lutzseverino/repository-standards/actions/workflows/ci.yml/badge.svg)](https://github.com/lutzseverino/repository-standards/actions/workflows/ci.yml)
+  [![Releases](https://img.shields.io/github/v/release/lutzseverino/repository-standards?color=2f3437)](https://github.com/lutzseverino/repository-standards/releases)
+  [![License: MIT](https://img.shields.io/badge/license-MIT-2f3437)](LICENSE)
 </div>
 
-This private source of truth defines the common change workflow, repository
+This public source of truth defines the common change workflow, repository
 presentation, documentation structure, managed community files, and
 ecosystem-specific build and CI baselines.
 
@@ -84,7 +86,9 @@ The manifest is the ownership boundary. Files emitted by selected profiles are
 managed. Paths listed under `repository-owned` cannot be emitted by a profile.
 Everything else remains untouched. Declared boundaries make repository-owned
 README and documentation structure auditable without making their prose a
-managed copy.
+managed copy. Declaring the exact `CHANGELOG.md` path as repository-owned also
+opts into changelog structural audit; repositories without versioned consumers
+may omit both the declaration and file.
 
 Version 4 requires the `common` and `documentation` profiles and a GitHub
 contract. This keeps the family-wide workflow, repository-local agent skills,
@@ -93,9 +97,8 @@ boundary auditable.
 
 JSON is canonical because the tools can read it with the Python standard
 library. YAML manifests are also accepted when PyYAML is installed. The JSON
-Schema in `schema/repository-standards.schema.json` documents the contract; the
-examples do not depend on a remotely accessible schema because this source
-repository is private.
+Schema in `schema/repository-standards.schema.json` documents the contract;
+local validation does not depend on network access.
 
 `standards-version` is the integer compatibility version of the manifest and
 sync protocol. `standards-release` is the exact semantic version of the
@@ -155,18 +158,19 @@ boundary conventions, and canonical authoring templates.
 
 ## Maintenance and rollout
 
-Participating repositories have no runtime or build dependency on this private
-repository. Managed outputs, including standard agent skills, are vendored into
-each repository, so its build, CI, contribution workflow, and public history
+Participating repositories have no runtime or build dependency on this
+repository. Managed outputs, including standard agent skills, are vendored
+into each repository, so its build, CI, contribution workflow, and history
 remain self-contained.
 
 A standards change is reviewed here, recorded in `CHANGELOG.md`, assigned a
-semantic release, and tagged. Adoption is then deliberate: check out that
-release, update each target manifest's `standards-release`, preview with
-`scripts/sync`, apply the managed changes, run the repository's own gate, and
-audit again. Product CI never requires access to this private repository. The
-common profile declares canonical GitHub labels for read-only live audit;
-provisioning remains manual.
+semantic release, and tagged. Every pushed stable tag publishes a GitHub
+Release with notes from its matching changelog section. Consumers can inspect
+the public release history and check out an exact stable tag without private
+credentials. Adoption remains deliberate: update the target manifest's
+`standards-release`, preview with `scripts/sync`, apply the managed changes, run
+the repository's own gate, and audit again. The common profile declares
+canonical GitHub labels for read-only live audit; provisioning remains manual.
 
 See [Maintenance and rollout](standards/maintenance-and-rollout.md) for the
 versioning and adoption procedure.
@@ -179,3 +183,8 @@ configuration from structured manifest data, manage repository-family agent
 configuration, and remove only exact paths explicitly declared absent. README
 and documentation boundaries are structurally audited while their content is
 maintained with repository-aware judgment.
+
+## License
+
+Distributed under the [MIT License](LICENSE). Public distribution keeps the
+repository's existing commit history and author metadata intact.

@@ -7,6 +7,20 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Add dependency-free changelog validation and stable release-note extraction.
+- Publish stable tags through a GitHub Release workflow after validating the
+  tag, source version, and matching changelog section.
+- License the standards source for public distribution under the MIT License.
+
+### Changed
+
+- Make changelog structural audit an explicit opt-in through the exact
+  repository-owned `CHANGELOG.md` path.
+- Document public release consumption and recovery when a stable tag exists but
+  GitHub Release creation fails.
+
 ## [3.1.0] - 2026-08-13
 
 ### Added

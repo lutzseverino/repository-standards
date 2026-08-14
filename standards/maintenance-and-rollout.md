@@ -2,14 +2,14 @@
 
 ## Operating model
 
-`repository-standards` is a source of truth used at maintenance time. It is not
-a runtime service, build dependency, Git submodule, package dependency, or
-private reusable-workflow dependency.
+`repository-standards` is a public source of truth used at maintenance time.
+It is not a runtime service, build dependency, Git submodule, package
+dependency, or reusable-workflow dependency.
 
 Managed files are copied into participating repositories and committed there.
 Each repository therefore remains self-contained: contributors can read its
-workflow, CI can run, and public builds can complete without access to this
-private repository.
+workflow, CI can run, and builds can complete without access to the standards
+source.
 
 ## Two versions with different jobs
 
@@ -40,7 +40,32 @@ Standards changes use the normal issue and pull-request workflow.
 3. Record the user-visible change under `Unreleased` in `CHANGELOG.md`.
 4. Choose the next semantic release and update `VERSION`.
 5. Move changelog entries into the dated release section.
-6. Merge only after CI passes, then tag the merged commit.
+6. Merge only after CI passes, then push an annotated stable tag for the merged
+   commit. The release workflow validates the tag, `VERSION`, and matching
+   changelog release before publishing its section as the GitHub Release body.
+
+Do not move or reuse a pushed stable tag. Publishing the repository must retain
+its existing history and author metadata.
+
+### Recover a tag whose release failed
+
+If a stable tag exists but GitHub Release creation failed, keep the tag fixed.
+For a transient GitHub or runner failure, rerun the failed workflow. If the
+tagged inputs are coherent but release automation itself cannot be rerun,
+check out the tag and use the same validator before creating the release:
+
+```sh
+git checkout vMAJOR.MINOR.PATCH
+notes_file="$(mktemp)"
+scripts/changelog release-notes --tag vMAJOR.MINOR.PATCH > "$notes_file"
+gh release create vMAJOR.MINOR.PATCH --verify-tag \
+  --title vMAJOR.MINOR.PATCH --notes-file "$notes_file"
+```
+
+Remove the temporary notes file afterward. If validation reports incoherent
+tag, `VERSION`, or changelog inputs, do not work around it and do not retarget
+the tag. Correct the source on `main`, assign a new version, and publish a new
+stable tag.
 
 ## Adopt a standards release
 
@@ -71,15 +96,15 @@ An audit is meaningful only when the standards checkout matches the manifest's
 `standards-release`. The tool rejects a mismatch rather than silently comparing
 against newer or older content.
 
-Teams may run audits locally or in CI after making the private standards source
-available. Target repository CI must not require private-source access for its
-ordinary build and test gate.
+Teams may run audits locally or in CI from an exact public standards release.
+Target repository CI remains self-contained for its ordinary build and test
+gate.
 
 Live audits require `gh` authentication and repository-settings visibility.
 They are read-only and intentionally separate from offline managed-file audits.
 
 The scheduled `Standards Audit` workflow covers participating repositories
-accessible with its repository token. Private repositories owned elsewhere are
+accessible with its repository token. Repositories owned elsewhere are
 excluded until a dedicated read-only GitHub App or fine-grained token is
 configured; personal maintainer tokens must not be reused as automation
 credentials.

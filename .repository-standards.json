@@ -39,6 +39,7 @@
   "repository-owned": [
     ".repository-standards.json",
     "README.md",
+    "LICENSE",
     "CHANGELOG.md",
     "VERSION",
     "CONTEXT.md",
@@ -51,6 +52,7 @@
     "examples/**",
     "scripts/**",
     ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
     ".github/workflows/standards-audit.yml"
   ]
 }
