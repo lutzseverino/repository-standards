@@ -241,15 +241,7 @@ def _ruleset_payload(
     expected: dict[str, Any],
     actual: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if expected["allow-bypass-actors"]:
-        bypass_actors = list((actual or {}).get("bypass_actors", []))
-        if not bypass_actors:
-            raise StandardsError(
-                "github.ruleset.allow-bypass-actors is true but no existing bypass "
-                "actors can be preserved"
-            )
-    else:
-        bypass_actors = []
+    bypass_actors: list[dict[str, Any]] = []
     actual_rules = list((actual or {}).get("rules", []))
     managed_rule_types = {
         "deletion",

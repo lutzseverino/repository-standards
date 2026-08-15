@@ -27,6 +27,34 @@ and standards releases use semantic versioning.
   repository-owned `CHANGELOG.md` path.
 - Document public release consumption and recovery when a stable tag exists but
   GitHub Release creation fails.
+- Advance the manifest compatibility contract to version `5` and reject bypass
+  actors until the manifest can identify them explicitly. Because this is an
+  incompatible contract change, the next stable release must be `4.0.0`.
+
+### Fixed
+
+- Reject symlinks in every ancestor of a managed target before audit or
+  synchronization can follow them.
+- Treat heading-like lines inside fenced changelog examples as literal content.
+- Route manual GitHub Release recovery through the complete publication gate.
+- Read only the manifest's top-level `standards-release` field during session
+  release discovery, including multiline JSON and quoted YAML keys.
+- Reconcile managed files and live GitHub state and run every completion check
+  when adoption is invoked for the already-pinned release.
+- Reject ignored managed absences before adoption can omit their deletion from
+  its isolated preview.
+- Audit unreleased changes in the standards source with current `main` tooling
+  while keeping participating repositories pinned to their adopted releases.
+
+### Migration
+
+- Update manifests to `standards-version: 5` and set
+  `github.ruleset.allow-bypass-actors` to `false`.
+- Use the documented manual bootstrap for the release that introduces both the
+  lifecycle skill and compatibility version `5`; later version-5 releases use
+  the installed adoption skill.
+- Remove or unignore any present path declared as a managed absence before
+  rerunning standards adoption.
 
 ## [3.1.0] - 2026-08-13
 

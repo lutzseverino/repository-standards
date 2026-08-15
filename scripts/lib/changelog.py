@@ -27,10 +27,39 @@ CHANGELOG_CATEGORIES = {
     "Migration",
 }
 COMPARISON_LINK = re.compile(r"^\[[^]]+\]:\s+\S+")
+FENCE_OPEN = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 
 class ChangelogError(Exception):
     """Raised when a changelog does not satisfy the release contract."""
+
+
+def _fenced_lines(lines: list[str]) -> list[bool]:
+    flags: list[bool] = []
+    fence_character: str | None = None
+    fence_length = 0
+    for line in lines:
+        if fence_character is None:
+            match = FENCE_OPEN.match(line)
+            if match is None:
+                flags.append(False)
+                continue
+            fence = match.group("fence")
+            if fence[0] == "`" and "`" in match.group("info"):
+                flags.append(False)
+                continue
+            fence_character = fence[0]
+            fence_length = len(fence)
+            flags.append(True)
+            continue
+        flags.append(True)
+        if re.fullmatch(
+            rf" {{0,3}}{re.escape(fence_character)}{{{fence_length},}}[ \t]*",
+            line,
+        ):
+            fence_character = None
+            fence_length = 0
+    return flags
 
 
 def _compare_semver(left: str, right: str) -> int:
@@ -70,17 +99,33 @@ def validate_changelog(path: Path) -> str:
         raise ChangelogError(f"cannot read {path.name}: {exc}") from exc
 
     lines = text.splitlines()
-    root_titles = [line for line in lines if line.startswith("# ")]
+    fenced = _fenced_lines(lines)
+    root_titles = [
+        line
+        for line_number, line in enumerate(lines)
+        if not fenced[line_number] and line.startswith("# ")
+    ]
     if not lines or lines[0] != "# Changelog" or root_titles != ["# Changelog"]:
         raise ChangelogError(
             "CHANGELOG.md must contain exactly one root '# Changelog' title"
         )
-    if lines.count("## [Unreleased]") != 1:
+    if (
+        sum(
+            1
+            for line_number, line in enumerate(lines)
+            if not fenced[line_number] and line == "## [Unreleased]"
+        )
+        != 1
+    ):
         raise ChangelogError(
             "CHANGELOG.md must contain exactly one '## [Unreleased]' section"
         )
 
-    section_headings = [line for line in lines if line.startswith("## ")]
+    section_headings = [
+        line
+        for line_number, line in enumerate(lines)
+        if not fenced[line_number] and line.startswith("## ")
+    ]
     if not section_headings or section_headings[0] != "## [Unreleased]":
         raise ChangelogError(
             "changelog sections must put Unreleased first and releases newest first"
@@ -88,7 +133,11 @@ def validate_changelog(path: Path) -> str:
 
     releases: list[tuple[str, date]] = []
     for line_number, line in enumerate(lines, start=1):
-        if not line.startswith("## ") or line == "## [Unreleased]":
+        if (
+            fenced[line_number - 1]
+            or not line.startswith("## ")
+            or line == "## [Unreleased]"
+        ):
             continue
         match = RELEASE_HEADING.fullmatch(line)
         if match is None:
@@ -127,14 +176,15 @@ def validate_changelog(path: Path) -> str:
             )
 
     for line_number, line in enumerate(lines, start=1):
-        if line.startswith("## "):
+        structural = not fenced[line_number - 1]
+        if structural and line.startswith("## "):
             finish_category()
             seen_categories = set()
             inside_section = True
             current_category = None
             current_category_has_content = False
             continue
-        if line.startswith("### "):
+        if structural and line.startswith("### "):
             finish_category()
             category = line.removeprefix("### ")
             if not inside_section:
@@ -195,11 +245,16 @@ def release_notes(repository: Path, tag: str) -> str:
 
     text = validate_changelog(repository / "CHANGELOG.md")
     lines = text.splitlines(keepends=True)
+    fenced = _fenced_lines([line.rstrip("\r\n") for line in lines])
     heading_pattern = re.compile(
         rf"^## \[{re.escape(version)}\] - [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}\n?$"
     )
     start = next(
-        (index + 1 for index, line in enumerate(lines) if heading_pattern.fullmatch(line)),
+        (
+            index + 1
+            for index, line in enumerate(lines)
+            if not fenced[index] and heading_pattern.fullmatch(line)
+        ),
         None,
     )
     if start is None:
@@ -210,7 +265,7 @@ def release_notes(repository: Path, tag: str) -> str:
         (
             index
             for index in range(start, len(lines))
-            if lines[index].startswith("## ")
+            if not fenced[index] and lines[index].startswith("## ")
         ),
         len(lines),
     )

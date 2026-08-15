@@ -12,6 +12,17 @@ COMMAND = ROOT / "scripts/publish-release"
 
 
 class PublishReleaseCommandTests(unittest.TestCase):
+    def test_manual_recovery_routes_through_the_complete_release_command(self) -> None:
+        maintenance = (ROOT / "standards/maintenance-and-rollout.md").read_text(
+            encoding="utf-8"
+        )
+        recovery = maintenance.split("### Recover a tag whose release failed", 1)[1]
+        recovery = recovery.split("## Adopt a standards release", 1)[0]
+
+        self.assertIn("git checkout vMAJOR.MINOR.PATCH", recovery)
+        self.assertIn("scripts/publish-release vMAJOR.MINOR.PATCH", recovery)
+        self.assertNotIn("gh release create", recovery)
+
     def create_repository(self) -> tuple[tempfile.TemporaryDirectory[str], Path]:
         temporary = tempfile.TemporaryDirectory()
         repository = Path(temporary.name)

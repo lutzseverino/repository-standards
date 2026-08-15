@@ -32,8 +32,8 @@ Each participating repository carries `.repository-standards.json`:
 
 ```json
 {
-  "standards-version": 4,
-  "standards-release": "3.1.0",
+  "standards-version": 5,
+  "standards-release": "4.0.0",
   "profiles": ["common", "documentation", "vite-react", "pnpm-workspace"],
   "boundaries": [
     {"path": ".", "type": "repository", "title": "Product"},
@@ -90,10 +90,12 @@ managed copy. Declaring the exact `CHANGELOG.md` path as repository-owned also
 opts into changelog structural audit; repositories without versioned consumers
 may omit both the declaration and file.
 
-Version 4 requires the `common` and `documentation` profiles and a GitHub
-contract. This keeps the family-wide workflow, repository-local agent skills,
-agent configuration, required labels, repository settings, and documentation
-boundary auditable.
+Version 5 requires the `common` and `documentation` profiles and a GitHub
+contract whose ruleset does not define bypass actors. Set
+`allow-bypass-actors` to `false`; actor identities are not yet part of the
+manifest contract. This keeps the family-wide workflow, repository-local agent
+skills, agent configuration, required labels, repository settings, and
+documentation boundary auditable.
 
 JSON is canonical because the tools can read it with the Python standard
 library. YAML manifests are also accepted when PyYAML is installed. The JSON

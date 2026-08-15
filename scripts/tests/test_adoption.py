@@ -36,7 +36,7 @@ class AdoptionCommandTests(unittest.TestCase):
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "standards-version": 4,
+            "standards-version": 5,
             "standards-release": "1.0.0",
             "profiles": ["common", "documentation"],
             "boundaries": [
@@ -129,7 +129,7 @@ class AdoptionCommandTests(unittest.TestCase):
                 manifest = json.loads(
                     (repository / ".repository-standards.json").read_text(encoding="utf-8")
                 )
-                if manifest.get("standards-version") != 4:
+                if manifest.get("standards-version") != 5:
                     print("error: unsupported standards-version", file=sys.stderr)
                     raise SystemExit(2)
                 if "managed.txt" in manifest.get("repository-owned", []):
@@ -166,7 +166,18 @@ class AdoptionCommandTests(unittest.TestCase):
                 from pathlib import Path
                 import sys
 
-                repository = Path(sys.argv[1])
+                repository = Path(sys.argv[-1])
+                if "--json" in sys.argv:
+                    print(
+                        json.dumps(
+                            {
+                                "files": [
+                                    {"path": "obsolete.txt", "mode": "absent"}
+                                ]
+                            }
+                        )
+                    )
+                    raise SystemExit(1)
                 manifest = json.loads(
                     (repository / ".repository-standards.json").read_text(encoding="utf-8")
                 )
@@ -272,15 +283,12 @@ class AdoptionCommandTests(unittest.TestCase):
             before,
         )
 
-    def test_explicit_version_rejects_unsafe_requests_and_equality_is_a_no_op(
-        self,
-    ) -> None:
+    def test_explicit_version_rejects_unsafe_requests(self) -> None:
         cases = (
             ("v2.0.0", 2, "malformed standards version"),
             ("2.0.0-rc.1", 2, "prerelease standards version"),
             ("2.0.0+build.1", 2, "build metadata is not a stable release"),
             ("0.9.0", 2, "downgrade"),
-            ("1.0.0", 0, "already adopts standards release 1.0.0"),
         )
         for version, returncode, message in cases:
             with self.subTest(version=version):
@@ -294,6 +302,37 @@ class AdoptionCommandTests(unittest.TestCase):
                 self.assertEqual(result.returncode, returncode, output)
                 self.assertIn(message, output)
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
+    def test_same_release_reconciles_and_runs_every_completion_check(self) -> None:
+        source = self.create_release_source("1.0.0")
+        self.prepare_target_for_adoption()
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_adopt(
+            "1.0.0",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+            },
+            validation_command="./check.sh",
+        )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("Reconciled standards release 1.0.0", output)
+        self.assertEqual(
+            (self.repository / "managed.txt").read_text(encoding="utf-8"),
+            "managed by 1.0.0\n",
+        )
+        self.assertFalse((self.repository / "obsolete.txt").exists())
+        self.assertEqual(
+            release_log.read_text(encoding="utf-8").splitlines(),
+            [
+                "sync-live preview 1.0.0",
+                "sync-live write 1.0.0",
+                "audit-live 1.0.0",
+            ],
+        )
 
     def test_explicit_release_is_prepared_with_its_own_tools_and_left_uncommitted(
         self,
@@ -469,6 +508,41 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertIn("conflicts with repository-owned pattern", result.stderr)
         self.assertFalse(release_log.exists())
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
+    def test_ignored_managed_absence_is_rejected_before_preview_or_writes(self) -> None:
+        source = self.create_release_source()
+        (self.repository / ".gitignore").write_text("obsolete.txt\n", encoding="utf-8")
+        check = self.repository / "check.sh"
+        check.write_text(
+            "#!/bin/sh\ntest -f managed.txt && test ! -e obsolete.txt\n",
+            encoding="utf-8",
+        )
+        check.chmod(0o755)
+        self.run_git("add", ".gitignore", "check.sh")
+        self.run_git("commit", "-qm", "ignore obsolete managed path")
+        obsolete = self.repository / "obsolete.txt"
+        obsolete.write_text("ignored but forbidden\n", encoding="utf-8")
+        self.assertEqual(
+            self.run_git("status", "--porcelain=v1", "--untracked-files=all").stdout,
+            "",
+        )
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_adopt(
+            "2.0.0",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+            },
+            validation_command="./check.sh",
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("ignored managed absences cannot be previewed", result.stderr)
+        self.assertIn("obsolete.txt", result.stderr)
+        self.assertTrue(obsolete.exists())
+        self.assertFalse((self.repository / "managed.txt").exists())
+        self.assertFalse(release_log.exists())
 
     def test_canonical_validation_failure_leaves_applied_changes_uncommitted(
         self,

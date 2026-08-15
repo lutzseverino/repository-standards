@@ -19,7 +19,7 @@ SEMANTIC_VERSION = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
-SUPPORTED_STANDARDS_VERSION = 4
+SUPPORTED_STANDARDS_VERSION = 5
 
 
 class AdoptionError(Exception):
@@ -226,6 +226,52 @@ def _release_tool(checkout: Path, name: str) -> str:
     return str(tool)
 
 
+def _managed_absences(checkout: Path, preview: Path) -> list[str]:
+    result = subprocess.run(
+        [_release_tool(checkout, "audit"), "--json", str(preview)],
+        cwd=preview,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in (0, 1):
+        raise AdoptionError(
+            "cannot inspect managed absences in the adoption preview: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    try:
+        report = json.loads(result.stdout)
+        files = report["files"]
+        return sorted(
+            item["path"]
+            for item in files
+            if isinstance(item, dict)
+            and item.get("mode") == "absent"
+            and isinstance(item.get("path"), str)
+        )
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise AdoptionError(
+            "release audit returned an invalid managed-file report"
+        ) from exc
+
+
+def _ignored_present_targets(repository: Path, targets: list[str]) -> list[str]:
+    ignored: list[str] = []
+    for target in targets:
+        path = repository / target
+        if not path.exists() and not path.is_symlink():
+            continue
+        check = _git(repository, "check-ignore", "--quiet", "--", target)
+        if check.returncode == 0:
+            ignored.append(target)
+        elif check.returncode not in (1,):
+            raise AdoptionError(
+                f"cannot inspect ignore status for managed absence {target!r}: "
+                f"{check.stderr.strip() or check.stdout.strip()}"
+            )
+    return ignored
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Adopt an exact or latest stable repository standards release"
@@ -279,11 +325,6 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    if requested == current:
-        print(
-            f"Repository already adopts standards release {selected_version}; no changes."
-        )
-        return 0
     if args.version is None:
         print(f"Resolved latest stable standards release: {selected_version}")
     try:
@@ -303,6 +344,16 @@ def main() -> int:
                     + (cloned.stderr.strip() or cloned.stdout.strip())
                 )
             _update_release(preview, selected_version)
+
+            ignored_absences = _ignored_present_targets(
+                repository, _managed_absences(checkout, preview)
+            )
+            if ignored_absences:
+                raise AdoptionError(
+                    "ignored managed absences cannot be previewed from the isolated "
+                    "checkout; remove or unignore these paths before adoption: "
+                    + ", ".join(ignored_absences)
+                )
 
             _run_phase(
                 "Offline preview",
@@ -347,10 +398,16 @@ def main() -> int:
     except (AdoptionError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(
-        f"\nPrepared standards adoption {current_value} -> {selected_version}; "
-        "changes remain uncommitted."
-    )
+    if requested == current:
+        print(
+            f"\nReconciled standards release {selected_version}; "
+            "changes remain uncommitted."
+        )
+    else:
+        print(
+            f"\nPrepared standards adoption {current_value} -> {selected_version}; "
+            "changes remain uncommitted."
+        )
     return 0
 
 

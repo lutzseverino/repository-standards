@@ -287,6 +287,63 @@ All notable changes are documented here.
             "### Changed\n\n- Changed the public contract.\n",
         )
 
+    def test_fenced_heading_examples_are_literal_release_note_content(self) -> None:
+        temporary = self.write_repository(
+            '''# Changelog
+
+## [Unreleased]
+
+## [2.0.0] - 2026-08-14
+
+### Changed
+
+- Document the generated Markdown:
+
+```markdown
+## Example
+
+### Added
+
+## [Unreleased]
+```
+
+- Keep parsing the release after the example.
+'''
+        )
+        self.addCleanup(temporary.cleanup)
+
+        result = self.run_command(
+            Path(temporary.name), "release-notes", "--tag", "v2.0.0"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("## Example", result.stdout)
+        self.assertIn("### Added", result.stdout)
+        self.assertIn("## [Unreleased]", result.stdout)
+        self.assertIn("Keep parsing the release after the example", result.stdout)
+
+    def test_backtick_in_fence_info_string_does_not_hide_real_headings(self) -> None:
+        temporary = self.write_repository(
+            '''# Changelog
+
+## [Unreleased]
+
+### Added
+
+- This apparent fence is ordinary Markdown content.
+
+```markdown`bad
+## [Unreleased]
+```
+'''
+        )
+        self.addCleanup(temporary.cleanup)
+
+        result = self.run_command(Path(temporary.name), "validate")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("exactly one '## [Unreleased]' section", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
