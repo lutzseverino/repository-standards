@@ -27,6 +27,8 @@ and standards releases use semantic versioning.
   repository-owned `CHANGELOG.md` path.
 - Document public release consumption and recovery when a stable tag exists but
   GitHub Release creation fails.
+- Document the one-time public rollout through the `v3.1.0` backfill, the
+  introducing release, and manual downstream bootstrap handoffs.
 - Advance the manifest compatibility contract to version `5` and reject bypass
   actors until the manifest can identify them explicitly. Because this is an
   incompatible contract change, the next stable release must be `4.0.0`.

@@ -73,6 +73,41 @@ and coherent tag, `VERSION`, and changelog inputs before it creates the release.
 If any gate fails, do not work around it and do not retarget the tag. Correct the
 source on `main`, assign a new version, and publish a new stable tag.
 
+### Complete the first public rollout
+
+The release that introduces public discovery and the repository lifecycle
+skill has a one-time rollout order:
+
+1. Publish the standards source only after its license and public-facing
+   documentation are present on `main`.
+2. Publish an immutable GitHub Release for the existing `v3.1.0` tag using its
+   matching changelog section, then verify that the unauthenticated
+   latest-release redirect resolves `v3.1.0`.
+3. Prepare and merge the introducing release on `main`, run `scripts/check`,
+   push its annotated stable tag, and wait for release automation to publish a
+   non-draft, non-prerelease GitHub Release from the matching changelog section.
+   Verify that the unauthenticated latest-release redirect now resolves the
+   introducing release. Then complete these checks without release-source or
+   latest-version overrides:
+
+   - In a local participating-repository fixture whose manifest remains pinned
+     to `3.1.0` but contains the introducing discovery artifacts, run discovery
+     once and render its cached notice. Confirm that only one request occurs and
+     that the fixed notice reports `3.1.0` to the introducing release.
+   - In two clean, disposable GitHub-backed participating-repository fixtures
+     that use the current manifest protocol and remain pinned to `3.1.0`, invoke
+     the installed adoption runner once with the exact introducing version and
+     once with the version omitted. Both runs must acquire the public release,
+     prepare the repository changes, and pass the fixture's canonical
+     validation plus the release's offline and live audits.
+4. Hand each participating repository to its maintainer for the manual
+   bootstrap described below. Older repositories do not contain the new skill,
+   so they must not be told to invoke it for this first adoption.
+
+Downstream repository adoptions are separate delivery work. The standards
+release operation records those handoffs but does not modify participating
+repositories.
+
 ## Adopt a standards release
 
 Invoke `adopt-repository-standards VERSION` in the participating repository for
