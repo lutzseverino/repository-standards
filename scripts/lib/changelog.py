@@ -27,7 +27,7 @@ CHANGELOG_CATEGORIES = {
     "Migration",
 }
 COMPARISON_LINK = re.compile(r"^\[[^]]+\]:\s+\S+")
-FENCE_OPEN = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})")
+FENCE_OPEN = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 
 class ChangelogError(Exception):
@@ -45,6 +45,9 @@ def _fenced_lines(lines: list[str]) -> list[bool]:
                 flags.append(False)
                 continue
             fence = match.group("fence")
+            if fence[0] == "`" and "`" in match.group("info"):
+                flags.append(False)
+                continue
             fence_character = fence[0]
             fence_length = len(fence)
             flags.append(True)

@@ -322,6 +322,28 @@ All notable changes are documented here.
         self.assertIn("## [Unreleased]", result.stdout)
         self.assertIn("Keep parsing the release after the example", result.stdout)
 
+    def test_backtick_in_fence_info_string_does_not_hide_real_headings(self) -> None:
+        temporary = self.write_repository(
+            '''# Changelog
+
+## [Unreleased]
+
+### Added
+
+- This apparent fence is ordinary Markdown content.
+
+```markdown`bad
+## [Unreleased]
+```
+'''
+        )
+        self.addCleanup(temporary.cleanup)
+
+        result = self.run_command(Path(temporary.name), "validate")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("exactly one '## [Unreleased]' section", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
