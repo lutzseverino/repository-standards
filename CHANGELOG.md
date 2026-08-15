@@ -7,6 +7,8 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-08-16
+
 ### Added
 
 - Distribute the dependency-free `adopt-repository-standards` lifecycle skill
