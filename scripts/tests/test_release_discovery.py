@@ -17,6 +17,9 @@ sys.path.insert(0, str(SCRIPTS))
 from lib.standards import standards_root, sync_main  # noqa: E402
 
 
+INTRODUCING_RELEASE = "4.0.0"
+
+
 class ReleaseDiscoveryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -116,11 +119,12 @@ printf '%s' "$DISCOVERY_FINAL_URL"
 
     def test_newer_stable_release_is_discovered_with_one_bounded_request(self) -> None:
         result = self.run_discovery(
-            "https://github.com/lutzseverino/repository-standards/releases/tag/v3.2.0"
+            "https://github.com/lutzseverino/repository-standards/releases/tag/"
+            f"v{INTRODUCING_RELEASE}"
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, "3.2.0\n")
+        self.assertEqual(result.stdout, f"{INTRODUCING_RELEASE}\n")
         self.assertEqual(result.stderr, "")
         self.assertEqual(
             self.curl_log.read_text(encoding="utf-8"),
@@ -133,7 +137,8 @@ printf '%s' "$DISCOVERY_FINAL_URL"
         self,
     ) -> None:
         discovery = self.run_discovery(
-            "https://github.com/lutzseverino/repository-standards/releases/tag/v3.2.0"
+            "https://github.com/lutzseverino/repository-standards/releases/tag/"
+            f"v{INTRODUCING_RELEASE}"
         )
 
         notice = self.run_discovery(
@@ -145,10 +150,11 @@ printf '%s' "$DISCOVERY_FINAL_URL"
         self.assertEqual(notice.returncode, 0)
         self.assertEqual(
             notice.stdout,
-            "Repository standards update available: 3.1.0 → 3.2.0.\n"
+            "Repository standards update available: "
+            f"3.1.0 → {INTRODUCING_RELEASE}.\n"
             "\n"
             "Start a new session in this repository and enter:\n"
-            "adopt-repository-standards 3.2.0\n",
+            f"adopt-repository-standards {INTRODUCING_RELEASE}\n",
         )
         self.assertEqual(notice.stderr, "")
         self.assertEqual(self.request_count(), 1)
