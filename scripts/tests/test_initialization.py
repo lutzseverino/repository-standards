@@ -66,7 +66,19 @@ class RepositoryInitializationCommandTests(unittest.TestCase):
         )
         self.assertEqual(previewed["github"]["repository"], "owner/example")
         self.assertEqual(previewed["github"]["default-branch"], "main")
-        self.assertIsNone(previewed["github"]["ruleset"])
+        self.assertEqual(
+            previewed["github"]["ruleset"],
+            {
+                "name": "Protect main",
+                "required-status-checks": ["CI / Required"],
+                "require-current-branch": True,
+                "required-approvals": 0,
+                "allowed-merge-methods": ["squash"],
+                "prevent-deletion": True,
+                "prevent-force-push": True,
+                "allow-bypass-actors": False,
+            },
+        )
 
         written = self.run_initialize("--write")
 
@@ -93,6 +105,14 @@ class RepositoryInitializationCommandTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(verified.returncode, 0, verified.stderr)
+
+    def test_explicitly_unsupported_rulesets_remain_disabled(self) -> None:
+        self.write_input(github={"ruleset": None})
+
+        preview = self.run_initialize()
+
+        self.assertEqual(preview.returncode, 1, preview.stderr)
+        self.assertIsNone(json.loads(preview.stdout)["github"]["ruleset"])
 
     def test_multiple_qualifying_profiles_stop_before_destination_mutation(self) -> None:
         self.write_input(

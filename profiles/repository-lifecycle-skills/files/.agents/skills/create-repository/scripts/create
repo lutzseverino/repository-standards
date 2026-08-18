@@ -30,6 +30,11 @@ class RemoteState(Enum):
     UNKNOWN = "unknown"
 
 
+class RulesetSupport(Enum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+
+
 def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repository), *arguments],
@@ -189,7 +194,9 @@ def _observe_github_repository(repository: str) -> RemoteState:
     return RemoteState.UNKNOWN
 
 
-def _preflight_github(owner: str, repository: str, visibility: str) -> None:
+def _preflight_github(
+    owner: str, repository: str, visibility: str
+) -> RulesetSupport:
     authenticated = _gh("auth", "status")
     if authenticated.returncode != 0:
         raise CreationError(
@@ -203,7 +210,8 @@ def _preflight_github(owner: str, repository: str, visibility: str) -> None:
             + (viewer.stderr.strip() or viewer.stdout.strip())
         )
     try:
-        viewer_login = json.loads(viewer.stdout)["login"]
+        viewer_details = json.loads(viewer.stdout)
+        viewer_login = viewer_details["login"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise CreationError(
             "authenticated GitHub user response did not contain a login"
@@ -216,6 +224,21 @@ def _preflight_github(owner: str, repository: str, visibility: str) -> None:
         if visibility == "internal":
             raise CreationError(
                 "internal visibility requires an enterprise-owned GitHub organization"
+            )
+        if visibility == "public":
+            ruleset_support = RulesetSupport.SUPPORTED
+        else:
+            try:
+                viewer_plan = viewer_details["plan"]["name"]
+            except (KeyError, TypeError) as exc:
+                raise CreationError(
+                    "authenticated GitHub user response did not prove private "
+                    "repository ruleset support"
+                ) from exc
+            ruleset_support = (
+                RulesetSupport.SUPPORTED
+                if viewer_plan in {"pro", "business_plus", "enterprise"}
+                else RulesetSupport.UNSUPPORTED
             )
     else:
         organization_result = _gh(
@@ -259,39 +282,63 @@ def _preflight_github(owner: str, repository: str, visibility: str) -> None:
                 "authenticated user cannot create repositories for GitHub "
                 f"organization {owner}"
             )
-        if visibility == "internal":
-            details_result = _gh("api", f"orgs/{owner}")
-            if details_result.returncode != 0:
-                raise CreationError(
-                    f"cannot inspect GitHub organization {owner}: "
-                    + (details_result.stderr.strip() or details_result.stdout.strip())
-                )
+        details_result = _gh("api", f"orgs/{owner}")
+        if details_result.returncode != 0:
+            raise CreationError(
+                f"cannot inspect GitHub organization {owner}: "
+                + (details_result.stderr.strip() or details_result.stdout.strip())
+            )
+        try:
+            details = json.loads(details_result.stdout)
+        except json.JSONDecodeError as exc:
+            raise CreationError(
+                f"GitHub organization response was invalid for {owner}"
+            ) from exc
+        if not isinstance(details, dict):
+            raise CreationError(
+                f"GitHub organization response was invalid for {owner}"
+            )
+        visibility_permission = (
+            f"members_can_create_{visibility}_repositories"
+        )
+        if (
+            organization.get("viewerCanAdminister") is not True
+            and details.get(visibility_permission) is not True
+        ):
+            raise CreationError(
+                f"authenticated user cannot create {visibility} repositories for "
+                f"GitHub organization {owner}"
+            )
+        if visibility == "public":
+            ruleset_support = RulesetSupport.SUPPORTED
+        else:
             try:
-                details = json.loads(details_result.stdout)
                 plan_name = details["plan"]["name"]
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            except (KeyError, TypeError) as exc:
                 raise CreationError(
-                    f"GitHub organization response did not prove internal "
-                    f"repository eligibility for {owner}"
+                    f"GitHub organization response did not prove {visibility} "
+                    f"repository ruleset support for {owner}"
                 ) from exc
-            if plan_name not in {"business_plus", "enterprise"}:
+            if (
+                visibility == "internal"
+                and plan_name not in {"business_plus", "enterprise"}
+            ):
                 raise CreationError(
                     f"GitHub organization {owner} does not support internal "
                     "repositories"
                 )
-            if (
-                organization.get("viewerCanAdminister") is not True
-                and details.get("members_can_create_internal_repositories") is not True
-            ):
-                raise CreationError(
-                    "authenticated user cannot create internal repositories for "
-                    f"GitHub organization {owner}"
-                )
+            ruleset_support = (
+                RulesetSupport.SUPPORTED
+                if plan_name
+                in {"team", "business", "business_plus", "enterprise"}
+                else RulesetSupport.UNSUPPORTED
+            )
     observation = _observe_github_repository(repository)
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
     if observation is RemoteState.UNKNOWN:
         raise CreationError(f"cannot verify GitHub identity {repository}")
+    return ruleset_support
 
 
 def _run_phase(
@@ -456,7 +503,9 @@ def main() -> int:
 
         selected_version = _stable_version(args.version or _latest_release())
         repository_name = f"{args.owner}/{args.name}"
-        _preflight_github(args.owner, repository_name, args.visibility)
+        ruleset_support = _preflight_github(
+            args.owner, repository_name, args.visibility
+        )
         remote_state = RemoteState.ABSENT
 
         with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
@@ -471,6 +520,8 @@ def main() -> int:
             }
             if args.profile:
                 initialization["profiles"] = args.profile
+            if ruleset_support is RulesetSupport.UNSUPPORTED:
+                initialization["github"] = {"ruleset": None}
             initialization_path.write_text(
                 json.dumps(initialization, indent=2) + "\n", encoding="utf-8"
             )

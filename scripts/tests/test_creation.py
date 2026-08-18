@@ -52,12 +52,23 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 if facts.get("facts", {}).get("ambiguous") == "true":
                     print("error: multiple selectable ecosystem profiles match", file=sys.stderr)
                     raise SystemExit(2)
+                default_ruleset = {
+                    "name": "Protect main",
+                    "required-status-checks": ["CI / Required"],
+                    "require-current-branch": True,
+                    "required-approvals": 0,
+                    "allowed-merge-methods": ["squash"],
+                    "prevent-deletion": True,
+                    "prevent-force-push": True,
+                    "allow-bypass-actors": False,
+                }
+                ruleset = facts.get("github", {}).get("ruleset", default_ruleset)
                 manifest = {
                     "standards-version": 5,
                     "standards-release": facts["standards-release"],
                     "profiles": ["common", "documentation"],
                     "repository-owned": ["README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"],
-                    "github": {"repository": facts["repository"], "default-branch": "main", "ruleset": None},
+                    "github": {"repository": facts["repository"], "default-branch": "main", "ruleset": ruleset},
                 }
                 if mode == "preview":
                     print(json.dumps(manifest))
@@ -170,7 +181,12 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 if arguments[:2] == ["auth", "status"]:
                     raise SystemExit(0)
                 if arguments[:2] == ["api", "user"]:
-                    print(json.dumps({"login": "owner"}))
+                    print(json.dumps({
+                        "login": "owner",
+                        "plan": {
+                            "name": os.environ.get("FAKE_USER_PLAN", "free")
+                        },
+                    }))
                     raise SystemExit(0)
                 if arguments[:2] == ["api", "graphql"]:
                     requested_owner = next(
@@ -311,6 +327,12 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertTrue((self.destination / ".repository-standards.json").is_file())
         self.assertTrue((self.destination / "README.md").is_file())
         self.assertTrue((self.destination / "LICENSE").is_file())
+        manifest = json.loads(
+            (self.destination / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertIsNone(manifest["github"]["ruleset"])
         head = subprocess.run(
             ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
             check=False,
@@ -451,6 +473,58 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 self.assertFalse(self.destination.exists())
                 self.assertFalse(self.log.exists())
 
+    def test_organization_visibility_permission_is_checked_before_mutation(
+        self,
+    ) -> None:
+        for visibility in ("public", "private"):
+            with self.subTest(visibility=visibility):
+                result = self.run_create(
+                    "--owner",
+                    "restricted-organization",
+                    "--visibility",
+                    visibility,
+                    extra_environment={
+                        "FAKE_ORGANIZATION": "restricted-organization",
+                        "FAKE_ORGANIZATION_CAN_CREATE": "1",
+                        "FAKE_ORGANIZATION_PLAN": "team",
+                    },
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(
+                    f"cannot create {visibility} repositories", result.stderr
+                )
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
+
+    def test_ruleset_default_follows_proven_target_support(self) -> None:
+        cases = (
+            ("public", {}, True),
+            ("private", {"FAKE_USER_PLAN": "pro"}, True),
+        )
+        for visibility, environment, expected_ruleset in cases:
+            with self.subTest(visibility=visibility):
+                self.destination = self.directory / visibility
+                self.github_state.write_text(
+                    '{"created": false}\n', encoding="utf-8"
+                )
+                result = self.run_create(
+                    "--visibility",
+                    visibility,
+                    extra_environment=environment,
+                )
+
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                manifest = json.loads(
+                    (self.destination / ".repository-standards.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(
+                    manifest["github"]["ruleset"] is not None,
+                    expected_ruleset,
+                )
+
     def test_internal_visibility_accepts_an_eligible_enterprise_organization(
         self,
     ) -> None:
@@ -478,6 +552,12 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             remote.stdout.strip(),
             "https://github.com/enterprise-organization/example.git",
         )
+        manifest = json.loads(
+            (self.destination / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["github"]["ruleset"]["name"], "Protect main")
 
     def test_lost_creation_response_reobserves_and_reports_the_retained_remote(
         self,

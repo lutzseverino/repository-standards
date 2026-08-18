@@ -18,6 +18,19 @@ DEFAULT_GITHUB_FEATURES = {
 }
 
 
+def _default_main_ruleset() -> dict[str, Any]:
+    return {
+        "name": "Protect main",
+        "required-status-checks": ["CI / Required"],
+        "require-current-branch": True,
+        "required-approvals": 0,
+        "allowed-merge-methods": ["squash"],
+        "prevent-deletion": True,
+        "prevent-force-push": True,
+        "allow-bypass-actors": False,
+    }
+
+
 class ContractError(Exception):
     """Raised when a repository contract cannot be validated and normalized."""
 
@@ -403,7 +416,7 @@ def build_initial_repository_contract(
         "default-branch": "main",
         "settings": settings,
         "features": features,
-        "ruleset": None,
+        "ruleset": _default_main_ruleset(),
         **github,
     }
     github_contract["repository"] = repository
