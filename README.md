@@ -174,7 +174,8 @@ Participating repositories receive two user-invoked lifecycle skills.
 that release's own tools and leaves its changes uncommitted. `create-repository`
 reuses settled facts, asks only for missing explicit decisions, validates the
 local baseline before creating an empty GitHub repository, configures `origin`,
-and leaves uncommitted content on unborn `main`. First publication remains the
+and leaves uncommitted content on unborn `main`. License identifiers and text
+come from the selected release's pinned catalog. First publication remains the
 required next lifecycle operation; creation does not claim standards
 completeness.
 

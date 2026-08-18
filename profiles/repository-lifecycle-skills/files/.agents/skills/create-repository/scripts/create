@@ -194,61 +194,68 @@ def _gh(*arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _resolve_license(requested: str, owner: str) -> tuple[str, str]:
-    catalog_result = _gh("api", "licenses")
-    if catalog_result.returncode != 0:
-        raise CreationError(
-            "cannot inspect GitHub license catalog: "
-            + (catalog_result.stderr.strip() or catalog_result.stdout.strip())
-        )
+def _resolve_license(
+    checkout: Path, requested: str, owner: str
+) -> tuple[str, str]:
+    catalog_path = (
+        checkout
+        / ".agents/skills/create-repository/licenses/catalog.json"
+    )
     try:
-        catalog = json.loads(catalog_result.stdout)
-    except json.JSONDecodeError as exc:
-        raise CreationError("GitHub license catalog was not valid JSON") from exc
-    if not isinstance(catalog, list):
-        raise CreationError("GitHub license catalog did not contain a list")
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        entries = catalog["licenses"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError(
+            "selected standards release has an invalid license catalog"
+        ) from exc
+    if not isinstance(entries, list):
+        raise CreationError(
+            "selected standards release has an invalid license catalog"
+        )
     matches = [
         entry
-        for entry in catalog
+        for entry in entries
         if isinstance(entry, dict)
         and any(
             isinstance(identifier, str)
             and identifier.casefold() == requested.casefold()
-            for identifier in (entry.get("key"), entry.get("spdx_id"))
+            for identifier in (entry.get("key"), entry.get("spdx-id"))
         )
     ]
     if len(matches) != 1:
         raise CreationError(
-            f"unsupported GitHub license identifier: {requested!r}"
+            "unsupported license identifier for the selected standards release: "
+            f"{requested!r}"
         )
     key = matches[0].get("key")
-    canonical_identifier = matches[0].get("spdx_id")
+    canonical_identifier = matches[0].get("spdx-id")
     if not isinstance(key, str) or not isinstance(canonical_identifier, str):
-        raise CreationError("GitHub license catalog entry was invalid")
-    details_result = _gh("api", f"licenses/{key}")
-    if details_result.returncode != 0:
         raise CreationError(
-            f"cannot inspect GitHub license {canonical_identifier}: "
-            + (details_result.stderr.strip() or details_result.stdout.strip())
+            "selected standards release has an invalid license catalog entry"
         )
-    try:
-        details = json.loads(details_result.stdout)
-        body = details["body"]
-        observed_identifier = details["spdx_id"]
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise CreationError(
-            f"GitHub license response was invalid for {canonical_identifier}"
-        ) from exc
-    if (
-        observed_identifier != canonical_identifier
-        or not isinstance(body, str)
-        or not body
-    ):
-        raise CreationError(
-            f"GitHub license response was invalid for {canonical_identifier}"
-        )
-    if canonical_identifier == "MIT":
+    renderer = matches[0].get("renderer")
+    relative_file = matches[0].get("file")
+    if renderer == "mit" and relative_file is None:
         body = _mit_license(owner)
+    elif renderer is None and isinstance(relative_file, str):
+        if Path(relative_file).name != relative_file:
+            raise CreationError(
+                "selected standards release has an unsafe license catalog entry"
+            )
+        try:
+            body = (catalog_path.parent / relative_file).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise CreationError(
+                f"cannot read pinned license text for {canonical_identifier}: {exc}"
+            ) from exc
+        if not body:
+            raise CreationError(
+                f"pinned license text is empty for {canonical_identifier}"
+            )
+    else:
+        raise CreationError(
+            "selected standards release has an invalid license catalog entry"
+        )
     return canonical_identifier, body
 
 
@@ -647,12 +654,14 @@ def main() -> int:
         ruleset_support = _preflight_github(
             args.owner, repository_name, args.visibility
         )
-        license_identifier, license_text = _resolve_license(args.license, args.owner)
         remote_state = RemoteState.ABSENT
 
         with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
             temporary_root = Path(directory)
             checkout = _checked_out_release(selected_version, temporary_root)
+            license_identifier, license_text = _resolve_license(
+                checkout, args.license, args.owner
+            )
             initialization_path = temporary_root / "initialization.json"
             initialization: dict[str, object] = {
                 "standards-release": selected_version,

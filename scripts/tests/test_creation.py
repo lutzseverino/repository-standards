@@ -33,6 +33,29 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         release = self.directory / "release"
         scripts = release / "scripts"
         scripts.mkdir(parents=True)
+        licenses = (
+            release / ".agents/skills/create-repository/licenses"
+        )
+        licenses.mkdir(parents=True)
+        (licenses / "catalog.json").write_text(
+            json.dumps(
+                {
+                    "licenses": [
+                        {"key": "mit", "spdx-id": "MIT", "renderer": "mit"},
+                        {
+                            "key": "apache-2.0",
+                            "spdx-id": "Apache-2.0",
+                            "file": "Apache-2.0.txt",
+                        },
+                    ]
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (licenses / "Apache-2.0.txt").write_text(
+            "Apache License 2.0\n", encoding="utf-8"
+        )
         (release / "VERSION").write_text("4.0.0\n", encoding="utf-8")
         tools = {
             "init": """\
@@ -182,24 +205,6 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     state = json.load(handle)
                 arguments = sys.argv[1:]
                 if arguments[:2] == ["auth", "status"]:
-                    raise SystemExit(0)
-                if arguments[:2] == ["api", "licenses"]:
-                    print(json.dumps([
-                        {"key": "mit", "spdx_id": "MIT"},
-                        {"key": "apache-2.0", "spdx_id": "Apache-2.0"},
-                    ]))
-                    raise SystemExit(0)
-                if arguments[:2] == ["api", "licenses/mit"]:
-                    print(json.dumps({
-                        "spdx_id": "MIT",
-                        "body": "MIT catalog template",
-                    }))
-                    raise SystemExit(0)
-                if arguments[:2] == ["api", "licenses/apache-2.0"]:
-                    print(json.dumps({
-                        "spdx_id": "Apache-2.0",
-                        "body": "Apache License 2.0\\n",
-                    }))
                     raise SystemExit(0)
                 if arguments[:2] == ["api", "user"]:
                     print(json.dumps({
@@ -526,7 +531,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         result = self.run_create("--license", "Unknown-1.0")
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("unsupported GitHub license identifier", result.stderr)
+        self.assertIn("unsupported license identifier", result.stderr)
         self.assertFalse(self.destination.exists())
         self.assertFalse(self.log.exists())
 

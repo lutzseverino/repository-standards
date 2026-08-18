@@ -16,7 +16,8 @@ Create one prepared creation baseline from settled repository facts.
    facts only from unambiguous context; collect an unspecified ecosystem before
    invocation and ask only for unproven facts. This step is complete only when
    every selectable profile fully matches or conflicts with a settled fact.
-   Express the license as an SPDX identifier or key from GitHub's license catalog.
+   Express the license as an SPDX identifier or key from the selected standards
+   release's pinned license catalog.
 2. Run the bundled creation runner with those facts. Pass an exact release when
    the user selected one; omit `--version` to select the latest stable release.
    Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves an

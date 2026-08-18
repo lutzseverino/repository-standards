@@ -1,0 +1,14 @@
+{
+  "licenses": [
+    {
+      "key": "mit",
+      "spdx-id": "MIT",
+      "renderer": "mit"
+    },
+    {
+      "key": "apache-2.0",
+      "spdx-id": "Apache-2.0",
+      "file": "Apache-2.0.txt"
+    }
+  ]
+}
