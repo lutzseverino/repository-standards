@@ -8,6 +8,7 @@ from pathlib import Path
 
 from lib.live_reconciliation import (
     GitHubCliAdapter,
+    LiveLifecycle,
     apply_live_delta,
     reconcile_live_github,
 )
@@ -21,6 +22,12 @@ def main() -> int:
     )
     parser.add_argument("repository", help="repository checkout to synchronize")
     parser.add_argument("--manifest", help="manifest path, relative to repository")
+    parser.add_argument(
+        "--lifecycle",
+        choices=("prepared", "published"),
+        default="published",
+        help="repository lifecycle state used to determine applicable requirements",
+    )
     parser.add_argument("--write", action="store_true", help="apply planned operations")
     args = parser.parse_args()
     repository = Path(args.repository).expanduser().resolve()
@@ -32,7 +39,8 @@ def main() -> int:
         )
         contract = repository_contract.github
         adapter = GitHubCliAdapter()
-        snapshot = adapter.observe(repository_contract)
+        lifecycle = LiveLifecycle(args.lifecycle)
+        snapshot = adapter.observe(repository_contract, lifecycle=lifecycle)
         delta = reconcile_live_github(repository_contract, snapshot)
         operations = delta.operations
     except (StandardsError, ContractError) as exc:
@@ -40,11 +48,19 @@ def main() -> int:
         return 2
 
     if not operations:
-        print(f"Live GitHub contract is current for {contract.repository}.")
+        if delta.pending_findings:
+            print(f"Prepared live GitHub contract for {contract.repository}:")
+            for finding in delta.pending_findings:
+                print(f"- {finding}")
+            print("No applicable live changes remain before first publication.")
+        else:
+            print(f"Live GitHub contract is current for {contract.repository}.")
         return 0
     for operation in operations:
         print(operation.description)
     if not args.write:
+        for finding in delta.pending_findings:
+            print(f"PENDING  {finding}")
         print(
             f"\nPreview: {len(operations)} live operation(s) would be applied. "
             "Re-run with --write."
@@ -69,6 +85,8 @@ def main() -> int:
             print("- none", file=sys.stderr)
         return 2
     print(f"\nApplied {len(operations)} live operation(s) to {contract.repository}.")
+    for finding in delta.pending_findings:
+        print(f"PENDING  {finding}")
     return 0
 
 

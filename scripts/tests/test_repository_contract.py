@@ -93,7 +93,36 @@ class RepositoryContractTests(unittest.TestCase):
                 "node-protocol",
             ),
         )
-        self.assertTrue(all(profile.applicability is None for profile in contract.profiles))
+        applicability = {
+            profile.name: profile.applicability for profile in contract.profiles
+        }
+        self.assertTrue(
+            all(
+                applicability[name] is None
+                for name in (
+                    "agent-skills",
+                    "repository-lifecycle-skills",
+                    "common",
+                    "documentation",
+                )
+            )
+        )
+        self.assertEqual(
+            dict(applicability["node-npm"] or ()),
+            {
+                "ecosystem": "node",
+                "package-manager": "npm",
+                "project-kind": "package",
+            },
+        )
+        self.assertEqual(
+            dict(applicability["node-protocol"] or ()),
+            {
+                "ecosystem": "node",
+                "package-manager": "npm",
+                "project-kind": "protocol",
+            },
+        )
         self.assertIn(".gitignore", contract.managed_paths)
         self.assertIn(
             ".github/pull_request_template.md", contract.managed_absences

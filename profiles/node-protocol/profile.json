@@ -2,6 +2,11 @@
   "name": "node-protocol",
   "description": "Node.js protocol, schema, and reference implementation baseline",
   "extends": ["node-npm"],
+  "applicability": {
+    "ecosystem": "node",
+    "package-manager": "npm",
+    "project-kind": "protocol"
+  },
   "files": [
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 20}
   ]

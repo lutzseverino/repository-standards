@@ -527,8 +527,19 @@ def _load_profile(
     if len(parents) != len(set(parents)):
         raise StandardsError(f"{path}: extends must not contain duplicates")
     applicability = data.get("applicability")
-    if applicability is not None and not isinstance(applicability, dict):
-        raise StandardsError(f"{path}: applicability must be an object")
+    if applicability is not None:
+        if not isinstance(applicability, dict):
+            raise StandardsError(f"{path}: applicability must be an object")
+        if not applicability or not all(
+            isinstance(key, str)
+            and key
+            and isinstance(value, str)
+            and value
+            for key, value in applicability.items()
+        ):
+            raise StandardsError(
+                f"{path}: applicability must contain non-empty string facts"
+            )
     github = data.get("github", {})
     if not isinstance(github, dict) or set(github) - {"required-labels"}:
         raise StandardsError(

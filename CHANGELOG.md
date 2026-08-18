@@ -15,6 +15,9 @@ and standards releases use semantic versioning.
 - Reconcile repository settings and features, required labels, and the named
   branch-protection ruleset through one replaceable GitHub adapter and shared
   delta, including publication-pending and partial-application evidence.
+- Add deterministic initial-contract preview/write tooling, explicit selectable
+  ecosystem-profile applicability, and the family-owned `create-repository`
+  skill for recoverable prepared creation baselines.
 
 ## [4.0.0] - 2026-08-16
 

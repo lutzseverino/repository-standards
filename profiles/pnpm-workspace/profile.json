@@ -2,6 +2,11 @@
   "name": "pnpm-workspace",
   "description": "pnpm workspace and install-unit conventions",
   "extends": [],
+  "applicability": {
+    "ecosystem": "node",
+    "package-manager": "pnpm",
+    "project-kind": "workspace"
+  },
   "files": [
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 20}
   ]

@@ -5,7 +5,8 @@
     "source": "https://github.com/lutzseverino/repository-standards",
     "license": "MIT",
     "skills": [
-      "adopt-repository-standards"
+      "adopt-repository-standards",
+      "create-repository"
     ]
   }
 }

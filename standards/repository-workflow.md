@@ -34,6 +34,8 @@ agreed small change -> implementation -> validated commit
 agreed multi-session change -> specification -> tickets -> implementation
 ready specification or ticket -> implementation
 huge unresolved effort -> wayfinder -> agreed work
+repository creation -> prepared creation baseline -> first publication
+                    -> standards-complete repository
 validated commit -> delivery preparation: push + pull request + CI/review evidence
                  -> explicit human confirmation
                  -> delivery finalization: reverify -> squash merge
@@ -85,6 +87,33 @@ Work implementation tickets blockers-first. Use native GitHub sub-issues and
 dependencies where available. Planning skills may mark specifications and
 tickets `ready-for-agent`; a human or separate orchestrator may select one for
 autonomous implementation.
+
+## Repository creation
+
+Repository creation produces a prepared creation baseline: validated,
+uncommitted local content on unborn `main` plus an empty GitHub repository
+configured as `origin`. It creates no commit, branch publication, pull request,
+merge, product scaffold, or package/build manifest and does not claim standards
+completeness.
+
+Every created repository selects the mandatory `common` and `documentation`
+profiles. An ecosystem profile is selectable only when it declares explicit
+applicability and owns observable managed or audited behavior. Creation infers
+the profile when exactly one selectable profile matches settled facts, uses
+only the mandatory baseline when none matches, and stops before mutation for
+explicit selection when multiple profiles match.
+
+The family-owned `create-repository` skill is one execution adapter for this
+operation. It reuses settled facts and requires repository name, one-line
+purpose, visibility, and license to be explicit. The selected release's own
+initialization, offline synchronization and audit, and prepared-lifecycle live
+interfaces validate the baseline. Local and remote collisions and every other
+deterministic blocker are resolved before target mutation. Application-time
+failures retain recoverable work and report completed state without rollback.
+
+First publication is the separate next lifecycle operation. It owns the first
+commit, publication of `main`, default-branch establishment, applicable branch
+protection, and proof that the repository is standards-complete.
 
 ## Branch, commit, and implementation
 

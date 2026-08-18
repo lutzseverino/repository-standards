@@ -250,13 +250,17 @@ responses.
         with redirect_stdout(output):
             self.assertEqual(sync_main(["--write", str(repository)]), 0)
 
-        skill = repository / ".agents/skills/adopt-repository-standards/SKILL.md"
-        runner = repository / ".agents/skills/adopt-repository-standards/scripts/adopt"
-        self.assertTrue(skill.is_file())
-        self.assertTrue(runner.is_file())
-        skill_text = skill.read_text(encoding="utf-8")
-        self.assertIn("name: adopt-repository-standards", skill_text)
-        self.assertIn("disable-model-invocation: true", skill_text)
+        for name, runner_name in (
+            ("adopt-repository-standards", "adopt"),
+            ("create-repository", "create"),
+        ):
+            skill = repository / f".agents/skills/{name}/SKILL.md"
+            runner = repository / f".agents/skills/{name}/scripts/{runner_name}"
+            self.assertTrue(skill.is_file())
+            self.assertTrue(runner.is_file())
+            skill_text = skill.read_text(encoding="utf-8")
+            self.assertIn(f"name: {name}", skill_text)
+            self.assertIn("disable-model-invocation: true", skill_text)
 
         inventory = json.loads(
             (
@@ -271,7 +275,8 @@ responses.
         )
         self.assertEqual(inventory["bundle"]["license"], "MIT")
         self.assertEqual(
-            inventory["bundle"]["skills"], ["adopt-repository-standards"]
+            inventory["bundle"]["skills"],
+            ["adopt-repository-standards", "create-repository"],
         )
         license_text = (
             repository / ".agents/licenses/repository-lifecycle-skills.txt"
