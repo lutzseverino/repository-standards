@@ -169,6 +169,24 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 arguments = sys.argv[1:]
                 if arguments[:2] == ["auth", "status"]:
                     raise SystemExit(0)
+                if arguments[:2] == ["api", "user"]:
+                    print(json.dumps({"login": "owner"}))
+                    raise SystemExit(0)
+                if arguments[:2] == ["api", "graphql"]:
+                    requested_owner = next(
+                        value.split("=", 1)[1]
+                        for value in arguments
+                        if value.startswith("login=")
+                    )
+                    organization = None
+                    if requested_owner == os.environ.get("FAKE_ORGANIZATION"):
+                        organization = {
+                            "viewerCanCreateRepositories": bool(
+                                os.environ.get("FAKE_ORGANIZATION_CAN_CREATE")
+                            )
+                        }
+                    print(json.dumps({"data": {"organization": organization}}))
+                    raise SystemExit(0)
                 if arguments[:2] == ["api", "repos/owner/example"]:
                     if state["created"] and os.environ.get("FAKE_OBSERVATION_FAILURE"):
                         print("network unavailable", file=sys.stderr)
@@ -334,6 +352,35 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertIn("GitHub identity collision", remote.stderr)
         self.assertFalse(self.destination.exists())
         self.assertFalse(self.log.exists())
+
+    def test_invalid_or_ineligible_owner_stops_before_local_mutation(self) -> None:
+        cases = (
+            (
+                "missing-owner",
+                {},
+                "does not identify the authenticated user or an organization",
+            ),
+            (
+                "restricted-organization",
+                {"FAKE_ORGANIZATION": "restricted-organization"},
+                "cannot create repositories for GitHub organization",
+            ),
+        )
+        for owner, environment, diagnostic in cases:
+            with self.subTest(owner=owner):
+                result = self.run_create(
+                    "--owner",
+                    owner,
+                    extra_environment=environment,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
+                self.assertFalse(
+                    json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+                )
 
     def test_lost_creation_response_reobserves_and_reports_the_retained_remote(
         self,

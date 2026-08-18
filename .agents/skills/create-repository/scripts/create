@@ -17,6 +17,8 @@ from pathlib import Path
 
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
 class CreationError(Exception):
     pass
 
@@ -187,13 +189,71 @@ def _observe_github_repository(repository: str) -> RemoteState:
     return RemoteState.UNKNOWN
 
 
-def _preflight_github(repository: str) -> None:
+def _preflight_github(owner: str, repository: str) -> None:
     authenticated = _gh("auth", "status")
     if authenticated.returncode != 0:
         raise CreationError(
             "GitHub authentication failed: "
             + (authenticated.stderr.strip() or authenticated.stdout.strip())
         )
+    viewer = _gh("api", "user")
+    if viewer.returncode != 0:
+        raise CreationError(
+            "cannot inspect the authenticated GitHub user: "
+            + (viewer.stderr.strip() or viewer.stdout.strip())
+        )
+    try:
+        viewer_login = json.loads(viewer.stdout)["login"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError(
+            "authenticated GitHub user response did not contain a login"
+        ) from exc
+    if not isinstance(viewer_login, str) or not viewer_login:
+        raise CreationError(
+            "authenticated GitHub user response did not contain a login"
+        )
+    if viewer_login.casefold() != owner.casefold():
+        organization_result = _gh(
+            "api",
+            "graphql",
+            "-f",
+            (
+                "query=query($login:String!){organization(login:$login)"
+                "{viewerCanCreateRepositories}}"
+            ),
+            "-F",
+            f"login={owner}",
+        )
+        if organization_result.returncode != 0:
+            raise CreationError(
+                f"cannot verify GitHub owner {owner}: "
+                + (
+                    organization_result.stderr.strip()
+                    or organization_result.stdout.strip()
+                )
+            )
+        try:
+            organization = json.loads(organization_result.stdout)["data"][
+                "organization"
+            ]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise CreationError(
+                f"GitHub owner verification returned invalid data for {owner}"
+            ) from exc
+        if organization is None:
+            raise CreationError(
+                f"GitHub owner {owner} does not identify the authenticated user "
+                "or an organization"
+            )
+        if not isinstance(organization, dict):
+            raise CreationError(
+                f"GitHub owner verification returned invalid data for {owner}"
+            )
+        if organization.get("viewerCanCreateRepositories") is not True:
+            raise CreationError(
+                "authenticated user cannot create repositories for GitHub "
+                f"organization {owner}"
+            )
     observation = _observe_github_repository(repository)
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
@@ -363,7 +423,7 @@ def main() -> int:
 
         selected_version = _stable_version(args.version or _latest_release())
         repository_name = f"{args.owner}/{args.name}"
-        _preflight_github(repository_name)
+        _preflight_github(args.owner, repository_name)
         remote_state = RemoteState.ABSENT
 
         with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
