@@ -8,13 +8,8 @@ import sys
 from pathlib import Path
 
 from lib.github_settings import inspect_live_github
-from lib.standards import (
-    StandardsError,
-    collect_required_labels,
-    load_manifest,
-    load_profiles,
-    standards_root,
-)
+from lib.repository_contract import ContractError, resolve_repository_contract
+from lib.standards import StandardsError, standards_root
 
 
 def main() -> int:
@@ -25,16 +20,17 @@ def main() -> int:
     args = parser.parse_args()
     repository = Path(args.repository).expanduser().resolve()
     try:
-        _, manifest = load_manifest(repository, args.manifest)
-        contract = manifest.get("github")
-        if contract is None:
-            raise StandardsError("manifest does not declare a github contract")
-        profiles = load_profiles(standards_root(), manifest["profiles"])
+        repository_contract = resolve_repository_contract(
+            repository,
+            standards_root=standards_root(),
+            manifest=args.manifest,
+        )
+        contract = repository_contract.github
         errors = inspect_live_github(
             contract,
-            required_labels=collect_required_labels(profiles),
+            required_labels=repository_contract.required_labels,
         )
-    except StandardsError as exc:
+    except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -42,7 +38,7 @@ def main() -> int:
         print(
             json.dumps(
                 {
-                    "repository": contract["repository"],
+                    "repository": contract.repository,
                     "clean": not errors,
                     "errors": errors,
                 },
@@ -50,11 +46,11 @@ def main() -> int:
             )
         )
     elif errors:
-        print(f"Live GitHub settings drift for {contract['repository']}:")
+        print(f"Live GitHub settings drift for {contract.repository}:")
         for error in errors:
             print(f"- {error}")
     else:
-        print(f"Live GitHub settings conform for {contract['repository']}.")
+        print(f"Live GitHub settings conform for {contract.repository}.")
     return 1 if errors else 0
 
 

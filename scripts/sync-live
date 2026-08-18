@@ -7,13 +7,8 @@ import sys
 from pathlib import Path
 
 from lib.github_settings import GitHubCliTransport, plan_live_github
-from lib.standards import (
-    StandardsError,
-    collect_required_labels,
-    load_manifest,
-    load_profiles,
-    standards_root,
-)
+from lib.repository_contract import ContractError, resolve_repository_contract
+from lib.standards import StandardsError, standards_root
 
 
 def main() -> int:
@@ -26,21 +21,24 @@ def main() -> int:
     args = parser.parse_args()
     repository = Path(args.repository).expanduser().resolve()
     try:
-        _, manifest = load_manifest(repository, args.manifest)
-        profiles = load_profiles(standards_root(), manifest["profiles"])
-        contract = manifest["github"]
+        repository_contract = resolve_repository_contract(
+            repository,
+            standards_root=standards_root(),
+            manifest=args.manifest,
+        )
+        contract = repository_contract.github
         transport = GitHubCliTransport()
         operations = plan_live_github(
             contract,
             transport,
-            required_labels=collect_required_labels(profiles),
+            required_labels=repository_contract.required_labels,
         )
-    except StandardsError as exc:
+    except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
     if not operations:
-        print(f"Live GitHub contract is current for {contract['repository']}.")
+        print(f"Live GitHub contract is current for {contract.repository}.")
         return 0
     for operation in operations:
         print(operation.description)
@@ -65,7 +63,7 @@ def main() -> int:
         for remaining in operations[index:]:
             print(f"- {remaining.description}", file=sys.stderr)
         return 2
-    print(f"\nApplied {len(operations)} live operation(s) to {contract['repository']}.")
+    print(f"\nApplied {len(operations)} live operation(s) to {contract.repository}.")
     return 0
 
 

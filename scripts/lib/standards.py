@@ -14,6 +14,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from .changelog import ChangelogError, SEMVER, validate_changelog
+from .repository_contract import (
+    ContractError,
+    RepositoryBoundary,
+    RepositoryContract,
+    resolve_repository_contract,
+)
 
 
 SUPPORTED_STANDARDS_VERSION = 5
@@ -68,6 +74,12 @@ class PlannedFile:
 
 
 @dataclass(frozen=True)
+class PlanBuildBlocker:
+    target: str
+    message: str
+
+
+@dataclass(frozen=True)
 class Result:
     target: str
     status: str
@@ -97,17 +109,24 @@ def standards_root() -> Path:
 
 
 def _relative_path(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value or value == ".":
         raise StandardsError(f"{field} must be a non-empty relative path")
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts or "." in path.parts:
         raise StandardsError(f"{field} must stay within the repository: {value!r}")
-    return path.as_posix()
+    normalized = path.as_posix()
+    if value != normalized:
+        raise StandardsError(f"{field} must be a normalized relative path: {value!r}")
+    return normalized
 
 
 def _boundary_path(value: Any, field: str) -> str:
     if value == ".":
         return "."
+    if isinstance(value, str) and value != PurePosixPath(value).as_posix():
+        raise StandardsError(
+            f"{field} must be a normalized concrete directory: {value!r}"
+        )
     normalized = _relative_path(value, field)
     if value != normalized or any(character in normalized for character in "*?["):
         raise StandardsError(f"{field} must be a normalized concrete directory: {value!r}")
@@ -143,7 +162,7 @@ def _read_data(path: Path) -> dict[str, Any]:
     return value
 
 
-def find_manifest(repository: Path, requested: str | None = None) -> Path:
+def _find_manifest(repository: Path, requested: str | None = None) -> Path:
     if requested:
         candidate = Path(requested)
         if not candidate.is_absolute():
@@ -161,8 +180,8 @@ def find_manifest(repository: Path, requested: str | None = None) -> Path:
     return found[0].resolve()
 
 
-def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path, dict[str, Any]]:
-    path = find_manifest(repository, requested)
+def _load_manifest(repository: Path, requested: str | None = None) -> tuple[Path, dict[str, Any]]:
+    path = _find_manifest(repository, requested)
     manifest = _read_data(path)
     allowed = {
         "$schema",
@@ -179,6 +198,8 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     unknown = sorted(set(manifest) - allowed)
     if unknown:
         raise StandardsError(f"unknown manifest fields: {', '.join(unknown)}")
+    if "$schema" in manifest and not isinstance(manifest["$schema"], str):
+        raise StandardsError("$schema must be a string")
 
     if manifest.get("standards-version") != SUPPORTED_STANDARDS_VERSION:
         raise StandardsError(
@@ -203,7 +224,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     if not isinstance(boundaries, list) or not boundaries:
         raise StandardsError("boundaries must be a non-empty list")
     normalized_boundaries: list[dict[str, str]] = []
-    boundary_paths: set[str] = set()
+    boundary_declarations: set[tuple[str, str, str]] = set()
     for index, boundary in enumerate(boundaries):
         field = f"boundaries[{index}]"
         if not isinstance(boundary, dict):
@@ -222,9 +243,10 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         title = boundary.get("title")
         if not isinstance(title, str) or not title.strip():
             raise StandardsError(f"{field}.title must be a non-empty string")
-        if path_value in boundary_paths:
-            raise StandardsError(f"boundary paths must be unique: {path_value!r}")
-        boundary_paths.add(path_value)
+        declaration = (path_value, boundary_type, title)
+        if declaration in boundary_declarations:
+            raise StandardsError("boundaries must not contain duplicate declarations")
+        boundary_declarations.add(declaration)
         normalized_boundaries.append(
             {"path": path_value, "type": boundary_type, "title": title}
         )
@@ -238,12 +260,6 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         raise StandardsError(
             "boundaries must contain exactly one repository boundary at '.'"
         )
-    root_boundary = next(
-        (boundary for boundary in normalized_boundaries if boundary["path"] == "."),
-        None,
-    )
-    if root_boundary is None or root_boundary["type"] != "repository":
-        raise StandardsError("the boundary at '.' must have type repository")
     if "common" not in profiles:
         raise StandardsError(
             "standards-version 5 workflow requires the common profile"
@@ -255,7 +271,7 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
     if not isinstance(dependency_updates, list) or not dependency_updates:
         raise StandardsError("dependency-updates must be a non-empty list")
     normalized_updates: list[dict[str, str]] = []
-    update_keys: set[tuple[str, str]] = set()
+    update_declarations: set[tuple[str, str, str]] = set()
     for index, update in enumerate(dependency_updates):
         field = f"dependency-updates[{index}]"
         if not isinstance(update, dict):
@@ -284,12 +300,12 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         schedule = update.get("schedule")
         if schedule not in DEPENDENCY_INTERVALS:
             raise StandardsError(f"{field}.schedule must be daily, weekly, or monthly")
-        key = (ecosystem, directory)
-        if key in update_keys:
+        declaration = (ecosystem, directory, schedule)
+        if declaration in update_declarations:
             raise StandardsError(
-                f"dependency update ecosystem and directory pairs must be unique: {key!r}"
+                "dependency-updates must not contain duplicate declarations"
             )
-        update_keys.add(key)
+        update_declarations.add(declaration)
         normalized_updates.append(
             {"ecosystem": ecosystem, "directory": directory, "schedule": schedule}
         )
@@ -409,6 +425,10 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
             isinstance(item, str) for item in raw_sources
         ):
             raise StandardsError(f"local-fragments[{target!r}] must be a list")
+        if len(raw_sources) != len(set(raw_sources)):
+            raise StandardsError(
+                f"local-fragments[{target!r}] must not contain duplicates"
+            )
         normalized_fragments[target] = [
             _relative_path(item, f"local-fragments[{target!r}]") for item in raw_sources
         ]
@@ -418,6 +438,8 @@ def load_manifest(repository: Path, requested: str | None = None) -> tuple[Path,
         isinstance(item, str) and item for item in repository_owned
     ):
         raise StandardsError("repository-owned must be a list of path patterns")
+    if len(repository_owned) != len(set(repository_owned)):
+        raise StandardsError("repository-owned must not contain duplicates")
     for pattern in repository_owned:
         _relative_path(pattern, "repository-owned pattern")
 
@@ -450,13 +472,19 @@ def _load_profile(
     if data.get("name") != name:
         raise StandardsError(f"{path}: name must be {name!r}")
     unknown = sorted(
-        set(data) - {"name", "description", "extends", "files", "github"}
+        set(data)
+        - {"name", "description", "extends", "applicability", "files", "github"}
     )
     if unknown:
         raise StandardsError(f"{path}: unknown fields: {', '.join(unknown)}")
     parents = data.get("extends", [])
     if not isinstance(parents, list) or not all(isinstance(item, str) for item in parents):
         raise StandardsError(f"{path}: extends must be a list")
+    if len(parents) != len(set(parents)):
+        raise StandardsError(f"{path}: extends must not contain duplicates")
+    applicability = data.get("applicability")
+    if applicability is not None and not isinstance(applicability, dict):
+        raise StandardsError(f"{path}: applicability must be an object")
     github = data.get("github", {})
     if not isinstance(github, dict) or set(github) - {"required-labels"}:
         raise StandardsError(
@@ -480,7 +508,7 @@ def _load_profile(
     ordered.append((name, data, profile_dir))
 
 
-def load_profiles(root: Path, selected: Iterable[str]) -> list[tuple[str, dict[str, Any], Path]]:
+def _load_profiles(root: Path, selected: Iterable[str]) -> list[tuple[str, dict[str, Any], Path]]:
     ordered: list[tuple[str, dict[str, Any], Path]] = []
     loaded: set[str] = set()
     for name in selected:
@@ -488,7 +516,7 @@ def load_profiles(root: Path, selected: Iterable[str]) -> list[tuple[str, dict[s
     return ordered
 
 
-def collect_required_labels(
+def _collect_required_labels(
     profiles: Iterable[tuple[str, dict[str, Any], Path]],
 ) -> tuple[str, ...]:
     labels = {
@@ -499,7 +527,7 @@ def collect_required_labels(
     return tuple(sorted(labels))
 
 
-def collect_sources(
+def _collect_sources(
     profiles: list[tuple[str, dict[str, Any], Path]]
 ) -> dict[str, list[Source]]:
     targets: dict[str, list[Source]] = {}
@@ -666,7 +694,13 @@ def _render_dependabot(updates: list[dict[str, str]]) -> bytes:
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[PlannedFile]:
+def _build_plan_with_blockers(
+    root: Path,
+    repository: Path,
+    manifest: dict[str, Any],
+    *,
+    resolved_profiles: list[tuple[str, dict[str, Any], Path]] | None = None,
+) -> tuple[list[PlannedFile], list[PlanBuildBlocker]]:
     root = root.resolve()
     repository = repository.resolve()
     version_path = root / "VERSION"
@@ -680,8 +714,12 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
             f"but this checkout is {source_release}; check out tag "
             f"v{manifest['standards-release']} or update the manifest deliberately"
         )
-    profiles = load_profiles(root, manifest["profiles"])
-    sources_by_target = collect_sources(profiles)
+    profiles = (
+        resolved_profiles
+        if resolved_profiles is not None
+        else _load_profiles(root, manifest["profiles"])
+    )
+    sources_by_target = _collect_sources(profiles)
     local_fragments: dict[str, list[str]] = manifest["local-fragments"]
 
     compose_targets = {
@@ -690,65 +728,84 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
         if sources[0].mode == "compose"
     }
     unknown_fragment_targets = sorted(set(local_fragments) - compose_targets)
-    if unknown_fragment_targets:
-        raise StandardsError(
-            "local fragments require a managed compose target: "
-            + ", ".join(unknown_fragment_targets)
+    blockers = [
+        PlanBuildBlocker(
+            target,
+            "local fragments require a managed compose target",
         )
+        for target in unknown_fragment_targets
+    ]
 
     planned: list[PlannedFile] = []
     for target in sorted(sources_by_target):
         owned_pattern = _matches_owned(target, manifest["repository-owned"])
         if owned_pattern:
-            raise StandardsError(
-                f"managed target {target!r} conflicts with repository-owned pattern "
-                f"{owned_pattern!r}"
+            blockers.append(
+                PlanBuildBlocker(
+                    target,
+                    f"managed target conflicts with repository-owned pattern "
+                    f"{owned_pattern!r}",
+                )
             )
         sources = sources_by_target[target]
         origins = [
             f"{source.profile}:{source.path.name if source.path else 'absence'}"
             for source in sources
         ]
-        if sources[0].mode == "absent":
-            content = b""
-        elif sources[0].mode == "exact":
-            assert sources[0].path is not None
-            content = sources[0].path.read_bytes()
-        elif sources[0].mode == "template":
-            content = _render_template(sources[0], manifest["variables"])
-        else:
-            sources = sorted(sources, key=lambda item: (item.order, item.profile_index))
-            assert all(source.path is not None for source in sources)
-            parts = [source.path.read_bytes() for source in sources]
-            origins = [
-                f"{source.profile}:{source.path.name}"
-                for source in sources
-                if source.path is not None
-            ]
-            for local_value in local_fragments.get(target, []):
-                local_path = (repository / local_value).resolve()
-                try:
-                    local_path.relative_to(repository)
-                except ValueError as exc:
-                    raise StandardsError(f"local fragment escapes repository: {local_value}") from exc
-                if not local_path.is_file():
-                    raise StandardsError(f"local fragment not found: {local_value}")
-                parts.append(local_path.read_bytes())
-                origins.append(f"repository:{local_value}")
-            content = _join_fragments(parts, target)
+        content = b""
+        try:
+            if sources[0].mode == "absent":
+                pass
+            elif sources[0].mode == "exact":
+                assert sources[0].path is not None
+                content = sources[0].path.read_bytes()
+            elif sources[0].mode == "template":
+                content = _render_template(sources[0], manifest["variables"])
+            else:
+                sources = sorted(
+                    sources, key=lambda item: (item.order, item.profile_index)
+                )
+                assert all(source.path is not None for source in sources)
+                parts = [source.path.read_bytes() for source in sources]
+                origins = [
+                    f"{source.profile}:{source.path.name}"
+                    for source in sources
+                    if source.path is not None
+                ]
+                for local_value in local_fragments.get(target, []):
+                    local_path = (repository / local_value).resolve()
+                    try:
+                        local_path.relative_to(repository)
+                    except ValueError as exc:
+                        raise StandardsError(
+                            f"local fragment escapes repository: {local_value}"
+                        ) from exc
+                    if not local_path.is_file():
+                        raise StandardsError(f"local fragment not found: {local_value}")
+                    parts.append(local_path.read_bytes())
+                    origins.append(f"repository:{local_value}")
+                content = _join_fragments(parts, target)
+        except (OSError, StandardsError) as exc:
+            blockers.append(PlanBuildBlocker(target, str(exc)))
         planned.append(
             PlannedFile(target, sources[0].mode, content, tuple(origins))
         )
     dependabot_target = ".github/dependabot.yml"
     if dependabot_target in sources_by_target:
-        raise StandardsError(
-            "profiles must not manage .github/dependabot.yml; it is rendered from dependency-updates"
+        blockers.append(
+            PlanBuildBlocker(
+                dependabot_target,
+                "profiles must not manage this generated dependency-update target",
+            )
         )
     owned_pattern = _matches_owned(dependabot_target, manifest["repository-owned"])
     if owned_pattern:
-        raise StandardsError(
-            f"managed target {dependabot_target!r} conflicts with repository-owned pattern "
-            f"{owned_pattern!r}"
+        blockers.append(
+            PlanBuildBlocker(
+                dependabot_target,
+                f"managed target conflicts with repository-owned pattern "
+                f"{owned_pattern!r}",
+            )
         )
     planned.append(
         PlannedFile(
@@ -758,7 +815,10 @@ def build_plan(root: Path, repository: Path, manifest: dict[str, Any]) -> list[P
             ("manifest:dependency-updates",),
         )
     )
-    return sorted(planned, key=lambda item: item.target)
+    return (
+        sorted(planned, key=lambda item: item.target),
+        sorted(blockers, key=lambda item: (item.target, item.message)),
+    )
 
 
 def _validate_managed_target(repository: Path, target: Path, relative: str) -> None:
@@ -973,14 +1033,19 @@ def _check_empty_documentation_categories(
 
 
 def inspect_boundaries(
-    repository: Path, boundaries: Iterable[dict[str, str]]
+    repository: Path, boundaries: Iterable[dict[str, str] | RepositoryBoundary]
 ) -> list[BoundaryResult]:
     repository = repository.resolve()
     results: list[BoundaryResult] = []
     for boundary in boundaries:
-        boundary_path = boundary["path"]
-        boundary_type = boundary["type"]
-        title = boundary["title"]
+        if isinstance(boundary, RepositoryBoundary):
+            boundary_path = boundary.path
+            boundary_type = boundary.boundary_type
+            title = boundary.title
+        else:
+            boundary_path = boundary["path"]
+            boundary_type = boundary["type"]
+            title = boundary["title"]
         messages: list[str] = []
 
         readme_path = _boundary_target(boundary_path, "README.md")
@@ -1101,13 +1166,16 @@ def write(repository: Path, results: Iterable[Result]) -> int:
     return changed
 
 
-def _resolve(repository_value: str, manifest_value: str | None) -> tuple[Path, Path, dict[str, Any], list[Result]]:
+def _resolve(
+    repository_value: str, manifest_value: str | None
+) -> tuple[RepositoryContract, list[Result]]:
     repository = Path(repository_value).expanduser().resolve()
-    if not repository.is_dir():
-        raise StandardsError(f"repository directory not found: {repository}")
-    _, manifest = load_manifest(repository, manifest_value)
-    plan = build_plan(standards_root(), repository, manifest)
-    return repository, standards_root(), manifest, inspect(repository, plan)
+    contract = resolve_repository_contract(
+        repository,
+        standards_root=standards_root(),
+        manifest=manifest_value,
+    )
+    return contract, inspect(repository, contract.managed_files)
 
 
 def audit_main(argv: list[str] | None = None) -> int:
@@ -1117,18 +1185,19 @@ def audit_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args(argv)
     try:
-        repository, _, manifest, results = _resolve(args.repository, args.manifest)
-    except StandardsError as exc:
+        contract, results = _resolve(args.repository, args.manifest)
+    except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    repository = contract.repository
     drift = [result for result in results if result.status != "ok"]
-    boundary_results = inspect_boundaries(repository, manifest["boundaries"])
+    boundary_results = inspect_boundaries(repository, contract.boundaries)
     invalid_boundaries = [
         result for result in boundary_results if result.status != "ok"
     ]
     document_results = inspect_repository_owned_documents(
-        repository, manifest["repository-owned"]
+        repository, contract.repository_owned
     )
     invalid_documents = [
         result for result in document_results if result.status != "ok"
@@ -1138,9 +1207,9 @@ def audit_main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "repository": str(repository),
-                    "standards-version": manifest["standards-version"],
-                    "standards-release": manifest["standards-release"],
-                    "profiles": manifest["profiles"],
+                    "standards-version": contract.protocol,
+                    "standards-release": contract.release,
+                    "profiles": list(contract.selected_profiles),
                     "clean": not drift and not invalid_boundaries and not invalid_documents,
                     "files": [
                         {
@@ -1202,43 +1271,74 @@ def audit_main(argv: list[str] | None = None) -> int:
 
 
 def sync_main(argv: list[str] | None = None) -> int:
+    from .offline_sync import (
+        apply_synchronization_plan,
+        plan_synchronization,
+        render_synchronization_preview,
+    )
+
     parser = argparse.ArgumentParser(description="Preview or write managed repository standards")
     parser.add_argument("repository", help="repository to synchronize")
     parser.add_argument("--manifest", help="manifest path, relative to repository")
     parser.add_argument("--write", action="store_true", help="write managed targets")
     args = parser.parse_args(argv)
     try:
-        repository, _, _, results = _resolve(args.repository, args.manifest)
-        drift = [result for result in results if result.status != "ok"]
+        contract = resolve_repository_contract(
+            Path(args.repository),
+            standards_root=standards_root(),
+            manifest=args.manifest,
+            retain_plan_blockers=True,
+        )
+        repository = contract.repository
+        plan = plan_synchronization(contract)
+        preview = render_synchronization_preview(plan)
+        changes = plan.changes
         if args.write:
-            changed = write(repository, drift)
-            print(f"Synchronized {changed} managed file(s) in {repository}")
+            if plan.blockers:
+                print(preview, end="")
+                print(
+                    f"\nPreflight blocked: {len(plan.blockers)} managed path(s) "
+                    "require attention. No target was mutated."
+                )
+                return 2
+            report = apply_synchronization_plan(plan)
+            if not report.succeeded:
+                assert report.failed is not None
+                print(
+                    f"error: application failed at {report.failed.target}: "
+                    f"{report.failed.message}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Completed: " + (", ".join(report.completed) or "none"),
+                    file=sys.stderr,
+                )
+                print(f"Failed: {report.failed.target}", file=sys.stderr)
+                print(
+                    "Remaining: " + (", ".join(report.remaining) or "none"),
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"Synchronized {len(report.completed)} managed file(s) in {repository}")
             return 0
-        if not drift:
+        if not changes and not plan.blockers:
             print(f"All managed files are current in {repository}")
             return 0
-        for result in drift:
-            print(_preview_text(result), end="")
-        blockers = [
-            result
-            for result in drift
-            if result.mode == "absent" and result.status == "not-file"
-        ]
-        if blockers:
-            changes = len(drift) - len(blockers)
+        print(preview, end="")
+        if plan.blockers:
             if changes:
                 print(
-                    f"\nPreview: {changes} managed file(s) would change; "
-                    f"{len(blockers)} blocked path(s) require attention."
+                    f"\nPreview: {len(changes)} managed file(s) would change; "
+                    f"{len(plan.blockers)} blocked path(s) require attention."
                 )
             else:
                 print(
-                    f"\nPreview blocked: {len(blockers)} managed path(s) "
+                    f"\nPreview blocked: {len(plan.blockers)} managed path(s) "
                     "require attention."
                 )
             return 2
-        print(f"\nPreview: {len(drift)} managed file(s) would change. Re-run with --write.")
+        print(f"\nPreview: {len(changes)} managed file(s) would change. Re-run with --write.")
         return 1
-    except StandardsError as exc:
+    except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -17,20 +17,26 @@ from lib.standards import (  # noqa: E402
     StandardsError,
     _render_template,
     audit_main,
-    build_plan,
-    collect_required_labels,
-    collect_sources,
+    _collect_sources,
     inspect,
     inspect_boundaries,
-    load_manifest,
-    load_profiles,
     standards_root,
     sync_main,
     write,
 )
+from lib.repository_contract import (  # noqa: E402
+    ContractError,
+    RepositoryContract,
+    resolve_repository_contract,
+)
 
 
 class StandardsTests(unittest.TestCase):
+    def resolve_contract(self, repository: Path) -> RepositoryContract:
+        return resolve_repository_contract(
+            repository, standards_root=standards_root()
+        )
+
     def create_repository(self, manifest: dict) -> tuple[tempfile.TemporaryDirectory[str], Path]:
         temporary = tempfile.TemporaryDirectory()
         repository = Path(temporary.name)
@@ -94,8 +100,7 @@ class StandardsTests(unittest.TestCase):
     def test_sync_then_audit_is_clean(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        _, manifest = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, manifest)
+        plan = self.resolve_contract(repository).managed_files
         initial = inspect(repository, plan)
         self.assertTrue(initial)
         self.assertTrue(
@@ -329,8 +334,7 @@ responses.
         local.parent.mkdir()
         local.write_text("# Product output\nproduct-output/\n", encoding="utf-8")
 
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         gitignore = next(item for item in plan if item.target == ".gitignore")
         rendered = gitignore.content.decode("utf-8")
         self.assertIn("node_modules/", rendered)
@@ -342,9 +346,8 @@ responses.
         manifest["repository-owned"].append(".gitignore")
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        with self.assertRaisesRegex(StandardsError, "conflicts with repository-owned"):
-            build_plan(standards_root(), repository, loaded)
+        with self.assertRaisesRegex(ContractError, "conflicts with repository-owned"):
+            self.resolve_contract(repository)
 
     def test_managed_absence_is_audited_and_removed(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
@@ -353,8 +356,7 @@ responses.
         retired.parent.mkdir(parents=True)
         retired.write_text("retired policy\n", encoding="utf-8")
 
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         initial = inspect(repository, plan)
         result = next(
             item
@@ -377,8 +379,7 @@ responses.
     def test_sync_preview_names_every_managed_deletion(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         write(repository, inspect(repository, plan))
         retired = repository / ".github/pull_request_template.md"
 
@@ -415,8 +416,7 @@ responses.
     def test_sync_preview_reports_blocked_managed_absence(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         write(repository, inspect(repository, plan))
         retired_file = repository / ".github/pull_request_template.md"
         blocked_path = repository / ".github/workflows/pr-policy.yml"
@@ -463,17 +463,15 @@ responses.
         manifest["standards-release"] = "9.9.9"
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        with self.assertRaisesRegex(StandardsError, "check out tag v9.9.9"):
-            build_plan(standards_root(), repository, loaded)
+        with self.assertRaisesRegex(ContractError, "check out tag v9.9.9"):
+            self.resolve_contract(repository)
 
     def test_profile_inheritance_is_resolved_once(self) -> None:
         manifest = self.base_manifest()
         manifest["profiles"] = ["common", "documentation", "node-protocol"]
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         gitignore = next(item for item in plan if item.target == ".gitignore")
         rendered = gitignore.content.decode("utf-8")
         self.assertEqual(rendered.count("node_modules/"), 1)
@@ -504,13 +502,14 @@ responses.
         ]
 
         with self.assertRaisesRegex(StandardsError, "tree source must not be a symlink"):
-            collect_sources(profiles)
+            _collect_sources(profiles)
 
     def test_common_profile_declares_the_canonical_required_labels(self) -> None:
-        profiles = load_profiles(standards_root(), ["common"])
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
 
         self.assertEqual(
-            collect_required_labels(profiles),
+            self.resolve_contract(repository).required_labels,
             (
                 "bug",
                 "enhancement",
@@ -525,8 +524,7 @@ responses.
     def test_managed_target_symlink_is_rejected(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         outside = repository.parent / f"{repository.name}-outside"
         outside.write_text("do not change", encoding="utf-8")
         self.addCleanup(outside.unlink)
@@ -544,12 +542,12 @@ responses.
             linked_skills, target_is_directory=True
         )
 
-        errors = StringIO()
-        with redirect_stderr(errors):
+        output = StringIO()
+        with redirect_stdout(output):
             result = sync_main([str(repository)])
 
         self.assertEqual(result, 2)
-        self.assertIn("managed target ancestor must not be a symlink", errors.getvalue())
+        self.assertIn("managed target ancestor must not be a symlink", output.getvalue())
 
     def test_documentation_profile_manages_exactly_seven_templates(self) -> None:
         manifest = self.base_manifest()
@@ -557,8 +555,7 @@ responses.
         manifest["repository-owned"] = ["docs/README.md", "docs/tutorials/**"]
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         documentation_targets = [
             item.target
             for item in plan
@@ -575,8 +572,7 @@ responses.
     def test_dependabot_is_rendered_from_structured_manifest_updates(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        _, manifest = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, manifest)
+        plan = self.resolve_contract(repository).managed_files
         dependabot = next(
             item for item in plan if item.target == ".github/dependabot.yml"
         )
@@ -591,9 +587,9 @@ responses.
         temporary, repository = self.create_repository(missing)
         try:
             with self.assertRaisesRegex(
-                StandardsError, "dependency-updates must be a non-empty list"
+                ContractError, "dependency-updates must be a non-empty list"
             ):
-                load_manifest(repository)
+                self.resolve_contract(repository)
         finally:
             temporary.cleanup()
 
@@ -601,8 +597,8 @@ responses.
         unsafe["dependency-updates"][0]["directory"] = "/../outside"
         temporary, repository = self.create_repository(unsafe)
         try:
-            with self.assertRaisesRegex(StandardsError, "must not contain dot segments"):
-                load_manifest(repository)
+            with self.assertRaisesRegex(ContractError, "must not contain dot segments"):
+                self.resolve_contract(repository)
         finally:
             temporary.cleanup()
 
@@ -621,10 +617,10 @@ responses.
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
         with self.assertRaisesRegex(
-            StandardsError,
+            ContractError,
             "github must define repository, default-branch, settings, and ruleset",
         ):
-            load_manifest(repository)
+            self.resolve_contract(repository)
 
     def test_manifest_requires_common_profile_and_github_contract(self) -> None:
         missing_common = self.base_manifest()
@@ -632,9 +628,9 @@ responses.
         temporary, repository = self.create_repository(missing_common)
         try:
             with self.assertRaisesRegex(
-                StandardsError, "requires the common profile"
+                ContractError, "requires the common profile"
             ):
-                load_manifest(repository)
+                self.resolve_contract(repository)
         finally:
             temporary.cleanup()
 
@@ -643,9 +639,9 @@ responses.
         temporary, repository = self.create_repository(missing_github)
         try:
             with self.assertRaisesRegex(
-                StandardsError, "github contract is required"
+                ContractError, "github contract is required"
             ):
-                load_manifest(repository)
+                self.resolve_contract(repository)
         finally:
             temporary.cleanup()
 
@@ -672,12 +668,16 @@ responses.
             ("wrong repository path", wrong_repository, "repository boundary at '.'")
         )
 
-        duplicate_paths = self.base_manifest()
-        duplicate_paths["boundaries"].append(
-            {"path": ".", "type": "collection", "title": "Duplicate"}
+        duplicate_boundaries = self.base_manifest()
+        duplicate_boundaries["boundaries"].append(
+            {"path": ".", "type": "repository", "title": "Test Repository"}
         )
         invalid_manifests.append(
-            ("duplicate path", duplicate_paths, "boundary paths must be unique")
+            (
+                "duplicate boundary",
+                duplicate_boundaries,
+                "duplicate declarations",
+            )
         )
 
         non_normalized = self.base_manifest()
@@ -692,8 +692,8 @@ responses.
             with self.subTest(label=label):
                 temporary, repository = self.create_repository(manifest)
                 try:
-                    with self.assertRaisesRegex(StandardsError, message):
-                        load_manifest(repository)
+                    with self.assertRaisesRegex(ContractError, message):
+                        self.resolve_contract(repository)
                 finally:
                     temporary.cleanup()
 
@@ -730,13 +730,12 @@ responses.
             "# Documentation\n\nService docs.\n",
         )
 
-        _, loaded = load_manifest(repository)
-        results = inspect_boundaries(repository, loaded["boundaries"])
+        contract = self.resolve_contract(repository)
+        results = inspect_boundaries(repository, contract.boundaries)
         self.assertEqual([result.status for result in results], ["ok", "ok", "ok"])
-        plan = build_plan(standards_root(), repository, loaded)
         documentation_targets = [
             item.target
-            for item in plan
+            for item in contract.managed_files
             if "/_templates/" in item.target and item.mode != "absent"
         ]
         self.assertEqual(len(documentation_targets), 7)
@@ -782,8 +781,9 @@ responses.
         )
         (repository / "services/example/docs/_templates").mkdir(parents=True)
 
-        _, loaded = load_manifest(repository)
-        results = inspect_boundaries(repository, loaded["boundaries"])
+        results = inspect_boundaries(
+            repository, self.resolve_contract(repository).boundaries
+        )
         messages = "\n".join(
             message for result in results for message in result.messages
         )
@@ -809,8 +809,9 @@ responses.
         self.write_file(repository, "docs/README.md", "# Documentation\n")
         self.write_file(repository, "docs/tutorials/README.md", "# Tutorials\n")
 
-        _, loaded = load_manifest(repository)
-        result = inspect_boundaries(repository, loaded["boundaries"])[0]
+        result = inspect_boundaries(
+            repository, self.resolve_contract(repository).boundaries
+        )[0]
         self.assertEqual(result.status, "invalid")
         self.assertIn(
             "docs/tutorials has no authored content; remove it until needed",
@@ -829,8 +830,9 @@ responses.
         self.write_file(repository, "docs/README.md", "# Documentation\n")
         self.write_file(repository, "docs/adr/README.md", "# ADRs\n")
 
-        _, loaded = load_manifest(repository)
-        result = inspect_boundaries(repository, loaded["boundaries"])[0]
+        result = inspect_boundaries(
+            repository, self.resolve_contract(repository).boundaries
+        )[0]
 
         self.assertEqual(result.status, "invalid")
         self.assertIn(
@@ -855,8 +857,9 @@ responses.
             "# Endpoints\n",
         )
 
-        _, loaded = load_manifest(repository)
-        result = inspect_boundaries(repository, loaded["boundaries"])[0]
+        result = inspect_boundaries(
+            repository, self.resolve_contract(repository).boundaries
+        )[0]
         self.assertEqual(result.status, "ok")
 
     def test_audit_json_includes_boundaries_and_uses_them_for_exit_status(self) -> None:
@@ -869,8 +872,7 @@ responses.
             "See [documentation](docs/README.md).\n",
         )
         self.write_file(repository, "docs/README.md", "# Documentation\n")
-        _, manifest = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, manifest)
+        plan = self.resolve_contract(repository).managed_files
         write(repository, inspect(repository, plan))
 
         output = StringIO()
@@ -903,8 +905,7 @@ responses.
         )
         self.write_file(repository, "docs/README.md", "# Documentation\n")
         self.write_file(repository, "CHANGELOG.md", "# Changes\n")
-        _, loaded = load_manifest(repository)
-        plan = build_plan(standards_root(), repository, loaded)
+        plan = self.resolve_contract(repository).managed_files
         write(repository, inspect(repository, plan))
 
         output = StringIO()
