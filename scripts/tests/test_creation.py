@@ -458,6 +458,32 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 self.assertFalse(self.destination.exists())
                 self.assertFalse(self.log.exists())
 
+    def test_purpose_line_separators_stop_before_local_mutation(self) -> None:
+        separators = (
+            "\n",
+            "\r",
+            "\v",
+            "\f",
+            "\x1c",
+            "\x1d",
+            "\x1e",
+            "\x85",
+            "\u2028",
+            "\u2029",
+        )
+        for separator in separators:
+            with self.subTest(separator=ascii(separator)):
+                result = self.run_create(
+                    "--purpose", f"first{separator}second"
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(
+                    "purpose must be one explicit non-empty line", result.stderr
+                )
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
+
     def test_internal_visibility_requires_an_eligible_enterprise_organization(
         self,
     ) -> None:
@@ -516,6 +542,29 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 )
                 self.assertFalse(self.destination.exists())
                 self.assertFalse(self.log.exists())
+
+    def test_inaccessible_organization_repository_is_not_treated_as_absent(
+        self,
+    ) -> None:
+        result = self.run_create(
+            "--owner",
+            "member-organization",
+            extra_environment={
+                "FAKE_ORGANIZATION": "member-organization",
+                "FAKE_ORGANIZATION_CAN_CREATE": "1",
+                "FAKE_ORGANIZATION_CAN_CREATE_PRIVATE": "1",
+                "FAKE_ORGANIZATION_PLAN": "team",
+            },
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cannot prove GitHub identity", result.stderr)
+        self.assertIn("administrator visibility is required", result.stderr)
+        self.assertFalse(self.destination.exists())
+        self.assertFalse(self.log.exists())
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
 
     def test_ruleset_default_follows_proven_target_support(self) -> None:
         cases = (
@@ -585,6 +634,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             "internal",
             extra_environment={
                 "FAKE_ORGANIZATION": "enterprise-organization",
+                "FAKE_ORGANIZATION_ADMIN": "1",
                 "FAKE_ORGANIZATION_CAN_CREATE": "1",
                 "FAKE_ORGANIZATION_CAN_CREATE_INTERNAL": "1",
                 "FAKE_ORGANIZATION_PLAN": "business_plus",

@@ -17,6 +17,7 @@ from pathlib import Path
 
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
+LINE_SEPARATOR = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
 
 
 class CreationError(Exception):
@@ -184,13 +185,16 @@ def _gh(*arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _observe_github_repository(repository: str) -> RemoteState:
+def _observe_github_repository(
+    repository: str, *, absence_is_conclusive: bool = True
+) -> RemoteState:
     observed = _gh("api", f"repos/{repository}")
     if observed.returncode == 0:
         return RemoteState.CREATED
     message = observed.stderr.strip() or observed.stdout.strip()
     if "404" in message or "not found" in message.lower():
-        return RemoteState.ABSENT
+        if absence_is_conclusive:
+            return RemoteState.ABSENT
     return RemoteState.UNKNOWN
 
 
@@ -221,6 +225,7 @@ def _preflight_github(
             "authenticated GitHub user response did not contain a login"
         )
     if viewer_login.casefold() == owner.casefold():
+        absence_is_conclusive = True
         if visibility == "internal":
             raise CreationError(
                 "internal visibility requires an enterprise-owned GitHub organization"
@@ -286,6 +291,7 @@ def _preflight_github(
                 "authenticated user cannot create repositories for GitHub "
                 f"organization {owner}"
             )
+        absence_is_conclusive = organization.get("viewerCanAdminister") is True
         details_result = _gh("api", f"orgs/{owner}")
         if details_result.returncode != 0:
             raise CreationError(
@@ -340,11 +346,16 @@ def _preflight_github(
                     f"unknown GitHub organization plan {plan_name!r}; cannot prove "
                     f"{visibility} repository ruleset support for {owner}"
                 )
-    observation = _observe_github_repository(repository)
+    observation = _observe_github_repository(
+        repository, absence_is_conclusive=absence_is_conclusive
+    )
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
     if observation is RemoteState.UNKNOWN:
-        raise CreationError(f"cannot verify GitHub identity {repository}")
+        raise CreationError(
+            f"cannot prove GitHub identity {repository} is absent; "
+            "organization administrator visibility is required"
+        )
     return ruleset_support
 
 
@@ -496,7 +507,7 @@ def main() -> int:
             raise CreationError("repository name and owner must be explicit GitHub identities")
         if len(args.name) > 100:
             raise CreationError("repository name must not exceed 100 characters")
-        if not args.purpose.strip() or "\n" in args.purpose:
+        if not args.purpose.strip() or LINE_SEPARATOR.search(args.purpose):
             raise CreationError("purpose must be one explicit non-empty line")
         if len(args.purpose) > 350:
             raise CreationError("purpose must not exceed 350 characters")
