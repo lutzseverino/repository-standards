@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+DEFAULT_SQUASH_MERGE_COMMIT_TITLE = "PR_TITLE"
+DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE = "PR_BODY"
+DEFAULT_GITHUB_FEATURES = {
+    "issues": True,
+    "projects": False,
+    "wiki": False,
+}
 
 
 class ContractError(Exception):
@@ -52,6 +61,15 @@ class GitHubSettings:
     allow_squash_merge: bool
     allow_merge_commit: bool
     allow_rebase_merge: bool
+    squash_merge_commit_title: str = DEFAULT_SQUASH_MERGE_COMMIT_TITLE
+    squash_merge_commit_message: str = DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE
+
+
+@dataclass(frozen=True)
+class GitHubFeatures:
+    issues: bool = DEFAULT_GITHUB_FEATURES["issues"]
+    projects: bool = DEFAULT_GITHUB_FEATURES["projects"]
+    wiki: bool = DEFAULT_GITHUB_FEATURES["wiki"]
 
 
 @dataclass(frozen=True)
@@ -60,6 +78,7 @@ class GitHubContract:
     default_branch: str
     settings: GitHubSettings
     ruleset: tuple[tuple[str, Any], ...] | None
+    features: GitHubFeatures = field(default_factory=GitHubFeatures)
 
     def as_mapping(self) -> dict[str, Any]:
         """Return the normalized shape expected by GitHub reconciliation internals."""
@@ -72,6 +91,17 @@ class GitHubContract:
                 "allow-squash-merge": self.settings.allow_squash_merge,
                 "allow-merge-commit": self.settings.allow_merge_commit,
                 "allow-rebase-merge": self.settings.allow_rebase_merge,
+                "squash-merge-commit-title": (
+                    self.settings.squash_merge_commit_title
+                ),
+                "squash-merge-commit-message": (
+                    self.settings.squash_merge_commit_message
+                ),
+            },
+            "features": {
+                "issues": self.features.issues,
+                "projects": self.features.projects,
+                "wiki": self.features.wiki,
             },
             "ruleset": _thaw_value(self.ruleset),
         }
@@ -176,6 +206,9 @@ def resolve_repository_contract(
     )
     github = raw_manifest["github"]
     github_settings = github["settings"]
+    github_features = github.get(
+        "features", DEFAULT_GITHUB_FEATURES
+    )
     return RepositoryContract(
         repository=repository,
         manifest_path=manifest_path,
@@ -231,8 +264,21 @@ def resolve_repository_contract(
                 allow_squash_merge=github_settings["allow-squash-merge"],
                 allow_merge_commit=github_settings["allow-merge-commit"],
                 allow_rebase_merge=github_settings["allow-rebase-merge"],
+                squash_merge_commit_title=github_settings.get(
+                    "squash-merge-commit-title",
+                    DEFAULT_SQUASH_MERGE_COMMIT_TITLE,
+                ),
+                squash_merge_commit_message=github_settings.get(
+                    "squash-merge-commit-message",
+                    DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE,
+                ),
             ),
             ruleset=_freeze_mapping(github["ruleset"]),
+            features=GitHubFeatures(
+                issues=github_features["issues"],
+                projects=github_features["projects"],
+                wiki=github_features["wiki"],
+            ),
         ),
         plan_blockers=tuple(
             ContractBlocker(blocker.target, blocker.message)

@@ -12,6 +12,9 @@ and standards releases use semantic versioning.
 - Record the accepted actor-neutral lifecycle architecture for ordinary GitHub
   delivery, prepared creation, first publication, one normalized repository
   contract, and one shared live desired-state delta.
+- Reconcile repository settings and features, required labels, and the named
+  branch-protection ruleset through one replaceable GitHub adapter and shared
+  delta, including publication-pending and partial-application evidence.
 
 ## [4.0.0] - 2026-08-16
 

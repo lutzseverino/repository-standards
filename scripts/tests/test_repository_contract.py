@@ -106,6 +106,33 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(contract.boundaries[0].title, "Example")
         self.assertEqual(contract.github.repository, "owner/example")
         self.assertEqual(contract.github.default_branch, "main")
+        self.assertEqual(
+            contract.github.settings.squash_merge_commit_title, "PR_TITLE"
+        )
+        self.assertEqual(
+            contract.github.settings.squash_merge_commit_message, "PR_BODY"
+        )
+        self.assertTrue(contract.github.features.issues)
+        self.assertFalse(contract.github.features.projects)
+        self.assertFalse(contract.github.features.wiki)
+
+    def test_normalizes_explicit_repository_feature_rules(self) -> None:
+        manifest = self.base_manifest()
+        manifest["github"]["features"] = {
+            "issues": True,
+            "projects": True,
+            "wiki": False,
+        }
+        temporary, repository = self.create_repository(manifest)
+        self.addCleanup(temporary.cleanup)
+
+        contract = resolve_repository_contract(
+            repository, standards_root=self.standards_root
+        )
+
+        self.assertTrue(contract.github.features.issues)
+        self.assertTrue(contract.github.features.projects)
+        self.assertFalse(contract.github.features.wiki)
 
     def test_rejects_contract_errors_through_the_high_level_interface(self) -> None:
         cases: list[tuple[str, dict, str]] = []
@@ -264,6 +291,45 @@ class RepositoryContractTests(unittest.TestCase):
             {"ecosystem": "npm", "directory": "/", "schedule": "daily"}
         )
         cases.append(("distinct dependency declarations", distinct_update, True))
+
+        explicit_features = self.base_manifest()
+        explicit_features["github"]["features"] = {
+            "issues": True,
+            "projects": False,
+            "wiki": True,
+        }
+        cases.append(("explicit repository features", explicit_features, True))
+
+        invalid_features = self.base_manifest()
+        invalid_features["github"]["features"] = {
+            "issues": True,
+            "projects": "disabled",
+            "wiki": False,
+        }
+        cases.append(("invalid repository features", invalid_features, False))
+
+        disabled_issues = self.base_manifest()
+        disabled_issues["github"]["features"] = {
+            "issues": False,
+            "projects": False,
+            "wiki": False,
+        }
+        cases.append(("disabled issues", disabled_issues, False))
+
+        explicit_squash_format = self.base_manifest()
+        explicit_squash_format["github"]["settings"].update(
+            {
+                "squash-merge-commit-title": "COMMIT_OR_PR_TITLE",
+                "squash-merge-commit-message": "COMMIT_MESSAGES",
+            }
+        )
+        cases.append(("explicit squash format", explicit_squash_format, True))
+
+        incomplete_squash_format = self.base_manifest()
+        incomplete_squash_format["github"]["settings"][
+            "squash-merge-commit-title"
+        ] = "PR_TITLE"
+        cases.append(("one explicit squash format", incomplete_squash_format, True))
 
         missing = self.base_manifest()
         del missing["dependency-updates"]

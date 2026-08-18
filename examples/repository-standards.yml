@@ -25,6 +25,12 @@ github:
     allow-squash-merge: true
     allow-merge-commit: false
     allow-rebase-merge: false
+    squash-merge-commit-title: PR_TITLE
+    squash-merge-commit-message: PR_BODY
+  features:
+    issues: true
+    projects: false
+    wiki: false
   ruleset:
     name: Protect main
     required-status-checks: [CI / Required]

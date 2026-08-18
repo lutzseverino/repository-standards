@@ -7,7 +7,11 @@ import json
 import sys
 from pathlib import Path
 
-from lib.github_settings import inspect_live_github
+from lib.live_reconciliation import (
+    GitHubCliAdapter,
+    reconcile_live_github,
+    render_live_audit,
+)
 from lib.repository_contract import ContractError, resolve_repository_contract
 from lib.standards import StandardsError, standards_root
 
@@ -26,10 +30,10 @@ def main() -> int:
             manifest=args.manifest,
         )
         contract = repository_contract.github
-        errors = inspect_live_github(
-            contract,
-            required_labels=repository_contract.required_labels,
-        )
+        adapter = GitHubCliAdapter()
+        snapshot = adapter.observe(repository_contract)
+        delta = reconcile_live_github(repository_contract, snapshot)
+        errors = render_live_audit(delta)
     except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -39,8 +43,9 @@ def main() -> int:
             json.dumps(
                 {
                     "repository": contract.repository,
-                    "clean": not errors,
+                    "clean": delta.clean,
                     "errors": errors,
+                    "pending": list(delta.pending_findings),
                 },
                 indent=2,
             )

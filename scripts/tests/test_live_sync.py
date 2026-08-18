@@ -30,6 +30,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 import json
                 import os
                 import sys
+                from urllib.parse import unquote
 
                 state_path = os.environ["FAKE_GITHUB_STATE"]
                 with open(state_path, encoding="utf-8") as handle:
@@ -42,6 +43,9 @@ class LiveSyncCommandTests(unittest.TestCase):
                     del args[index:index + 2]
                 endpoint = args[args.index("api") + 1]
                 payload = json.load(sys.stdin) if method != "GET" else None
+                if method == "GET" and state.get("fail_on_read"):
+                    print(state["failure_message"], file=sys.stderr)
+                    raise SystemExit(1)
                 if method != "GET":
                     write_number = state.get("write_count", 0) + 1
                     if write_number == state.get("fail_on_write"):
@@ -58,7 +62,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                     response = state["repository"]
                 elif method == "GET" and endpoint.startswith("repos/owner/example/labels?"):
                     response = state["labels"]
-                elif method == "GET" and endpoint == "repos/owner/example/rulesets":
+                elif method == "GET" and endpoint.startswith("repos/owner/example/rulesets?"):
                     response = [
                         {"id": item["id"], "name": item["name"]}
                         for item in state["rulesets"]
@@ -74,6 +78,15 @@ class LiveSyncCommandTests(unittest.TestCase):
                 elif method == "POST" and endpoint == "repos/owner/example/labels":
                     state["labels"].append(payload)
                     response = payload
+                elif method == "PATCH" and endpoint.startswith("repos/owner/example/labels/"):
+                    label_name = unquote(endpoint.rsplit("/", 1)[1])
+                    label = next(
+                        item
+                        for item in state["labels"]
+                        if item["name"].casefold() == label_name.casefold()
+                    )
+                    label["name"] = payload["new_name"]
+                    response = label
                 elif method == "POST" and endpoint == "repos/owner/example/rulesets":
                     response = {"id": 100 + len(state["rulesets"]), **payload}
                     state["rulesets"].append(response)
@@ -270,13 +283,26 @@ class LiveSyncCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Completed operations:\n- UPDATE   repository settings", result.stderr)
-        self.assertIn("Remaining operations:\n- CREATE   label 'bug'", result.stderr)
+        self.assertIn("Failed operation:\n- CREATE   label 'bug'", result.stderr)
+        self.assertIn(
+            "Remaining operations:\n- CREATE   label 'enhancement'", result.stderr
+        )
         self.assertIn("- CREATE   ruleset 'Protect main'", result.stderr)
         self.assertIn("gh auth login", result.stderr)
         self.assertIn("Administration (write)", result.stderr)
         updated = json.loads(self.state_path.read_text(encoding="utf-8"))
         self.assertEqual(updated["repository"]["default_branch"], "main")
         self.assertEqual(updated["labels"], [])
+
+        updated.pop("fail_on_write")
+        self.state_path.write_text(json.dumps(updated), encoding="utf-8")
+        retry = self.run_sync_live("--write")
+
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertIn("Applied 8 live operation(s)", retry.stdout)
+        rerun = self.run_sync_live("--write")
+        self.assertEqual(rerun.returncode, 0, rerun.stderr)
+        self.assertIn("Live GitHub contract is current", rerun.stdout)
 
     def test_write_updates_only_the_named_ruleset(self) -> None:
         required_labels = [
@@ -351,6 +377,51 @@ class LiveSyncCommandTests(unittest.TestCase):
             pull_request["parameters"]["required_approving_review_count"], 0
         )
 
+    def test_write_renames_required_label_case_collisions_and_reruns_cleanly(
+        self,
+    ) -> None:
+        state = {
+            "repository": {
+                "default_branch": "main",
+                "delete_branch_on_merge": True,
+                "allow_squash_merge": True,
+                "allow_merge_commit": False,
+                "allow_rebase_merge": False,
+                "squash_merge_commit_title": "PR_TITLE",
+                "squash_merge_commit_message": "PR_BODY",
+                "has_issues": True,
+                "has_projects": False,
+                "has_wiki": False,
+            },
+            "labels": [
+                {"name": name}
+                for name in (
+                    "Bug",
+                    "enhancement",
+                    "needs-triage",
+                    "needs-info",
+                    "ready-for-agent",
+                    "ready-for-human",
+                    "wontfix",
+                    "repository-specific",
+                )
+            ],
+            "rulesets": [],
+        }
+        self.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        written = self.run_sync_live("--write")
+
+        self.assertEqual(written.returncode, 0, written.stderr)
+        self.assertIn("UPDATE   label 'Bug' to 'bug'", written.stdout)
+        updated = json.loads(self.state_path.read_text(encoding="utf-8"))
+        label_names = {item["name"] for item in updated["labels"]}
+        self.assertIn("bug", label_names)
+        self.assertIn("repository-specific", label_names)
+        rerun = self.run_sync_live("--write")
+        self.assertEqual(rerun.returncode, 0, rerun.stderr)
+        self.assertIn("Live GitHub contract is current", rerun.stdout)
+
     def test_authentication_failures_include_recovery_guidance(self) -> None:
         messages = (
             "gh: Bad credentials (HTTP 401)",
@@ -380,6 +451,31 @@ class LiveSyncCommandTests(unittest.TestCase):
                 self.assertIn("gh auth login", result.stderr)
                 self.assertIn("Issues (write)", result.stderr)
                 self.assertIn("Administration (write)", result.stderr)
+
+    def test_observation_authentication_and_permission_failures_include_guidance(
+        self,
+    ) -> None:
+        for message in (
+            "gh: Bad credentials (HTTP 401)",
+            "gh: Resource not accessible by personal access token (HTTP 403)",
+        ):
+            with self.subTest(message=message):
+                self.state_path.write_text(
+                    json.dumps(
+                        {
+                            "fail_on_read": True,
+                            "failure_message": message,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                result = self.run_sync_live()
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("gh auth login", result.stderr)
+                self.assertIn("Issues (read)", result.stderr)
+                self.assertIn("Administration (read)", result.stderr)
 
 
 if __name__ == "__main__":

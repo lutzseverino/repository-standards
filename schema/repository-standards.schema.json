@@ -83,7 +83,19 @@
             "delete-branch-on-merge": {"type": "boolean"},
             "allow-squash-merge": {"type": "boolean"},
             "allow-merge-commit": {"type": "boolean"},
-            "allow-rebase-merge": {"type": "boolean"}
+            "allow-rebase-merge": {"type": "boolean"},
+            "squash-merge-commit-title": {"enum": ["PR_TITLE", "COMMIT_OR_PR_TITLE"]},
+            "squash-merge-commit-message": {"enum": ["PR_BODY", "COMMIT_MESSAGES", "BLANK"]}
+          }
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["issues", "projects", "wiki"],
+          "properties": {
+            "issues": {"const": true},
+            "projects": {"type": "boolean"},
+            "wiki": {"type": "boolean"}
           }
         },
         "ruleset": {

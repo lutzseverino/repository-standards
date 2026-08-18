@@ -51,7 +51,14 @@ Each participating repository carries `.repository-standards.json`:
       "delete-branch-on-merge": true,
       "allow-squash-merge": true,
       "allow-merge-commit": false,
-      "allow-rebase-merge": false
+      "allow-rebase-merge": false,
+      "squash-merge-commit-title": "PR_TITLE",
+      "squash-merge-commit-message": "PR_BODY"
+    },
+    "features": {
+      "issues": true,
+      "projects": false,
+      "wiki": false
     },
     "ruleset": {
       "name": "Protect main",
@@ -125,12 +132,19 @@ unified diffs. `sync --write` changes managed targets only. It refuses a plan
 that conflicts with a `repository-owned` path.
 
 `audit-live` is deliberately separate: it requires an authenticated GitHub CLI
-and compares required labels, declared repository settings, and rulesets.
-`sync-live` previews that same declared contract and `sync-live --write` applies
-only the required labels, settings, and named ruleset. Extra labels and
-undeclared live resources remain untouched. Repositories that cannot use
-rulesets may declare `"ruleset": null` while retaining auditable repository
-settings and labels.
+and renders the shared live desired-state delta for required labels, declared
+repository settings and features, and the named ruleset. `sync-live` previews
+operations projected from that same delta, and `sync-live --write` applies
+them. Extra labels, rulesets, and undeclared live resources remain untouched.
+Repository features default to Issues enabled and Projects and Wiki disabled;
+declare `github.features` to record intentional use. Repositories that cannot
+use rulesets may declare `"ruleset": null` while retaining auditable repository
+settings, features, and labels.
+
+GitHub omits ruleset bypass actors from read responses unless the caller has
+write access to the ruleset. A complete live audit of a declared ruleset
+therefore requires Administration write permission and fails rather than
+reporting false conformance when that field is not observable.
 
 Participating repositories receive the user-invoked
 `adopt-repository-standards` skill. Give it an exact stable version for a
