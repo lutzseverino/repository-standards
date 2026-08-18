@@ -2,13 +2,15 @@
 
 ## Canonical flow
 
-The repository family owns one canonical repository workflow composed around
-the official Matt Pocock skill bundle at
+The repository family owns one actor-neutral canonical repository workflow.
+This document defines its entry-point routing, readiness, branching,
+validation, and GitHub delivery independently of the actors or tools that
+perform those operations.
+
+The official Matt Pocock skill bundle at
 [`84fdeffd`](https://github.com/mattpocock/skills/tree/84fdeffd12f2ee307994d1eb6feb48173b6e0502)
-and repository-family policy. The pinned skills define their execution
-contracts. This document defines entry-point routing, readiness, branching,
-validation, and GitHub delivery without attributing those additions to
-upstream.
+supplies pinned execution contracts. Skills and other tools are execution
+adapters; they do not define workflow policy.
 
 The common profile distributes the official 25-skill bundle as exact
 repository-local files with source, revision, inventory, and license metadata.
@@ -22,7 +24,8 @@ do not need to run `setup-matt-pocock-skills` after synchronization.
 Skill names below omit the agent-specific invocation prefix. Use the active
 agent's syntax, such as `$implement` in Codex.
 
-The workflow separates implementation from GitHub delivery:
+The current execution-adapter mapping preserves the canonical separation
+between implementation and GitHub delivery:
 
 ```text
 incoming request -> triage -> ready work
@@ -31,8 +34,10 @@ agreed small change -> implementation -> validated commit
 agreed multi-session change -> specification -> tickets -> implementation
 ready specification or ticket -> implementation
 huge unresolved effort -> wayfinder -> agreed work
-validated commit -> pull request -> CI/review -> squash merge
-                 -> tracker reconciliation -> delete branch
+validated commit -> delivery preparation: push + pull request + CI/review evidence
+                 -> explicit human confirmation
+                 -> delivery finalization: reverify -> squash merge
+                    -> tracker reconciliation -> branch cleanup
 ```
 
 ## Incoming requests
@@ -107,22 +112,46 @@ is the complete merge-readiness gate; do not hide additional required checks
 behind a second, stronger command. CI may split the gate into jobs, but those
 jobs must collectively run every constituent check.
 
-## Manual GitHub delivery
+## GitHub delivery
 
-GitHub delivery begins after implementation:
+Until the family-owned delivery skill is released, contributors execute its
+accepted Prepare and Finalize phases manually.
 
-1. Push the branch and open a pull request.
+Prepare begins after implementation:
+
+1. Validate the exact candidate, push the branch, and reuse and update its
+   existing pull request or open a ready pull request. For tracked work,
+   include an unambiguous non-closing link to the applicable incoming request,
+   implementation ticket, or specification.
 2. Use a Conventional Commit subject for the pull-request title so it becomes
    the squash commit subject.
-3. Pass CI and complete any required review.
-4. Squash merge the pull request.
-5. Close the implementation ticket after its change reaches the default branch.
-6. Close a parent specification after all of its implementation tickets are
-   delivered.
-7. Delete the merged branch.
+3. Pass CI, complete any required review, and present the prepared head and
+   current evidence for delivery.
 
-Closing references are permitted but not required. Automated dependency-update
-pull requests remain exempt from the human planning flow.
+Prepare stops for explicit human confirmation. A pull-request reference alone
+does not authorize Finalize.
+
+After confirmation, Finalize:
+
+4. Reverify the prepared head, canonical validation, required checks, review
+   evidence, mergeability, and repository merge policy. If that evidence is
+   failed or stale, return the work and diagnostic evidence to implementation;
+   delivery does not edit the implementation work.
+5. Squash merge the pull request.
+6. Reconcile the linked tracked work after its change reaches the default
+   branch, including an incoming request, implementation ticket, or directly
+   implemented specification.
+7. Close a parent specification after all of its implementation tickets are
+   delivered.
+8. Delete the merged branch.
+
+Both phases preserve and restore unrelated local state.
+Where repository conformance is required as evidence, both phases consume the
+normalized repository contract and shared live desired-state delta.
+
+Closing references may supplement but do not replace a required tracked-work
+link. Automated dependency-update pull requests remain exempt from the human
+planning flow.
 
 ## Repository settings
 
