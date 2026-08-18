@@ -7,6 +7,12 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Record the accepted actor-neutral lifecycle architecture for ordinary GitHub
+  delivery, prepared creation, first publication, one normalized repository
+  contract, and one shared live desired-state delta.
+
 ## [4.0.0] - 2026-08-16
 
 ### Added

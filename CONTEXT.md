@@ -5,10 +5,10 @@ Canonical language for the conventions shared by participating repositories.
 ## Language
 
 **Canonical workflow**:
-The repository-owned change process expected of every participating
-repository. It composes pinned external skill contracts with family-wide
-policy; it is not an upstream workflow or a selectable alternative.
-_Avoid_: Workflow option, workflow profile
+The actor-neutral, repository-owned change process expected of every
+participating repository. Skills and other tools may execute its operations,
+but they do not define the process.
+_Avoid_: Skill workflow, workflow option, workflow profile
 
 **Response language**:
 English by default for agent responses, regardless of the language used to
@@ -51,6 +51,16 @@ The work that carries a validated commit through repository review and into the
 default branch.
 _Avoid_: Implementation
 
+**Delivery preparation**:
+The part of GitHub delivery that prepares a validated change and its pull
+request for human inspection, ending at an explicit confirmation boundary.
+_Avoid_: Implementation, delivery finalization
+
+**Delivery finalization**:
+The part of GitHub delivery that, after explicit confirmation, verifies and
+merges the prepared change, reconciles tracked work, and cleans up its branch.
+_Avoid_: Delivery preparation, implementation
+
 **Required label**:
 A GitHub label whose exact name must exist for the canonical workflow. A
 repository can also have labels that are not required labels.
@@ -67,14 +77,41 @@ conformance with a specific standards release, including repository content
 and its declared live GitHub contract.
 _Avoid_: File synchronization, standards update
 
+**Prepared creation baseline**:
+The uncommitted local repository content and empty GitHub repository produced
+by repository creation. It still requires first publication.
+_Avoid_: Published repository, standards-complete repository
+
+**First publication**:
+The separate lifecycle transition from a prepared creation baseline to a
+standards-complete repository.
+_Avoid_: GitHub delivery, initial delivery, repository creation
+
+**Standards-complete repository**:
+A published repository whose committed content and observed live GitHub state
+satisfy every applicable rule of its selected standards release.
+_Avoid_: Lifecycle-relative conformance, prepared creation baseline
+
+**Selectable ecosystem profile**:
+The prepared-creation lifecycle treats an ecosystem profile as selectable only
+when it has explicit applicability and observable managed or audited behavior.
+Unenforced ecosystem guidance is not selectable.
+_Avoid_: Applicability label, ecosystem advice
+
+**Live desired-state delta**:
+The complete difference between a repository's applicable desired live
+contract and its observed GitHub state, shared by audit, synchronization, and
+lifecycle operations.
+_Avoid_: Audit-only findings, write-only plan
+
 **Canonical validation**:
 The single complete command that determines whether a change is ready for
 GitHub delivery.
 _Avoid_: Test suite, partial check, stronger quality gate
 
 **Tracker reconciliation**:
-The manual work that updates or closes tracked work after its change reaches
-the default branch.
+The work that updates or closes tracked work after its change reaches the
+default branch.
 _Avoid_: Implementation, dispatch
 
 **Agent configuration**:

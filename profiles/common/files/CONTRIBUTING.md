@@ -4,12 +4,14 @@ Thank you for improving this repository.
 
 ## Workflow
 
-This repository uses the canonical repository workflow. It composes the
-official Matt Pocock skill bundle at
-[`84fdeffd`](https://github.com/mattpocock/skills/tree/84fdeffd12f2ee307994d1eb6feb48173b6e0502).
-The pinned skills define their execution contracts; repository documentation
-defines how to route work between them and how to deliver validated changes
-through GitHub.
+This repository uses the actor-neutral canonical repository workflow.
+Repository documentation defines how work moves between states and how
+validated changes reach GitHub.
+
+The official Matt Pocock skill bundle at
+[`84fdeffd`](https://github.com/mattpocock/skills/tree/84fdeffd12f2ee307994d1eb6feb48173b6e0502)
+supplies pinned execution contracts. Its skills are execution adapters; they
+do not define workflow policy.
 
 GitHub Issues track incoming requests, published specifications, and generated
 implementation tickets. They are not a required starting point for every
@@ -71,16 +73,41 @@ a commit. It does not open or merge a pull request or close tracked work.
 Run the single canonical validation command documented by this repository
 before considering implementation complete.
 
-### Manual GitHub delivery
+### GitHub delivery
 
-After implementation:
+Until the family-owned delivery skill is released, execute its accepted phases
+manually.
 
-1. Push the branch and open a pull request.
+Prepare after implementation:
+
+1. Validate the exact candidate, push the branch, and reuse and update its
+   existing pull request or open a ready pull request. For tracked work,
+   include an unambiguous non-closing link to the applicable incoming request,
+   implementation ticket, or specification.
 2. Use a Conventional Commit subject for the pull-request title.
-3. Pass CI and complete any required review.
-4. Squash merge the pull request and delete the branch.
-5. Close the delivered implementation ticket after the change reaches `main`.
-6. Close a parent specification after all of its implementation tickets are
-   delivered.
+3. Pass CI, complete any required review, and present the prepared head and
+   current evidence for delivery.
 
-A pull request may use closing references, but they are not required.
+Prepare stops for explicit human confirmation. A pull-request reference alone
+does not authorize Finalize.
+
+After confirmation, Finalize:
+
+4. Reverify the prepared head, canonical validation, required checks, review
+   evidence, mergeability, and repository merge policy. If that evidence is
+   failed or stale, return the work and diagnostic evidence to implementation;
+   delivery does not edit the implementation work.
+5. Squash merge the pull request.
+6. Reconcile the linked tracked work after the change reaches `main`, including
+   an incoming request, implementation ticket, or directly implemented
+   specification.
+7. Close a parent specification after all of its implementation tickets are
+   delivered.
+8. Delete the merged branch.
+
+Both phases preserve and restore unrelated local state.
+Where repository conformance is required as evidence, both phases consume the
+normalized repository contract and shared live desired-state delta.
+
+Closing references may supplement but do not replace a required tracked-work
+link.
