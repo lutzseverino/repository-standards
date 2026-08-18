@@ -19,13 +19,6 @@ from pathlib import Path
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
 LINE_SEPARATOR = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
-REPOSITORY_CONTENT_PATHS = (
-    "README.md",
-    "LICENSE",
-    "CONTEXT.md",
-    "docs/README.md",
-    "docs/agents/domain.md",
-)
 
 
 class CreationError(Exception):
@@ -42,6 +35,14 @@ class RemoteState(Enum):
 class RulesetSupport(Enum):
     SUPPORTED = "supported"
     UNSUPPORTED = "unsupported"
+
+
+class RepositoryContentPath(Enum):
+    README = "README.md"
+    LICENSE = "LICENSE"
+    CONTEXT = "CONTEXT.md"
+    DOCUMENTATION = "docs/README.md"
+    DOMAIN_CONFIGURATION = "docs/agents/domain.md"
 
 
 def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -191,6 +192,64 @@ def _gh(*arguments: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def _resolve_license(requested: str, owner: str) -> tuple[str, str]:
+    catalog_result = _gh("api", "licenses")
+    if catalog_result.returncode != 0:
+        raise CreationError(
+            "cannot inspect GitHub license catalog: "
+            + (catalog_result.stderr.strip() or catalog_result.stdout.strip())
+        )
+    try:
+        catalog = json.loads(catalog_result.stdout)
+    except json.JSONDecodeError as exc:
+        raise CreationError("GitHub license catalog was not valid JSON") from exc
+    if not isinstance(catalog, list):
+        raise CreationError("GitHub license catalog did not contain a list")
+    matches = [
+        entry
+        for entry in catalog
+        if isinstance(entry, dict)
+        and any(
+            isinstance(identifier, str)
+            and identifier.casefold() == requested.casefold()
+            for identifier in (entry.get("key"), entry.get("spdx_id"))
+        )
+    ]
+    if len(matches) != 1:
+        raise CreationError(
+            f"unsupported GitHub license identifier: {requested!r}"
+        )
+    key = matches[0].get("key")
+    canonical_identifier = matches[0].get("spdx_id")
+    if not isinstance(key, str) or not isinstance(canonical_identifier, str):
+        raise CreationError("GitHub license catalog entry was invalid")
+    details_result = _gh("api", f"licenses/{key}")
+    if details_result.returncode != 0:
+        raise CreationError(
+            f"cannot inspect GitHub license {canonical_identifier}: "
+            + (details_result.stderr.strip() or details_result.stdout.strip())
+        )
+    try:
+        details = json.loads(details_result.stdout)
+        body = details["body"]
+        observed_identifier = details["spdx_id"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError(
+            f"GitHub license response was invalid for {canonical_identifier}"
+        ) from exc
+    if (
+        observed_identifier != canonical_identifier
+        or not isinstance(body, str)
+        or not body
+    ):
+        raise CreationError(
+            f"GitHub license response was invalid for {canonical_identifier}"
+        )
+    if canonical_identifier == "MIT":
+        body = _mit_license(owner)
+    return canonical_identifier, body
 
 
 def _observe_github_repository(
@@ -426,25 +485,22 @@ def _write_repository_content(
     *,
     name: str,
     purpose: str,
-    owner: str,
-    license_identifier: str,
+    license_text: str,
 ) -> None:
     escaped_purpose = html.escape(purpose)
-    if license_identifier != "MIT":
-        raise CreationError(f"unsupported repository license: {license_identifier}")
     files = {
-        "README.md": (
+        RepositoryContentPath.README.value: (
             f'<div align="center">\n  <h1>{name}</h1>\n'
             f"  <p>{escaped_purpose}</p>\n</div>\n\n"
             "See the [documentation](docs/README.md).\n"
         ),
-        "LICENSE": _mit_license(owner),
-        "CONTEXT.md": (
+        RepositoryContentPath.LICENSE.value: license_text,
+        RepositoryContentPath.CONTEXT.value: (
             f"# {name}\n\nCanonical language for "
             f"{escaped_purpose.rstrip('.').lower()}.\n\n"
             "## Language\n\nAdd terms here when the repository resolves them.\n"
         ),
-        "docs/README.md": (
+        RepositoryContentPath.DOCUMENTATION.value: (
             "# Documentation\n\nRepository documentation is organized by purpose.\n\n"
             "- `tutorials/` for learning-oriented lessons.\n"
             "- `how-to/` for task-oriented guides.\n"
@@ -452,7 +508,7 @@ def _write_repository_content(
             "- `explanation/` for understanding and rationale.\n"
             "- `adr/` for architectural decisions.\n"
         ),
-        "docs/agents/domain.md": (
+        RepositoryContentPath.DOMAIN_CONFIGURATION.value: (
             "# Domain docs\n\nThis repository uses a single domain context.\n\n"
             "Before exploring or naming domain concepts, read `CONTEXT.md` at the "
             "repository root and relevant records in `docs/adr/`.\n"
@@ -513,7 +569,8 @@ def _retained_state(
         else:
             print("- local Git repository: not initialized", file=sys.stderr)
         retained_paths = []
-        for relative in REPOSITORY_CONTENT_PATHS:
+        for content_path in RepositoryContentPath:
+            relative = content_path.value
             kind = _retained_path_kind(destination / relative)
             if kind:
                 retained_paths.append(f"{relative} ({kind})")
@@ -549,7 +606,7 @@ def main() -> int:
     parser.add_argument(
         "--visibility", required=True, choices=("private", "public", "internal")
     )
-    parser.add_argument("--license", required=True, choices=("MIT",))
+    parser.add_argument("--license", required=True)
     parser.add_argument("--owner", required=True)
     parser.add_argument("--destination", required=True)
     parser.add_argument("--version")
@@ -590,6 +647,7 @@ def main() -> int:
         ruleset_support = _preflight_github(
             args.owner, repository_name, args.visibility
         )
+        license_identifier, license_text = _resolve_license(args.license, args.owner)
         remote_state = RemoteState.ABSENT
 
         with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
@@ -601,7 +659,7 @@ def main() -> int:
                 "repository": repository_name,
                 "title": args.name,
                 "facts": facts,
-                "variables": {"license": args.license},
+                "variables": {"license": license_identifier},
             }
             if args.profile:
                 initialization["profiles"] = args.profile
@@ -644,8 +702,7 @@ def main() -> int:
                 destination,
                 name=args.name,
                 purpose=args.purpose,
-                owner=args.owner,
-                license_identifier=args.license,
+                license_text=license_text,
             )
             local_state = "unborn main with repository-owned content"
             _run_phase(

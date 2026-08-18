@@ -183,6 +183,24 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 arguments = sys.argv[1:]
                 if arguments[:2] == ["auth", "status"]:
                     raise SystemExit(0)
+                if arguments[:2] == ["api", "licenses"]:
+                    print(json.dumps([
+                        {"key": "mit", "spdx_id": "MIT"},
+                        {"key": "apache-2.0", "spdx_id": "Apache-2.0"},
+                    ]))
+                    raise SystemExit(0)
+                if arguments[:2] == ["api", "licenses/mit"]:
+                    print(json.dumps({
+                        "spdx_id": "MIT",
+                        "body": "MIT catalog template",
+                    }))
+                    raise SystemExit(0)
+                if arguments[:2] == ["api", "licenses/apache-2.0"]:
+                    print(json.dumps({
+                        "spdx_id": "Apache-2.0",
+                        "body": "Apache License 2.0\\n",
+                    }))
+                    raise SystemExit(0)
                 if arguments[:2] == ["api", "user"]:
                     print(json.dumps({
                         "login": "owner",
@@ -488,6 +506,29 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 self.assertIn(diagnostic, result.stderr)
                 self.assertFalse(self.destination.exists())
                 self.assertFalse(self.log.exists())
+
+    def test_explicit_license_is_resolved_recorded_and_written(self) -> None:
+        result = self.run_create("--license", "apache-2.0")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        manifest = json.loads(
+            (self.destination / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["variables"]["license"], "Apache-2.0")
+        self.assertEqual(
+            (self.destination / "LICENSE").read_text(encoding="utf-8"),
+            "Apache License 2.0\n",
+        )
+
+    def test_unknown_license_stops_before_local_mutation(self) -> None:
+        result = self.run_create("--license", "Unknown-1.0")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unsupported GitHub license identifier", result.stderr)
+        self.assertFalse(self.destination.exists())
+        self.assertFalse(self.log.exists())
 
     def test_purpose_line_separators_stop_before_local_mutation(self) -> None:
         separators = (

@@ -46,6 +46,12 @@ class CreationFreshAgentTests(unittest.TestCase):
                 pathlib.Path(".creation-invoked").write_text(
                     "\\n".join(arguments) + "\\n", encoding="utf-8"
                 )
+                destination = pathlib.Path(
+                    arguments[arguments.index("--destination") + 1]
+                )
+                if destination.exists():
+                    print("error: local destination collision", file=sys.stderr)
+                    raise SystemExit(2)
                 if "existing" in arguments:
                     print("error: GitHub identity collision; repository exists", file=sys.stderr)
                     raise SystemExit(2)
@@ -61,7 +67,24 @@ class CreationFreshAgentTests(unittest.TestCase):
                         file=sys.stderr,
                     )
                     raise SystemExit(2)
-                print("Prepared creation baseline; first publication is required.")
+                selected = ["common", "documentation"]
+                if all(
+                    fact in facts
+                    for fact in (
+                        "ecosystem=node",
+                        "package-manager=npm",
+                        "project-kind=protocol",
+                    )
+                ):
+                    selected.append("node-protocol")
+                pathlib.Path(".creation-result").write_text(
+                    "\\n".join(selected) + "\\n", encoding="utf-8"
+                )
+                print(
+                    "Prepared creation baseline; selected profiles: "
+                    + ", ".join(selected)
+                    + "; first publication is required."
+                )
                 """
             ),
             encoding="utf-8",
@@ -108,6 +131,11 @@ class CreationFreshAgentTests(unittest.TestCase):
     def invocation(self) -> str:
         return (self.repository / ".creation-invoked").read_text(encoding="utf-8")
 
+    def selected_profiles(self) -> list[str]:
+        return (self.repository / ".creation-result").read_text(
+            encoding="utf-8"
+        ).splitlines()
+
     def test_rich_prior_context_is_reused_for_standalone_creation(self) -> None:
         destination = self.repository.parent / "widget"
         result, final = self.run_fresh_agent(
@@ -125,6 +153,7 @@ class CreationFreshAgentTests(unittest.TestCase):
         self.assertIn("--license\nMIT", invocation)
         self.assertIn("--fact\necosystem=elixir", invocation.lower())
         self.assertNotIn("workflow", invocation.lower())
+        self.assertEqual(self.selected_profiles(), ["common", "documentation"])
         self.assertIn("first publication", final.lower())
 
     def test_missing_explicit_decisions_are_requested_before_invocation(self) -> None:
@@ -181,6 +210,10 @@ class CreationFreshAgentTests(unittest.TestCase):
         self.assertIn("ecosystem=node", invocation)
         self.assertIn("package-manager=npm", invocation)
         self.assertIn("project-kind=protocol", invocation)
+        self.assertEqual(
+            self.selected_profiles(),
+            ["common", "documentation", "node-protocol"],
+        )
         self.assertIn("first publication", final.lower())
 
     def test_collision_is_surfaced_without_switching_workflows(self) -> None:
@@ -198,6 +231,23 @@ class CreationFreshAgentTests(unittest.TestCase):
         )
         self.assertNotIn("implement", final.lower())
         self.assertFalse((self.repository / ".workflow-invoked").exists())
+
+    def test_local_collision_is_surfaced_without_mutating_the_destination(
+        self,
+    ) -> None:
+        destination = self.repository.parent / "occupied"
+        destination.mkdir()
+        marker = destination / "keep.txt"
+        marker.write_text("keep\n", encoding="utf-8")
+        result, final = self.run_fresh_agent(
+            "Use $create-repository for private owner/fresh at "
+            f"{destination}. Purpose: 'Preserve the destination.' License: MIT. "
+            "The unsupported ecosystem is Elixir and the project kind is application."
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("collision", final.lower())
+        self.assertEqual(marker.read_text(encoding="utf-8"), "keep\n")
 
 
 if __name__ == "__main__":
