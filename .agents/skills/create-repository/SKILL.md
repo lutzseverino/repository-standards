@@ -10,8 +10,12 @@ Create one prepared creation baseline from settled repository facts.
 
 1. Reuse facts already settled in the conversation or supplied specification.
    Collect only missing decisions before running anything. Repository name,
-   one-line purpose, visibility, and license must be explicit. Infer the GitHub
-   owner, local destination, and ecosystem facts only from unambiguous context.
+   one-line purpose, visibility, and license must be explicit. Establish enough
+   applicability facts to prove every selectable ecosystem profile matches or
+   cannot match. Infer the GitHub owner, local destination, and applicability
+   facts only from unambiguous context; collect an unspecified ecosystem before
+   invocation and ask only for unproven facts. This step is complete only when
+   every selectable profile fully matches or conflicts with a settled fact.
 2. Run the bundled creation runner with those facts. Pass an exact release when
    the user selected one; omit `--version` to select the latest stable release.
    Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves an

@@ -285,6 +285,25 @@ def select_initial_profiles(
         for name, applicability in selectable.items()
         if all(facts.get(key) == value for key, value in applicability.items())
     )
+    incomplete = {
+        name: tuple(key for key in applicability if key not in facts)
+        for name, applicability in selectable.items()
+        if all(
+            key not in facts or facts[key] == value
+            for key, value in applicability.items()
+        )
+        and any(key not in facts for key in applicability)
+    }
+
+    if incomplete:
+        details = "; ".join(
+            f"{name} (missing {', '.join(missing)})"
+            for name, missing in sorted(incomplete.items())
+        )
+        raise ContractError(
+            "applicability facts are incomplete; cannot prove profile selection: "
+            + details
+        )
 
     if explicit_profiles is not None:
         if (

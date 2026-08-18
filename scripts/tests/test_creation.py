@@ -69,6 +69,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     "profiles": ["common", "documentation"],
                     "repository-owned": ["README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"],
                     "github": {"repository": facts["repository"], "default-branch": "main", "ruleset": ruleset},
+                    "variables": facts.get("variables", {}),
                 }
                 if mode == "preview":
                     print(json.dumps(manifest))
@@ -77,6 +78,8 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 (destination / ".repository-standards.json").write_text(
                     json.dumps(manifest) + "\\n", encoding="utf-8"
                 )
+                if os.environ.get("FAKE_REPOSITORY_CONTENT_FAILURE"):
+                    (destination / "LICENSE").mkdir()
                 print("initialized")
             """,
             "sync": """\
@@ -241,6 +244,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     and arguments[0] == "api"
                     and arguments[1].startswith("repos/")
                 ):
+                    if os.environ.get("FAKE_PREFLIGHT_OBSERVATION_FAILURE"):
+                        print("network unavailable", file=sys.stderr)
+                        raise SystemExit(2)
                     if state["created"] and os.environ.get("FAKE_OBSERVATION_FAILURE"):
                         print("network unavailable", file=sys.stderr)
                         raise SystemExit(2)
@@ -333,6 +339,11 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             )
         )
         self.assertIsNone(manifest["github"]["ruleset"])
+        self.assertEqual(manifest["variables"]["license"], "MIT")
+        self.assertIn(
+            "Copyright (c) owner",
+            (self.destination / "LICENSE").read_text(encoding="utf-8"),
+        )
         head = subprocess.run(
             ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
             check=False,
@@ -384,6 +395,26 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertIn("no automatic deletion or rollback", result.stderr)
         self.assertTrue((self.destination / "managed.txt").is_file())
         self.assertTrue(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
+
+    def test_local_content_failure_reports_observed_retained_state(self) -> None:
+        result = self.run_create(
+            extra_environment={"FAKE_REPOSITORY_CONTENT_FAILURE": "1"}
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("initial contract: present", result.stderr)
+        self.assertIn(
+            "local Git repository: initialized; branch: main; HEAD: unborn",
+            result.stderr,
+        )
+        self.assertIn("README.md (file)", result.stderr)
+        self.assertIn("LICENSE (directory)", result.stderr)
+        self.assertIn("no automatic deletion or rollback", result.stderr)
+        self.assertTrue((self.destination / "README.md").is_file())
+        self.assertTrue((self.destination / "LICENSE").is_dir())
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
 
     def test_local_and_remote_collisions_stop_before_creation_mutation(self) -> None:
         collision = self.destination / "existing.txt"
@@ -484,6 +515,18 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 self.assertFalse(self.destination.exists())
                 self.assertFalse(self.log.exists())
 
+    def test_repository_content_escapes_html_in_the_explicit_purpose(self) -> None:
+        purpose = 'Use <widgets> & "things" safely.'
+        result = self.run_create("--purpose", purpose)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        readme = (self.destination / "README.md").read_text(encoding="utf-8")
+        context = (self.destination / "CONTEXT.md").read_text(encoding="utf-8")
+        escaped = "Use &lt;widgets&gt; &amp; &quot;things&quot; safely."
+        self.assertIn(f"<p>{escaped}</p>", readme)
+        self.assertIn(escaped.rstrip(".").lower(), context)
+        self.assertNotIn(purpose, readme)
+
     def test_internal_visibility_requires_an_eligible_enterprise_organization(
         self,
     ) -> None:
@@ -565,6 +608,19 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertFalse(
             json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
         )
+
+    def test_preflight_observation_failure_is_not_misreported_as_visibility(
+        self,
+    ) -> None:
+        result = self.run_create(
+            extra_environment={"FAKE_PREFLIGHT_OBSERVATION_FAILURE": "1"}
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cannot verify GitHub identity owner/example", result.stderr)
+        self.assertNotIn("administrator visibility", result.stderr)
+        self.assertFalse(self.destination.exists())
+        self.assertFalse(self.log.exists())
 
     def test_ruleset_default_follows_proven_target_support(self) -> None:
         cases = (

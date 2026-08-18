@@ -30,6 +30,7 @@ class RepositoryInitializationCommandTests(unittest.TestCase):
                 "ecosystem": "node",
                 "package-manager": "npm",
                 "project-kind": "package",
+                "framework": "none",
             },
         }
         initialization.update(overrides)
@@ -140,11 +141,13 @@ class RepositoryInitializationCommandTests(unittest.TestCase):
                 "ecosystem": "node",
                 "package-manager": "npm",
                 "project-kind": "protocol",
+                "framework": "none",
             },
             "pnpm-workspace": {
                 "ecosystem": "node",
                 "package-manager": "pnpm",
                 "project-kind": "workspace",
+                "framework": "none",
             },
             "spring-boot": {
                 "ecosystem": "java",
@@ -178,6 +181,21 @@ class RepositoryInitializationCommandTests(unittest.TestCase):
                     manifest["profiles"],
                     ["common", "documentation", profile],
                 )
+
+    def test_incomplete_applicability_facts_stop_before_mutation(self) -> None:
+        for facts, missing in (
+            ({}, "ecosystem"),
+            ({"ecosystem": "node"}, "package-manager"),
+        ):
+            with self.subTest(facts=facts):
+                self.write_input(facts=facts)
+
+                result = self.run_initialize("--write")
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("applicability facts are incomplete", result.stderr)
+                self.assertIn(missing, result.stderr)
+                self.assertFalse(self.destination.exists())
 
     def test_no_match_uses_only_the_mandatory_baseline(self) -> None:
         self.write_input(

@@ -135,8 +135,21 @@ class CreationFreshAgentTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((self.repository / ".creation-invoked").exists())
         lowered = final.lower()
-        for missing in ("purpose", "visibility", "license"):
+        for missing in ("purpose", "visibility", "license", "ecosystem"):
             self.assertIn(missing, lowered)
+
+    def test_unknown_applicability_is_requested_before_invocation(self) -> None:
+        destination = self.repository.parent / "widget"
+        result, final = self.run_fresh_agent(
+            "Use $create-repository for private owner/widget at "
+            f"{destination}. Purpose: 'Track widgets.' License: MIT."
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.repository / ".creation-invoked").exists())
+        self.assertTrue(
+            "ecosystem" in final.lower() or "applicability" in final.lower()
+        )
 
     def test_ambiguous_profiles_are_returned_for_explicit_selection(self) -> None:
         destination = self.repository.parent / "web"
@@ -174,11 +187,15 @@ class CreationFreshAgentTests(unittest.TestCase):
         destination = self.repository.parent / "existing"
         result, final = self.run_fresh_agent(
             "Use $create-repository for private owner/existing at "
-            f"{destination}. Purpose: 'Existing identity.' License: MIT."
+            f"{destination}. Purpose: 'Existing identity.' License: MIT. "
+            "The unsupported ecosystem is Elixir and the project kind is application."
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("collision", final.lower())
+        lowered = final.lower()
+        self.assertTrue(
+            "collision" in lowered or "already exists" in lowered
+        )
         self.assertNotIn("implement", final.lower())
         self.assertFalse((self.repository / ".workflow-invoked").exists())
 

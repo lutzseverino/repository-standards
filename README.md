@@ -145,13 +145,16 @@ use rulesets may declare `"ruleset": null` while retaining auditable repository
 settings, features, and labels.
 
 `init` accepts a non-interactive JSON input containing the exact
-`standards-release`, GitHub `repository`, repository `title`, optional
-applicability `facts`, and optional explicit ecosystem `profiles`. It inserts
-the mandatory `common` and `documentation` profiles, infers one ecosystem
-profile only when exactly one selectable profile matches, and validates the
-complete manifest before write mode creates it. The input may also supply exact
-`boundaries`, `dependency-updates`, `github`, `variables`, `local-fragments`,
-and `repository-owned` declarations. Preview mode does not mutate the target.
+`standards-release`, GitHub `repository`, repository `title`, sufficient
+applicability `facts`, and optional explicit ecosystem `profiles`. Facts are
+sufficient when every selectable profile either fully matches or conflicts
+with at least one fact; an unproven profile stops initialization before write.
+The operation inserts the mandatory `common` and `documentation` profiles,
+infers one ecosystem profile only when exactly one selectable profile matches,
+and validates the complete manifest before write mode creates it. The input may
+also supply exact `boundaries`, `dependency-updates`, `github`, `variables`,
+`local-fragments`, and `repository-owned` declarations. Preview mode does not
+mutate the target.
 Local-fragment declarations are validated against selected compose targets
 without requiring their repository-owned source files to exist during
 initialization; author those sources before the first offline sync or audit.

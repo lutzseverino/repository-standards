@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -18,6 +19,13 @@ from pathlib import Path
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
 LINE_SEPARATOR = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
+REPOSITORY_CONTENT_PATHS = (
+    "README.md",
+    "LICENSE",
+    "CONTEXT.md",
+    "docs/README.md",
+    "docs/agents/domain.md",
+)
 
 
 class CreationError(Exception):
@@ -352,10 +360,12 @@ def _preflight_github(
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
     if observation is RemoteState.UNKNOWN:
-        raise CreationError(
-            f"cannot prove GitHub identity {repository} is absent; "
-            "organization administrator visibility is required"
-        )
+        if not absence_is_conclusive:
+            raise CreationError(
+                f"cannot prove GitHub identity {repository} is absent; "
+                "organization administrator visibility is required"
+            )
+        raise CreationError(f"cannot verify GitHub identity {repository}")
     return ruleset_support
 
 
@@ -412,17 +422,26 @@ SOFTWARE.
 
 
 def _write_repository_content(
-    repository: Path, *, name: str, purpose: str, owner: str
+    repository: Path,
+    *,
+    name: str,
+    purpose: str,
+    owner: str,
+    license_identifier: str,
 ) -> None:
+    escaped_purpose = html.escape(purpose)
+    if license_identifier != "MIT":
+        raise CreationError(f"unsupported repository license: {license_identifier}")
     files = {
         "README.md": (
             f'<div align="center">\n  <h1>{name}</h1>\n'
-            f"  <p>{purpose}</p>\n</div>\n\n"
+            f"  <p>{escaped_purpose}</p>\n</div>\n\n"
             "See the [documentation](docs/README.md).\n"
         ),
         "LICENSE": _mit_license(owner),
         "CONTEXT.md": (
-            f"# {name}\n\nCanonical language for {purpose.rstrip('.').lower()}.\n\n"
+            f"# {name}\n\nCanonical language for "
+            f"{escaped_purpose.rstrip('.').lower()}.\n\n"
             "## Language\n\nAdd terms here when the repository resolves them.\n"
         ),
         "docs/README.md": (
@@ -445,6 +464,18 @@ def _write_repository_content(
         path.write_text(content, encoding="utf-8")
 
 
+def _retained_path_kind(path: Path) -> str | None:
+    if path.is_symlink():
+        return "symbolic link"
+    if path.is_file():
+        return "file"
+    if path.is_dir():
+        return "directory"
+    if path.exists():
+        return "other"
+    return None
+
+
 def _retained_state(
     destination: Path,
     *,
@@ -457,9 +488,40 @@ def _retained_state(
     print("\nRetained state after failure:", file=sys.stderr)
     print(
         f"- local destination: {'present' if destination.exists() else 'not created'} "
-        f"({destination}); phase: {local_state}",
+        f"({destination}); last completed phase: {local_state}",
         file=sys.stderr,
     )
+    if destination.is_dir():
+        contract = destination / ".repository-standards.json"
+        print(
+            f"- initial contract: {'present' if contract.is_file() else 'absent'}",
+            file=sys.stderr,
+        )
+        git_directory = destination / ".git"
+        if git_directory.is_dir():
+            branch = _git(destination, "symbolic-ref", "--short", "HEAD")
+            branch_name = branch.stdout.strip() if branch.returncode == 0 else "unknown"
+            head = _git(destination, "rev-parse", "--verify", "HEAD")
+            head_state = (
+                head.stdout.strip() if head.returncode == 0 else "unborn"
+            )
+            print(
+                "- local Git repository: initialized; "
+                f"branch: {branch_name}; HEAD: {head_state}",
+                file=sys.stderr,
+            )
+        else:
+            print("- local Git repository: not initialized", file=sys.stderr)
+        retained_paths = []
+        for relative in REPOSITORY_CONTENT_PATHS:
+            kind = _retained_path_kind(destination / relative)
+            if kind:
+                retained_paths.append(f"{relative} ({kind})")
+        print(
+            "- repository-owned paths: "
+            + (", ".join(retained_paths) if retained_paths else "none observed"),
+            file=sys.stderr,
+        )
     if remote_state is RemoteState.CREATED:
         remote_description = "created and retained"
     elif remote_state is RemoteState.ABSENT:
@@ -539,6 +601,7 @@ def main() -> int:
                 "repository": repository_name,
                 "title": args.name,
                 "facts": facts,
+                "variables": {"license": args.license},
             }
             if args.profile:
                 initialization["profiles"] = args.profile
@@ -582,6 +645,7 @@ def main() -> int:
                 name=args.name,
                 purpose=args.purpose,
                 owner=args.owner,
+                license_identifier=args.license,
             )
             local_state = "unborn main with repository-owned content"
             _run_phase(
