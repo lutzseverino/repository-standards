@@ -181,13 +181,50 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     organization = None
                     if requested_owner == os.environ.get("FAKE_ORGANIZATION"):
                         organization = {
-                            "viewerCanCreateRepositories": bool(
-                                os.environ.get("FAKE_ORGANIZATION_CAN_CREATE")
-                            )
+                            "viewerCanAdminister": os.environ.get(
+                                "FAKE_ORGANIZATION_ADMIN"
+                            ) == "1",
+                            "viewerCanCreateRepositories": os.environ.get(
+                                "FAKE_ORGANIZATION_CAN_CREATE"
+                            ) == "1",
                         }
                     print(json.dumps({"data": {"organization": organization}}))
                     raise SystemExit(0)
-                if arguments[:2] == ["api", "repos/owner/example"]:
+                if (
+                    len(arguments) >= 2
+                    and arguments[0] == "api"
+                    and arguments[1].startswith("orgs/")
+                ):
+                    print(json.dumps({
+                        "plan": {
+                            "name": os.environ.get(
+                                "FAKE_ORGANIZATION_PLAN", "free"
+                            )
+                        },
+                        "members_can_create_public_repositories": os.environ.get(
+                            "FAKE_ORGANIZATION_CAN_CREATE_PUBLIC"
+                        ) == "1",
+                        "members_can_create_private_repositories": os.environ.get(
+                            "FAKE_ORGANIZATION_CAN_CREATE_PRIVATE"
+                        ) == "1",
+                        "members_can_create_internal_repositories": os.environ.get(
+                            "FAKE_ORGANIZATION_CAN_CREATE_INTERNAL"
+                        ) == "1",
+                    }))
+                    raise SystemExit(0)
+                if (
+                    len(arguments) >= 2
+                    and arguments[0] == "api"
+                    and arguments[1].startswith("repos/")
+                    and arguments[1].endswith("/branches")
+                ):
+                    print("[]")
+                    raise SystemExit(0)
+                if (
+                    len(arguments) >= 2
+                    and arguments[0] == "api"
+                    and arguments[1].startswith("repos/")
+                ):
                     if state["created"] and os.environ.get("FAKE_OBSERVATION_FAILURE"):
                         print("network unavailable", file=sys.stderr)
                         raise SystemExit(2)
@@ -196,10 +233,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                         raise SystemExit(1)
                     print(json.dumps({"full_name": "owner/example"}))
                     raise SystemExit(0)
-                if arguments[:2] == ["api", "repos/owner/example/branches"]:
-                    print("[]")
-                    raise SystemExit(0)
-                if arguments[:3] == ["repo", "create", "owner/example"]:
+                if arguments[:2] == ["repo", "create"]:
                     state["created"] = True
                     with open(state_path, "w", encoding="utf-8") as handle:
                         json.dump(state, handle)
@@ -381,6 +415,69 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 self.assertFalse(
                     json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
                 )
+
+    def test_internal_visibility_requires_an_eligible_enterprise_organization(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "owner",
+                {},
+                "internal visibility requires an enterprise-owned GitHub organization",
+            ),
+            (
+                "team-organization",
+                {
+                    "FAKE_ORGANIZATION": "team-organization",
+                    "FAKE_ORGANIZATION_ADMIN": "1",
+                    "FAKE_ORGANIZATION_CAN_CREATE": "1",
+                    "FAKE_ORGANIZATION_PLAN": "team",
+                },
+                "does not support internal repositories",
+            ),
+        )
+        for owner, environment, diagnostic in cases:
+            with self.subTest(owner=owner):
+                result = self.run_create(
+                    "--owner",
+                    owner,
+                    "--visibility",
+                    "internal",
+                    extra_environment=environment,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
+
+    def test_internal_visibility_accepts_an_eligible_enterprise_organization(
+        self,
+    ) -> None:
+        result = self.run_create(
+            "--owner",
+            "enterprise-organization",
+            "--visibility",
+            "internal",
+            extra_environment={
+                "FAKE_ORGANIZATION": "enterprise-organization",
+                "FAKE_ORGANIZATION_CAN_CREATE": "1",
+                "FAKE_ORGANIZATION_CAN_CREATE_INTERNAL": "1",
+                "FAKE_ORGANIZATION_PLAN": "business_plus",
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        remote = subprocess.run(
+            ["git", "-C", str(self.destination), "remote", "get-url", "origin"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            remote.stdout.strip(),
+            "https://github.com/enterprise-organization/example.git",
+        )
 
     def test_lost_creation_response_reobserves_and_reports_the_retained_remote(
         self,

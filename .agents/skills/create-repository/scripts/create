@@ -189,7 +189,7 @@ def _observe_github_repository(repository: str) -> RemoteState:
     return RemoteState.UNKNOWN
 
 
-def _preflight_github(owner: str, repository: str) -> None:
+def _preflight_github(owner: str, repository: str, visibility: str) -> None:
     authenticated = _gh("auth", "status")
     if authenticated.returncode != 0:
         raise CreationError(
@@ -212,14 +212,19 @@ def _preflight_github(owner: str, repository: str) -> None:
         raise CreationError(
             "authenticated GitHub user response did not contain a login"
         )
-    if viewer_login.casefold() != owner.casefold():
+    if viewer_login.casefold() == owner.casefold():
+        if visibility == "internal":
+            raise CreationError(
+                "internal visibility requires an enterprise-owned GitHub organization"
+            )
+    else:
         organization_result = _gh(
             "api",
             "graphql",
             "-f",
             (
                 "query=query($login:String!){organization(login:$login)"
-                "{viewerCanCreateRepositories}}"
+                "{viewerCanAdminister viewerCanCreateRepositories}}"
             ),
             "-F",
             f"login={owner}",
@@ -254,6 +259,34 @@ def _preflight_github(owner: str, repository: str) -> None:
                 "authenticated user cannot create repositories for GitHub "
                 f"organization {owner}"
             )
+        if visibility == "internal":
+            details_result = _gh("api", f"orgs/{owner}")
+            if details_result.returncode != 0:
+                raise CreationError(
+                    f"cannot inspect GitHub organization {owner}: "
+                    + (details_result.stderr.strip() or details_result.stdout.strip())
+                )
+            try:
+                details = json.loads(details_result.stdout)
+                plan_name = details["plan"]["name"]
+            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                raise CreationError(
+                    f"GitHub organization response did not prove internal "
+                    f"repository eligibility for {owner}"
+                ) from exc
+            if plan_name not in {"business_plus", "enterprise"}:
+                raise CreationError(
+                    f"GitHub organization {owner} does not support internal "
+                    "repositories"
+                )
+            if (
+                organization.get("viewerCanAdminister") is not True
+                and details.get("members_can_create_internal_repositories") is not True
+            ):
+                raise CreationError(
+                    "authenticated user cannot create internal repositories for "
+                    f"GitHub organization {owner}"
+                )
     observation = _observe_github_repository(repository)
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
@@ -423,7 +456,7 @@ def main() -> int:
 
         selected_version = _stable_version(args.version or _latest_release())
         repository_name = f"{args.owner}/{args.name}"
-        _preflight_github(args.owner, repository_name)
+        _preflight_github(args.owner, repository_name, args.visibility)
         remote_state = RemoteState.ABSENT
 
         with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
