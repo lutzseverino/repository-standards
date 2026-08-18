@@ -6,7 +6,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from lib.github_settings import GitHubCliTransport, plan_live_github
+from lib.live_reconciliation import (
+    GitHubCliAdapter,
+    apply_live_delta,
+    reconcile_live_github,
+)
 from lib.repository_contract import ContractError, resolve_repository_contract
 from lib.standards import StandardsError, standards_root
 
@@ -27,12 +31,10 @@ def main() -> int:
             manifest=args.manifest,
         )
         contract = repository_contract.github
-        transport = GitHubCliTransport()
-        operations = plan_live_github(
-            contract,
-            transport,
-            required_labels=repository_contract.required_labels,
-        )
+        adapter = GitHubCliAdapter()
+        snapshot = adapter.observe(repository_contract)
+        delta = reconcile_live_github(repository_contract, snapshot)
+        operations = delta.operations
     except (StandardsError, ContractError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -48,20 +50,23 @@ def main() -> int:
             "Re-run with --write."
         )
         return 1
-    try:
-        for index, operation in enumerate(operations):
-            transport.request(operation.method, operation.endpoint, operation.payload)
-    except StandardsError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    report = apply_live_delta(delta, adapter)
+    if not report.complete:
+        print(f"error: {report.error}", file=sys.stderr)
         print("Completed operations:", file=sys.stderr)
-        if index:
-            for completed in operations[:index]:
+        if report.completed:
+            for completed in report.completed:
                 print(f"- {completed.description}", file=sys.stderr)
         else:
             print("- none", file=sys.stderr)
+        print("Failed operation:", file=sys.stderr)
+        print(f"- {report.failed.description}", file=sys.stderr)
         print("Remaining operations:", file=sys.stderr)
-        for remaining in operations[index:]:
-            print(f"- {remaining.description}", file=sys.stderr)
+        if report.remaining:
+            for remaining in report.remaining:
+                print(f"- {remaining.description}", file=sys.stderr)
+        else:
+            print("- none", file=sys.stderr)
         return 2
     print(f"\nApplied {len(operations)} live operation(s) to {contract.repository}.")
     return 0

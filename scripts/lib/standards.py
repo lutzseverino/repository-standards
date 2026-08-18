@@ -16,6 +16,9 @@ from typing import Any, Iterable
 from .changelog import ChangelogError, SEMVER, validate_changelog
 from .repository_contract import (
     ContractError,
+    DEFAULT_GITHUB_FEATURES,
+    DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE,
+    DEFAULT_SQUASH_MERGE_COMMIT_TITLE,
     RepositoryBoundary,
     RepositoryContract,
     resolve_repository_contract,
@@ -322,9 +325,12 @@ def _load_manifest(repository: Path, requested: str | None = None) -> tuple[Path
             "settings",
             "ruleset",
         }
-        if set(github) != required_github_fields:
+        if not required_github_fields.issubset(github) or set(github) - (
+            required_github_fields | {"features"}
+        ):
             raise StandardsError(
-                "github must define repository, default-branch, settings, and ruleset"
+                "github must define repository, default-branch, settings, and ruleset; "
+                "optional features may also be declared"
             )
         repository_name = github.get("repository")
         if not isinstance(repository_name, str) or not re.fullmatch(
@@ -341,13 +347,51 @@ def _load_manifest(repository: Path, requested: str | None = None) -> tuple[Path
             "allow-merge-commit",
             "allow-rebase-merge",
         }
-        if not isinstance(settings, dict) or set(settings) != required_settings:
+        squash_settings = {
+            "squash-merge-commit-title",
+            "squash-merge-commit-message",
+        }
+        if (
+            not isinstance(settings, dict)
+            or not required_settings.issubset(settings)
+            or set(settings) - (required_settings | squash_settings)
+        ):
             raise StandardsError(
                 "github.settings must define delete-branch-on-merge, "
-                "allow-squash-merge, allow-merge-commit, and allow-rebase-merge"
+                "allow-squash-merge, allow-merge-commit, and allow-rebase-merge; "
+                "optional squash commit title and message settings may also be declared"
             )
-        if not all(isinstance(value, bool) for value in settings.values()):
+        if not all(isinstance(settings[key], bool) for key in required_settings):
             raise StandardsError("github.settings values must be booleans")
+        if settings.get(
+            "squash-merge-commit-title", DEFAULT_SQUASH_MERGE_COMMIT_TITLE
+        ) not in {
+            "PR_TITLE",
+            "COMMIT_OR_PR_TITLE",
+        }:
+            raise StandardsError(
+                "github.settings.squash-merge-commit-title is invalid"
+            )
+        if settings.get(
+            "squash-merge-commit-message", DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE
+        ) not in {
+            "PR_BODY",
+            "COMMIT_MESSAGES",
+            "BLANK",
+        }:
+            raise StandardsError(
+                "github.settings.squash-merge-commit-message is invalid"
+            )
+        features = github.get("features", DEFAULT_GITHUB_FEATURES)
+        required_features = {"issues", "projects", "wiki"}
+        if not isinstance(features, dict) or set(features) != required_features:
+            raise StandardsError(
+                "github.features must define issues, projects, and wiki"
+            )
+        if not all(isinstance(value, bool) for value in features.values()):
+            raise StandardsError("github.features values must be booleans")
+        if not features["issues"]:
+            raise StandardsError("github.features.issues must be true")
         ruleset = github.get("ruleset")
         if ruleset is not None:
             required_ruleset = {

@@ -166,5 +166,7 @@ planning flow.
 - disable Wiki and repository Projects unless actively used.
 
 The common profile declares the required label names. `scripts/audit-live`
-checks their presence together with declared repository settings and rulesets.
-Label provisioning remains a deliberate manual action.
+renders their presence together with declared repository settings, features,
+and rulesets from one live desired-state delta. `scripts/sync-live` previews and
+applies operations projected from that same delta while preserving undeclared
+live resources.
