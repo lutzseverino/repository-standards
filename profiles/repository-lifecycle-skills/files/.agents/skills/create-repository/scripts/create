@@ -12,6 +12,8 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+from contextlib import nullcontext
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from pathlib import Path
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
 LINE_SEPARATOR = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
+LICENSE_PLACEHOLDER = re.compile(r"\{\{\s*[A-Za-z][A-Za-z0-9_-]*\s*\}\}")
 
 
 class CreationError(Exception):
@@ -43,6 +46,12 @@ class RepositoryContentPath(Enum):
     CONTEXT = "CONTEXT.md"
     DOCUMENTATION = "docs/README.md"
     DOMAIN_CONFIGURATION = "docs/agents/domain.md"
+
+
+@dataclass(frozen=True)
+class PreparedLiveState:
+    summary: str
+    findings: tuple[str, ...] = ()
 
 
 def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -233,29 +242,42 @@ def _resolve_license(
         raise CreationError(
             "selected standards release has an invalid license catalog entry"
         )
-    renderer = matches[0].get("renderer")
     relative_file = matches[0].get("file")
-    if renderer == "mit" and relative_file is None:
-        body = _mit_license(owner)
-    elif renderer is None and isinstance(relative_file, str):
-        if Path(relative_file).name != relative_file:
-            raise CreationError(
-                "selected standards release has an unsafe license catalog entry"
-            )
-        try:
-            body = (catalog_path.parent / relative_file).read_text(encoding="utf-8")
-        except OSError as exc:
-            raise CreationError(
-                f"cannot read pinned license text for {canonical_identifier}: {exc}"
-            ) from exc
-        if not body:
-            raise CreationError(
-                f"pinned license text is empty for {canonical_identifier}"
-            )
-    else:
+    replacements = matches[0].get("replacements", {})
+    if not isinstance(relative_file, str) or not isinstance(replacements, dict):
         raise CreationError(
             "selected standards release has an invalid license catalog entry"
         )
+    if Path(relative_file).name != relative_file:
+        raise CreationError(
+            "selected standards release has an unsafe license catalog entry"
+        )
+    try:
+        body = (catalog_path.parent / relative_file).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CreationError(
+            f"cannot read pinned license text for {canonical_identifier}: {exc}"
+        ) from exc
+    if not body:
+        raise CreationError(
+            f"pinned license text is empty for {canonical_identifier}"
+        )
+    observed_placeholders = set(LICENSE_PLACEHOLDER.findall(body))
+    if observed_placeholders != set(replacements):
+        raise CreationError(
+            "selected standards release has an invalid license template"
+        )
+    replacement_values = {"owner": owner}
+    for placeholder, variable in replacements.items():
+        if (
+            not isinstance(placeholder, str)
+            or not isinstance(variable, str)
+            or variable not in replacement_values
+        ):
+            raise CreationError(
+                "selected standards release has an invalid license template"
+            )
+        body = body.replace(placeholder, replacement_values[variable])
     return canonical_identifier, body
 
 
@@ -270,6 +292,51 @@ def _observe_github_repository(
         if absence_is_conclusive:
             return RemoteState.ABSENT
     return RemoteState.UNKNOWN
+
+
+def _current_owner_visibility_is_conclusive(owner: str) -> bool:
+    viewer = _gh("api", "user")
+    if viewer.returncode != 0:
+        return False
+    try:
+        viewer_login = json.loads(viewer.stdout)["login"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
+    if isinstance(viewer_login, str) and viewer_login.casefold() == owner.casefold():
+        return True
+    organization_result = _gh(
+        "api",
+        "graphql",
+        "-f",
+        (
+            "query=query($login:String!){organization(login:$login)"
+            "{viewerCanAdminister}}"
+        ),
+        "-F",
+        f"login={owner}",
+    )
+    if organization_result.returncode != 0:
+        return False
+    try:
+        organization = json.loads(organization_result.stdout)["data"][
+            "organization"
+        ]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
+    return (
+        isinstance(organization, dict)
+        and organization.get("viewerCanAdminister") is True
+    )
+
+
+def _reobserve_github_repository(owner: str, repository: str) -> RemoteState:
+    try:
+        absence_is_conclusive = _current_owner_visibility_is_conclusive(owner)
+        return _observe_github_repository(
+            repository, absence_is_conclusive=absence_is_conclusive
+        )
+    except OSError:
+        return RemoteState.UNKNOWN
 
 
 def _preflight_github(
@@ -462,29 +529,68 @@ def _tool(checkout: Path, name: str) -> str:
     return str(checkout / "scripts" / name)
 
 
-def _mit_license(owner: str) -> str:
-    return f"""MIT License
-
-Copyright (c) {owner}
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-"""
+def _observe_prepared_live_state(
+    checkout: Path, destination: Path
+) -> PreparedLiveState:
+    try:
+        result = subprocess.run(
+            [
+                _tool(checkout, "audit-live"),
+                "--lifecycle",
+                "prepared",
+                "--json",
+                str(destination),
+            ],
+            cwd=destination,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return PreparedLiveState(
+            "state unknown; retained-state observation could not run",
+            (str(exc),),
+        )
+    diagnostic = result.stderr.strip() or result.stdout.strip()
+    if result.returncode not in (0, 1):
+        return PreparedLiveState(
+            "state unknown; retained-state observation failed",
+            (diagnostic or f"audit-live exited {result.returncode}",),
+        )
+    try:
+        report = json.loads(result.stdout)
+        errors = report["errors"]
+        pending = report["pending"]
+        applicable_clean = report["applicable-clean"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return PreparedLiveState(
+            "state unknown; retained-state observation was invalid",
+            (diagnostic or "audit-live returned no diagnostic",),
+        )
+    if (
+        not isinstance(errors, list)
+        or not all(isinstance(finding, str) for finding in errors)
+        or not isinstance(pending, list)
+        or not all(isinstance(finding, str) for finding in pending)
+        or not isinstance(applicable_clean, bool)
+        or applicable_clean != (not errors)
+        or result.returncode != (1 if errors else 0)
+    ):
+        return PreparedLiveState(
+            "state unknown; retained-state observation was invalid",
+            (diagnostic or "audit-live returned an incoherent report",),
+        )
+    findings = tuple(
+        [f"applicable drift: {finding}" for finding in errors]
+        + [f"publication pending: {finding}" for finding in pending]
+    )
+    if errors:
+        return PreparedLiveState("re-observed with applicable drift", findings)
+    if pending:
+        return PreparedLiveState(
+            "re-observed; applicable prepared state validated", findings
+        )
+    return PreparedLiveState("re-observed; prepared live state validated")
 
 
 def _write_repository_content(
@@ -545,8 +651,9 @@ def _retained_state(
     local_state: str,
     repository_name: str | None,
     remote_state: RemoteState,
+    remote_creation_attempted: bool,
     origin_configured: bool,
-    live_state: str,
+    live_state: PreparedLiveState,
 ) -> None:
     print("\nRetained state after failure:", file=sys.stderr)
     print(
@@ -587,12 +694,21 @@ def _retained_state(
             file=sys.stderr,
         )
     if remote_state is RemoteState.CREATED:
-        remote_description = "created and retained"
+        remote_description = (
+            "created and retained"
+            if remote_creation_attempted
+            else "now exists; creation was not attempted by this operation"
+        )
     elif remote_state is RemoteState.ABSENT:
         remote_description = "confirmed absent"
     elif remote_state is RemoteState.UNKNOWN:
+        context = (
+            "attempted creation"
+            if remote_creation_attempted
+            else "the earlier absence check"
+        )
         remote_description = (
-            "state unknown after attempted creation; inspect "
+            f"state unknown after {context}; inspect "
             f"{repository_name or 'the requested identity'} before retry"
         )
     else:
@@ -602,7 +718,12 @@ def _retained_state(
         f"- origin: {'configured' if origin_configured else 'not configured'}",
         file=sys.stderr,
     )
-    print(f"- prepared live reconciliation: {live_state}", file=sys.stderr)
+    print(
+        f"- prepared live reconciliation: {live_state.summary}",
+        file=sys.stderr,
+    )
+    for finding in live_state.findings:
+        print(f"  - {finding}", file=sys.stderr)
     print("- no automatic deletion or rollback was attempted", file=sys.stderr)
 
 
@@ -625,9 +746,11 @@ def main() -> int:
     remote_creation_attempted = False
     origin_configured = False
     local_state = "not created"
-    live_state = "not started"
+    live_state = PreparedLiveState("not started")
     destination = Path(args.destination).expanduser()
     repository_name: str | None = None
+    checkout: Path | None = None
+    temporary_checkout: tempfile.TemporaryDirectory[str] | None = None
     try:
         if not IDENTITY.fullmatch(args.name) or not IDENTITY.fullmatch(args.owner):
             raise CreationError("repository name and owner must be explicit GitHub identities")
@@ -656,7 +779,11 @@ def main() -> int:
         )
         remote_state = RemoteState.ABSENT
 
-        with tempfile.TemporaryDirectory(prefix="repository-creation-") as directory:
+        temporary_checkout = tempfile.TemporaryDirectory(
+            prefix="repository-creation-"
+        )
+        # Retain the selected release until failure-state observation completes.
+        with nullcontext(temporary_checkout.name) as directory:
             temporary_root = Path(directory)
             checkout = _checked_out_release(selected_version, temporary_root)
             license_identifier, license_text = _resolve_license(
@@ -773,7 +900,7 @@ def main() -> int:
                 cwd=destination,
                 allowed=(0, 1),
             )
-            live_state = "preview completed"
+            live_state = PreparedLiveState("preview completed")
             _run_phase(
                 "Prepared live synchronization write",
                 [
@@ -785,7 +912,7 @@ def main() -> int:
                 ],
                 cwd=destination,
             )
-            live_state = "applicable changes applied"
+            live_state = PreparedLiveState("applicable changes applied")
             _run_phase(
                 "Prepared live standards audit",
                 [
@@ -796,7 +923,9 @@ def main() -> int:
                 ],
                 cwd=destination,
             )
-            live_state = "validated; publication requirements pending"
+            live_state = PreparedLiveState(
+                "validated; publication requirements pending"
+            )
 
         head = _git(destination, "rev-parse", "--verify", "HEAD")
         if head.returncode == 0:
@@ -814,12 +943,21 @@ def main() -> int:
         if observed_branches:
             raise CreationError("creation unexpectedly published a GitHub branch")
     except (CreationError, OSError) as exc:
-        if (
-            repository_name
-            and remote_creation_attempted
-            and remote_state is not RemoteState.CREATED
+        if repository_name and (
+            remote_creation_attempted or remote_state is RemoteState.ABSENT
         ):
-            remote_state = _observe_github_repository(repository_name)
+            remote_state = _reobserve_github_repository(args.owner, repository_name)
+        if remote_creation_attempted:
+            if remote_state is RemoteState.CREATED and checkout is not None:
+                live_state = _observe_prepared_live_state(checkout, destination)
+            elif remote_state is RemoteState.ABSENT:
+                live_state = PreparedLiveState(
+                    "not retained; GitHub repository is confirmed absent"
+                )
+            else:
+                live_state = PreparedLiveState(
+                    "state unknown; GitHub repository could not be observed"
+                )
         if destination.is_dir():
             observed_origin = _git(destination, "remote", "get-url", "origin")
             origin_configured = observed_origin.returncode == 0
@@ -829,10 +967,14 @@ def main() -> int:
             local_state=local_state,
             repository_name=repository_name,
             remote_state=remote_state,
+            remote_creation_attempted=remote_creation_attempted,
             origin_configured=origin_configured,
             live_state=live_state,
         )
         return 2
+    finally:
+        if temporary_checkout is not None:
+            temporary_checkout.cleanup()
 
     print(f"\nPrepared creation baseline: {args.owner}/{args.name}")
     print(f"- local baseline: {destination} (uncommitted on main)")

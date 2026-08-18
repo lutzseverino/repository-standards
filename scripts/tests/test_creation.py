@@ -41,7 +41,12 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             json.dumps(
                 {
                     "licenses": [
-                        {"key": "mit", "spdx-id": "MIT", "renderer": "mit"},
+                        {
+                            "key": "mit",
+                            "spdx-id": "MIT",
+                            "file": "MIT.txt",
+                            "replacements": {"{{ owner }}": "owner"},
+                        },
                         {
                             "key": "apache-2.0",
                             "spdx-id": "Apache-2.0",
@@ -51,6 +56,10 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 }
             )
             + "\n",
+            encoding="utf-8",
+        )
+        (licenses / "MIT.txt").write_text(
+            "Selected release MIT license for {{ owner }}.\n",
             encoding="utf-8",
         )
         (licenses / "Apache-2.0.txt").write_text(
@@ -102,6 +111,13 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     json.dumps(manifest) + "\\n", encoding="utf-8"
                 )
                 if os.environ.get("FAKE_REPOSITORY_CONTENT_FAILURE"):
+                    if os.environ.get("FAKE_CONCURRENT_REMOTE"):
+                        state_path = os.environ["FAKE_GITHUB_STATE"]
+                        with open(state_path, encoding="utf-8") as handle:
+                            state = json.load(handle)
+                        state["created"] = True
+                        with open(state_path, "w", encoding="utf-8") as handle:
+                            json.dump(state, handle)
                     (destination / "LICENSE").mkdir()
                 print("initialized")
             """,
@@ -134,6 +150,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             """,
             "sync-live": """\
                 #!/usr/bin/env python3
+                import json
                 import os
                 import sys
 
@@ -141,17 +158,42 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
                     handle.write(f"sync-live {mode} {' '.join(sys.argv[1:])}\\n")
                 if mode == "write" and os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
+                    if os.environ.get("FAKE_DELETE_DURING_LIVE_FAILURE"):
+                        with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
+                            state = json.load(handle)
+                        state["created"] = False
+                        with open(os.environ["FAKE_GITHUB_STATE"], "w", encoding="utf-8") as handle:
+                            json.dump(state, handle)
                     print("injected live write failure", file=sys.stderr)
                     raise SystemExit(2)
+                if mode == "write":
+                    with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
+                        state = json.load(handle)
+                    state["live_applied"] = True
+                    with open(os.environ["FAKE_GITHUB_STATE"], "w", encoding="utf-8") as handle:
+                        json.dump(state, handle)
                 raise SystemExit(0 if mode == "write" else 1)
             """,
             "audit-live": """\
                 #!/usr/bin/env python3
+                import json
                 import os
                 import sys
 
                 with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
                     handle.write(f"audit-live {' '.join(sys.argv[1:])}\\n")
+                if "--json" in sys.argv:
+                    with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
+                        state = json.load(handle)
+                    errors = [] if state.get("live_applied") else [
+                        "github label enhancement is missing"
+                    ]
+                    print(json.dumps({
+                        "applicable-clean": not errors,
+                        "errors": errors,
+                        "pending": ["github.ruleset awaits first publication"],
+                    }))
+                    raise SystemExit(1 if errors else 0)
                 print("Prepared live contract validated; first publication pending.")
             """,
         }
@@ -207,6 +249,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 if arguments[:2] == ["auth", "status"]:
                     raise SystemExit(0)
                 if arguments[:2] == ["api", "user"]:
+                    if state["created"] and os.environ.get("FAKE_REVOKE_AFTER_CREATE"):
+                        print("authentication revoked", file=sys.stderr)
+                        raise SystemExit(1)
                     print(json.dumps({
                         "login": "owner",
                         "plan": {
@@ -273,6 +318,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     if state["created"] and os.environ.get("FAKE_OBSERVATION_FAILURE"):
                         print("network unavailable", file=sys.stderr)
                         raise SystemExit(2)
+                    if state["created"] and os.environ.get("FAKE_REVOKE_AFTER_CREATE"):
+                        print("HTTP 404: Not Found", file=sys.stderr)
+                        raise SystemExit(1)
                     if not state["created"]:
                         print("HTTP 404: Not Found", file=sys.stderr)
                         raise SystemExit(1)
@@ -302,16 +350,21 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self,
         *arguments: str,
         extra_environment: dict[str, str] | None = None,
+        use_reusable_checkout: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         environment.update(
             {
-                "REPOSITORY_STANDARDS_CHECKOUT": str(self.release),
+                "REPOSITORY_STANDARDS_SOURCE": str(self.release),
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
                 "FAKE_GITHUB_STATE": str(self.github_state),
                 "FAKE_CREATION_LOG": str(self.log),
             }
         )
+        if use_reusable_checkout:
+            environment["REPOSITORY_STANDARDS_CHECKOUT"] = str(self.release)
+        else:
+            environment.pop("REPOSITORY_STANDARDS_CHECKOUT", None)
         if extra_environment:
             environment.update(extra_environment)
         return subprocess.run(
@@ -363,9 +416,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         )
         self.assertIsNone(manifest["github"]["ruleset"])
         self.assertEqual(manifest["variables"]["license"], "MIT")
-        self.assertIn(
-            "Copyright (c) owner",
+        self.assertEqual(
             (self.destination / "LICENSE").read_text(encoding="utf-8"),
+            "Selected release MIT license for owner.\n",
         )
         head = subprocess.run(
             ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
@@ -407,7 +460,8 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
     def test_live_failure_retains_both_repositories_and_reports_exact_state(self) -> None:
         result = self.run_create(
-            extra_environment={"FAKE_LIVE_WRITE_FAILURE": "1"}
+            extra_environment={"FAKE_LIVE_WRITE_FAILURE": "1"},
+            use_reusable_checkout=False,
         )
 
         self.assertEqual(result.returncode, 2)
@@ -415,9 +469,55 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertIn("local destination: present", result.stderr)
         self.assertIn("GitHub repository: created and retained", result.stderr)
         self.assertIn("origin: configured", result.stderr)
+        self.assertIn(
+            "prepared live reconciliation: re-observed with applicable drift",
+            result.stderr,
+        )
+        self.assertIn(
+            "applicable drift: github label enhancement is missing",
+            result.stderr,
+        )
         self.assertIn("no automatic deletion or rollback", result.stderr)
         self.assertTrue((self.destination / "managed.txt").is_file())
         self.assertTrue(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
+
+    def test_deleted_repository_is_reobserved_after_live_failure(self) -> None:
+        result = self.run_create(
+            extra_environment={
+                "FAKE_LIVE_WRITE_FAILURE": "1",
+                "FAKE_DELETE_DURING_LIVE_FAILURE": "1",
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prepared live synchronization write failed", result.stderr)
+        self.assertIn("GitHub repository: confirmed absent", result.stderr)
+        self.assertIn(
+            "prepared live reconciliation: not retained; GitHub repository is "
+            "confirmed absent",
+            result.stderr,
+        )
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
+
+    def test_revoked_access_is_not_reported_as_a_retained_repository(self) -> None:
+        result = self.run_create(
+            extra_environment={
+                "FAKE_LIVE_WRITE_FAILURE": "1",
+                "FAKE_REVOKE_AFTER_CREATE": "1",
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prepared live synchronization write failed", result.stderr)
+        self.assertIn("GitHub repository: state unknown", result.stderr)
+        self.assertNotIn("GitHub repository: created and retained", result.stderr)
+        self.assertIn(
+            "prepared live reconciliation: state unknown; GitHub repository "
+            "could not be observed",
+            result.stderr,
+        )
 
     def test_local_content_failure_reports_observed_retained_state(self) -> None:
         result = self.run_create(
@@ -438,6 +538,22 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertFalse(
             json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
         )
+
+    def test_local_failure_reobserves_a_concurrent_remote(self) -> None:
+        result = self.run_create(
+            extra_environment={
+                "FAKE_REPOSITORY_CONTENT_FAILURE": "1",
+                "FAKE_CONCURRENT_REMOTE": "1",
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "GitHub repository: now exists; creation was not attempted by this "
+            "operation",
+            result.stderr,
+        )
+        self.assertNotIn("GitHub repository: created and retained", result.stderr)
 
     def test_local_and_remote_collisions_stop_before_creation_mutation(self) -> None:
         collision = self.destination / "existing.txt"

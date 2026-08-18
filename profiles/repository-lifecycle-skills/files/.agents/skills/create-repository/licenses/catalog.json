@@ -3,7 +3,10 @@
     {
       "key": "mit",
       "spdx-id": "MIT",
-      "renderer": "mit"
+      "file": "MIT.txt",
+      "replacements": {
+        "{{ owner }}": "owner"
+      }
     },
     {
       "key": "apache-2.0",
