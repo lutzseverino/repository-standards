@@ -9,6 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
+from .repository_contract import GitHubContract
 from .standards import StandardsError
 
 
@@ -19,6 +20,14 @@ SETTINGS_MAPPING = {
     "allow-merge-commit": "allow_merge_commit",
     "allow-rebase-merge": "allow_rebase_merge",
 }
+
+
+def _normalized_contract(
+    contract: GitHubContract | dict[str, Any],
+) -> dict[str, Any]:
+    if isinstance(contract, GitHubContract):
+        return contract.as_mapping()
+    return contract
 
 
 @dataclass(frozen=True)
@@ -197,11 +206,12 @@ def _compare_ruleset(
 
 
 def inspect_live_github(
-    contract: dict[str, Any],
+    contract: GitHubContract | dict[str, Any],
     fetch_json: JsonFetcher = gh_json,
     *,
     required_labels: Iterable[str] = (),
 ) -> list[str]:
+    contract = _normalized_contract(contract)
     repository = contract["repository"]
     repository_data = fetch_json(f"repos/{repository}")
     errors: list[str] = []
@@ -320,11 +330,12 @@ def _ruleset_payload(
 
 
 def plan_live_github(
-    contract: dict[str, Any],
+    contract: GitHubContract | dict[str, Any],
     transport: GitHubCliTransport,
     *,
     required_labels: Iterable[str] = (),
 ) -> list[LiveOperation]:
+    contract = _normalized_contract(contract)
     repository = contract["repository"]
     repository_endpoint = f"repos/{repository}"
     repository_data = transport.request("GET", repository_endpoint)
