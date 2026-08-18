@@ -438,6 +438,26 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
                 )
 
+    def test_github_metadata_limits_stop_before_local_mutation(self) -> None:
+        cases = (
+            (
+                ("--name", "n" * 101),
+                "repository name must not exceed 100 characters",
+            ),
+            (
+                ("--purpose", "p" * 351),
+                "purpose must not exceed 350 characters",
+            ),
+        )
+        for arguments, diagnostic in cases:
+            with self.subTest(arguments=arguments):
+                result = self.run_create(*arguments)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
+
     def test_internal_visibility_requires_an_eligible_enterprise_organization(
         self,
     ) -> None:
@@ -524,6 +544,36 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     manifest["github"]["ruleset"] is not None,
                     expected_ruleset,
                 )
+
+    def test_unknown_plan_does_not_disable_the_canonical_ruleset(self) -> None:
+        cases = (
+            (
+                (),
+                {"FAKE_USER_PLAN": "future-personal-plan"},
+                "unknown GitHub user plan",
+            ),
+            (
+                ("--owner", "future-organization"),
+                {
+                    "FAKE_ORGANIZATION": "future-organization",
+                    "FAKE_ORGANIZATION_ADMIN": "1",
+                    "FAKE_ORGANIZATION_CAN_CREATE": "1",
+                    "FAKE_ORGANIZATION_PLAN": "future-organization-plan",
+                },
+                "unknown GitHub organization plan",
+            ),
+        )
+        for arguments, environment, diagnostic in cases:
+            with self.subTest(arguments=arguments):
+                result = self.run_create(
+                    *arguments,
+                    extra_environment=environment,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(self.destination.exists())
+                self.assertFalse(self.log.exists())
 
     def test_internal_visibility_accepts_an_eligible_enterprise_organization(
         self,

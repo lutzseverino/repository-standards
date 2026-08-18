@@ -235,11 +235,15 @@ def _preflight_github(
                     "authenticated GitHub user response did not prove private "
                     "repository ruleset support"
                 ) from exc
-            ruleset_support = (
-                RulesetSupport.SUPPORTED
-                if viewer_plan in {"pro", "business_plus", "enterprise"}
-                else RulesetSupport.UNSUPPORTED
-            )
+            if viewer_plan == "pro":
+                ruleset_support = RulesetSupport.SUPPORTED
+            elif viewer_plan == "free":
+                ruleset_support = RulesetSupport.UNSUPPORTED
+            else:
+                raise CreationError(
+                    f"unknown GitHub user plan {viewer_plan!r}; cannot prove "
+                    "private repository ruleset support"
+                )
     else:
         organization_result = _gh(
             "api",
@@ -327,12 +331,15 @@ def _preflight_github(
                     f"GitHub organization {owner} does not support internal "
                     "repositories"
                 )
-            ruleset_support = (
-                RulesetSupport.SUPPORTED
-                if plan_name
-                in {"team", "business", "business_plus", "enterprise"}
-                else RulesetSupport.UNSUPPORTED
-            )
+            if plan_name in {"team", "business", "business_plus", "enterprise"}:
+                ruleset_support = RulesetSupport.SUPPORTED
+            elif plan_name == "free":
+                ruleset_support = RulesetSupport.UNSUPPORTED
+            else:
+                raise CreationError(
+                    f"unknown GitHub organization plan {plan_name!r}; cannot prove "
+                    f"{visibility} repository ruleset support for {owner}"
+                )
     observation = _observe_github_repository(repository)
     if observation is RemoteState.CREATED:
         raise CreationError(f"GitHub identity collision; repository exists: {repository}")
@@ -487,8 +494,12 @@ def main() -> int:
     try:
         if not IDENTITY.fullmatch(args.name) or not IDENTITY.fullmatch(args.owner):
             raise CreationError("repository name and owner must be explicit GitHub identities")
+        if len(args.name) > 100:
+            raise CreationError("repository name must not exceed 100 characters")
         if not args.purpose.strip() or "\n" in args.purpose:
             raise CreationError("purpose must be one explicit non-empty line")
+        if len(args.purpose) > 350:
+            raise CreationError("purpose must not exceed 350 characters")
         destination = _destination(args.destination)
         facts: dict[str, str] = {}
         for declaration in args.fact:
