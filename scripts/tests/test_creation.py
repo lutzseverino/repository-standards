@@ -332,6 +332,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                         json.dump(state, handle)
                     with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
                         handle.write("github create\\n")
+                    if os.environ.get("FAKE_CONCURRENT_CREATE_COLLISION"):
+                        print("repository already exists", file=sys.stderr)
+                        raise SystemExit(1)
                     if os.environ.get("FAKE_CREATE_RESPONSE_FAILURE"):
                         print("connection lost after creation", file=sys.stderr)
                         raise SystemExit(1)
@@ -467,7 +470,10 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Prepared live synchronization write failed", result.stderr)
         self.assertIn("local destination: present", result.stderr)
-        self.assertIn("GitHub repository: created and retained", result.stderr)
+        self.assertIn(
+            "GitHub repository: creation confirmed; repository currently exists",
+            result.stderr,
+        )
         self.assertIn("origin: configured", result.stderr)
         self.assertIn(
             "prepared live reconciliation: re-observed with applicable drift",
@@ -491,7 +497,10 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Prepared live synchronization write failed", result.stderr)
-        self.assertIn("GitHub repository: confirmed absent", result.stderr)
+        self.assertIn(
+            "GitHub repository: creation was confirmed; repository is now absent",
+            result.stderr,
+        )
         self.assertIn(
             "prepared live reconciliation: not retained; GitHub repository is "
             "confirmed absent",
@@ -512,7 +521,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Prepared live synchronization write failed", result.stderr)
         self.assertIn("GitHub repository: state unknown", result.stderr)
-        self.assertNotIn("GitHub repository: created and retained", result.stderr)
+        self.assertNotIn("repository currently exists", result.stderr)
         self.assertIn(
             "prepared live reconciliation: state unknown; GitHub repository "
             "could not be observed",
@@ -553,7 +562,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             "operation",
             result.stderr,
         )
-        self.assertNotIn("GitHub repository: created and retained", result.stderr)
+        self.assertNotIn("creation confirmed", result.stderr)
 
     def test_local_and_remote_collisions_stop_before_creation_mutation(self) -> None:
         collision = self.destination / "existing.txt"
@@ -877,7 +886,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         )
         self.assertEqual(manifest["github"]["ruleset"]["name"], "Protect main")
 
-    def test_lost_creation_response_reobserves_and_reports_the_retained_remote(
+    def test_lost_creation_response_reports_unknown_remote_attribution(
         self,
     ) -> None:
         result = self.run_create(
@@ -887,9 +896,35 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("GitHub repository creation failed", result.stderr)
         self.assertIn("offline baseline validated", result.stderr)
-        self.assertIn("GitHub repository: created and retained", result.stderr)
+        self.assertIn(
+            "GitHub repository: repository currently exists after an unconfirmed "
+            "creation attempt; attribution unknown",
+            result.stderr,
+        )
+        self.assertIn(
+            "prepared live reconciliation: not observed; repository attribution "
+            "is unknown",
+            result.stderr,
+        )
         self.assertIn("origin: not configured", result.stderr)
         self.assertTrue(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
+
+    def test_concurrent_create_collision_reports_unknown_remote_attribution(
+        self,
+    ) -> None:
+        result = self.run_create(
+            extra_environment={"FAKE_CONCURRENT_CREATE_COLLISION": "1"}
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("GitHub repository creation failed", result.stderr)
+        self.assertIn(
+            "repository currently exists after an unconfirmed creation attempt; "
+            "attribution unknown",
+            result.stderr,
+        )
+        self.assertNotIn("creation confirmed", result.stderr)
+        self.assertIn("origin: not configured", result.stderr)
 
     def test_inconclusive_reobservation_reports_unknown_remote_state(self) -> None:
         result = self.run_create(

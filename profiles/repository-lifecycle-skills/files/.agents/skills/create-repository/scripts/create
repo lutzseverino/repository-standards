@@ -35,6 +35,12 @@ class RemoteState(Enum):
     UNKNOWN = "unknown"
 
 
+class RemoteCreationOutcome(Enum):
+    NOT_ATTEMPTED = "not-attempted"
+    ATTEMPTED_UNCONFIRMED = "attempted-unconfirmed"
+    CONFIRMED = "confirmed"
+
+
 class RulesetSupport(Enum):
     SUPPORTED = "supported"
     UNSUPPORTED = "unsupported"
@@ -651,7 +657,7 @@ def _retained_state(
     local_state: str,
     repository_name: str | None,
     remote_state: RemoteState,
-    remote_creation_attempted: bool,
+    remote_creation: RemoteCreationOutcome,
     origin_configured: bool,
     live_state: PreparedLiveState,
 ) -> None:
@@ -694,19 +700,30 @@ def _retained_state(
             file=sys.stderr,
         )
     if remote_state is RemoteState.CREATED:
-        remote_description = (
-            "created and retained"
-            if remote_creation_attempted
-            else "now exists; creation was not attempted by this operation"
-        )
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
+            remote_description = "creation confirmed; repository currently exists"
+        elif remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED:
+            remote_description = (
+                "repository currently exists after an unconfirmed creation "
+                "attempt; attribution unknown"
+            )
+        else:
+            remote_description = (
+                "now exists; creation was not attempted by this operation"
+            )
     elif remote_state is RemoteState.ABSENT:
-        remote_description = "confirmed absent"
-    elif remote_state is RemoteState.UNKNOWN:
-        context = (
-            "attempted creation"
-            if remote_creation_attempted
-            else "the earlier absence check"
+        remote_description = (
+            "creation was confirmed; repository is now absent"
+            if remote_creation is RemoteCreationOutcome.CONFIRMED
+            else "confirmed absent"
         )
+    elif remote_state is RemoteState.UNKNOWN:
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
+            context = "confirmed creation"
+        elif remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED:
+            context = "an unconfirmed creation attempt"
+        else:
+            context = "the earlier absence check"
         remote_description = (
             f"state unknown after {context}; inspect "
             f"{repository_name or 'the requested identity'} before retry"
@@ -743,7 +760,7 @@ def main() -> int:
     args = parser.parse_args()
 
     remote_state = RemoteState.NOT_ATTEMPTED
-    remote_creation_attempted = False
+    remote_creation = RemoteCreationOutcome.NOT_ATTEMPTED
     origin_configured = False
     local_state = "not created"
     live_state = PreparedLiveState("not started")
@@ -859,7 +876,7 @@ def main() -> int:
             )
             local_state = "offline baseline validated"
 
-            remote_creation_attempted = True
+            remote_creation = RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
             created = _gh(
                 "repo",
                 "create",
@@ -874,6 +891,7 @@ def main() -> int:
                     "GitHub repository creation failed: "
                     + (created.stderr.strip() or created.stdout.strip())
                 )
+            remote_creation = RemoteCreationOutcome.CONFIRMED
             remote_state = RemoteState.CREATED
             added = _git(
                 destination,
@@ -944,10 +962,11 @@ def main() -> int:
             raise CreationError("creation unexpectedly published a GitHub branch")
     except (CreationError, OSError) as exc:
         if repository_name and (
-            remote_creation_attempted or remote_state is RemoteState.ABSENT
+            remote_creation is not RemoteCreationOutcome.NOT_ATTEMPTED
+            or remote_state is RemoteState.ABSENT
         ):
             remote_state = _reobserve_github_repository(args.owner, repository_name)
-        if remote_creation_attempted:
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
             if remote_state is RemoteState.CREATED and checkout is not None:
                 live_state = _observe_prepared_live_state(checkout, destination)
             elif remote_state is RemoteState.ABSENT:
@@ -958,6 +977,13 @@ def main() -> int:
                 live_state = PreparedLiveState(
                     "state unknown; GitHub repository could not be observed"
                 )
+        elif (
+            remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
+            and remote_state is RemoteState.CREATED
+        ):
+            live_state = PreparedLiveState(
+                "not observed; repository attribution is unknown"
+            )
         if destination.is_dir():
             observed_origin = _git(destination, "remote", "get-url", "origin")
             origin_configured = observed_origin.returncode == 0
@@ -967,7 +993,7 @@ def main() -> int:
             local_state=local_state,
             repository_name=repository_name,
             remote_state=remote_state,
-            remote_creation_attempted=remote_creation_attempted,
+            remote_creation=remote_creation,
             origin_configured=origin_configured,
             live_state=live_state,
         )
