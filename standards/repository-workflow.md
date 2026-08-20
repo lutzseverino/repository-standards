@@ -113,7 +113,13 @@ failures retain recoverable work and report completed state without rollback.
 
 First publication is the separate next lifecycle operation. It owns the first
 commit, publication of `main`, default-branch establishment, applicable branch
-protection, and proof that the repository is standards-complete.
+protection, and proof that the repository is standards-complete. Its read-only
+Plan records local content, commit metadata, repository identity, permissions,
+and observed GitHub state while previewing the complete ordered transition.
+Publish requires explicit human confirmation of that current Plan, rejects any
+changed input before mutation, retains successful work after partial failure,
+and creates no pull request. The family-owned `first-publication` skill is one
+execution adapter for this actor-neutral operation.
 
 ## Branch, commit, and implementation
 

@@ -123,6 +123,7 @@ class LiveReconciliationTests(unittest.TestCase):
         self.assertEqual(
             [operation.description for operation in delta.operations],
             [
+                "ESTABLISH default branch 'main'",
                 "UPDATE   repository settings",
                 "CREATE   label 'bug'",
                 "CREATE   ruleset 'Protect main'",
@@ -515,12 +516,12 @@ class LiveReconciliationTests(unittest.TestCase):
         self.assertFalse(report.complete)
         self.assertEqual(
             [item.description for item in report.completed],
-            ["UPDATE   repository settings"],
+            ["ESTABLISH default branch 'main'"],
         )
-        self.assertEqual(report.failed.description, "CREATE   label 'bug'")
+        self.assertEqual(report.failed.description, "UPDATE   repository settings")
         self.assertEqual(
             [item.description for item in report.remaining],
-            ["CREATE   ruleset 'Protect main'"],
+            ["CREATE   label 'bug'", "CREATE   ruleset 'Protect main'"],
         )
         self.assertEqual(report.error, "permission denied")
 

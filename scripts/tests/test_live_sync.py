@@ -305,7 +305,7 @@ class LiveSyncCommandTests(unittest.TestCase):
         written = self.run_sync_live("--write")
 
         self.assertEqual(written.returncode, 0, written.stderr)
-        self.assertIn("Applied 9 live operation(s)", written.stdout)
+        self.assertIn("Applied 10 live operation(s)", written.stdout)
         updated = json.loads(self.state_path.read_text(encoding="utf-8"))
         self.assertIn("repository-specific", {item["name"] for item in updated["labels"]})
         self.assertEqual(updated["repository"]["default_branch"], "main")
@@ -341,10 +341,13 @@ class LiveSyncCommandTests(unittest.TestCase):
         result = self.run_sync_live("--write")
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("Completed operations:\n- UPDATE   repository settings", result.stderr)
-        self.assertIn("Failed operation:\n- CREATE   label 'bug'", result.stderr)
         self.assertIn(
-            "Remaining operations:\n- CREATE   label 'enhancement'", result.stderr
+            "Completed operations:\n- ESTABLISH default branch 'main'",
+            result.stderr,
+        )
+        self.assertIn("Failed operation:\n- UPDATE   repository settings", result.stderr)
+        self.assertIn(
+            "Remaining operations:\n- CREATE   label 'bug'", result.stderr
         )
         self.assertIn("- CREATE   ruleset 'Protect main'", result.stderr)
         self.assertIn("gh auth login", result.stderr)
@@ -358,7 +361,7 @@ class LiveSyncCommandTests(unittest.TestCase):
         retry = self.run_sync_live("--write")
 
         self.assertEqual(retry.returncode, 0, retry.stderr)
-        self.assertIn("Applied 8 live operation(s)", retry.stdout)
+        self.assertIn("Applied 9 live operation(s)", retry.stdout)
         rerun = self.run_sync_live("--write")
         self.assertEqual(rerun.returncode, 0, rerun.stderr)
         self.assertIn("Live GitHub contract is current", rerun.stdout)

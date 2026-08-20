@@ -18,6 +18,9 @@ and standards releases use semantic versioning.
 - Add deterministic initial-contract preview/write tooling, explicit selectable
   ecosystem-profile applicability, and the family-owned `create-repository`
   skill for recoverable prepared creation baselines.
+- Add read-only first-publication planning, explicitly confirmed publication,
+  stale-input protection, exact partial-failure reports, final conformance
+  proof, and the family-owned `first-publication` execution skill.
 
 ## [4.0.0] - 2026-08-16
 

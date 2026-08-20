@@ -470,12 +470,23 @@ def reconcile_live_github(
             )
         )
     elif snapshot.repository.get("default_branch") != github["default-branch"]:
-        repository_findings.append(
-            f"github.default-branch is "
-            f"{snapshot.repository.get('default_branch')!r}; "
-            f"expected {github['default-branch']!r}"
+        differences.append(
+            LiveDifference(
+                (
+                    f"github.default-branch is "
+                    f"{snapshot.repository.get('default_branch')!r}; "
+                    f"expected {github['default-branch']!r}",
+                ),
+                (
+                    LiveOperation(
+                        f"ESTABLISH default branch {github['default-branch']!r}",
+                        "PATCH",
+                        endpoint,
+                        {"default_branch": github["default-branch"]},
+                    ),
+                ),
+            )
         )
-        repository_payload["default_branch"] = github["default-branch"]
 
     for contract_name, api_name in SETTINGS_MAPPING.items():
         expected = github["settings"][contract_name]
