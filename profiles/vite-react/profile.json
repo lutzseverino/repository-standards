@@ -2,6 +2,10 @@
   "name": "vite-react",
   "description": "React, Vite, TypeScript, Biome, ESLint, and Vitest baseline",
   "extends": [],
+  "applicability": {
+    "ecosystem": "node",
+    "framework": "vite-react"
+  },
   "files": [
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 30}
   ]

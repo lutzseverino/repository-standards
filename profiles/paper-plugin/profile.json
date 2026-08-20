@@ -2,6 +2,11 @@
   "name": "paper-plugin",
   "description": "Java and Maven conventions for Paper server plugins",
   "extends": [],
+  "applicability": {
+    "ecosystem": "java",
+    "framework": "paper",
+    "project-kind": "plugin"
+  },
   "files": [
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 40}
   ]

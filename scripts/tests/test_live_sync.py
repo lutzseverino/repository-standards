@@ -12,6 +12,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SYNC_LIVE = ROOT / "scripts/sync-live"
+AUDIT_LIVE = ROOT / "scripts/audit-live"
 
 
 class LiveSyncCommandTests(unittest.TestCase):
@@ -165,6 +166,64 @@ class LiveSyncCommandTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def run_audit_live(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        environment = os.environ.copy()
+        environment["REPOSITORY_STANDARDS_GH"] = str(self.gh_path)
+        environment["FAKE_GITHUB_STATE"] = str(self.state_path)
+        return subprocess.run(
+            [str(AUDIT_LIVE), *arguments, str(self.repository)],
+            cwd=ROOT,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_prepared_lifecycle_validates_applicable_state_and_reports_publication_pending(
+        self,
+    ) -> None:
+        manifest = self.manifest()
+        manifest["github"]["ruleset"] = None
+        (self.repository / ".repository-standards.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+        required_labels = [
+            "bug",
+            "enhancement",
+            "needs-triage",
+            "needs-info",
+            "ready-for-agent",
+            "ready-for-human",
+            "wontfix",
+        ]
+        state = {
+            "repository": {
+                "default_branch": None,
+                "delete_branch_on_merge": True,
+                "allow_squash_merge": True,
+                "allow_merge_commit": False,
+                "allow_rebase_merge": False,
+                "squash_merge_commit_title": "PR_TITLE",
+                "squash_merge_commit_message": "PR_BODY",
+                "has_issues": True,
+                "has_projects": False,
+                "has_wiki": False,
+            },
+            "labels": [{"name": name} for name in required_labels],
+            "rulesets": [],
+        }
+        self.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        preview = self.run_sync_live("--lifecycle", "prepared")
+        audit = self.run_audit_live("--lifecycle", "prepared")
+
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        self.assertIn("pending first publication", preview.stdout)
+        self.assertNotIn("UPDATE", preview.stdout)
+        self.assertEqual(audit.returncode, 0, audit.stderr)
+        self.assertIn("pending first publication", audit.stdout)
+        self.assertNotIn("conform", audit.stdout)
 
     def test_manifest_rejects_bypass_actors_before_github_access(self) -> None:
         manifest = self.manifest()

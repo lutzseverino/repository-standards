@@ -2,6 +2,11 @@
   "name": "spring-boot",
   "description": "Spring Boot service and Maven build baseline",
   "extends": [],
+  "applicability": {
+    "ecosystem": "java",
+    "framework": "spring-boot",
+    "project-kind": "service"
+  },
   "files": [
     {"mode": "compose", "source": "fragments/gitignore", "target": ".gitignore", "order": 40}
   ]

@@ -1,0 +1,17 @@
+{
+  "licenses": [
+    {
+      "key": "mit",
+      "spdx-id": "MIT",
+      "file": "MIT.txt",
+      "replacements": {
+        "{{ owner }}": "owner"
+      }
+    },
+    {
+      "key": "apache-2.0",
+      "spdx-id": "Apache-2.0",
+      "file": "Apache-2.0.txt"
+    }
+  ]
+}

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 DEFAULT_SQUASH_MERGE_COMMIT_TITLE = "PR_TITLE"
@@ -16,8 +18,33 @@ DEFAULT_GITHUB_FEATURES = {
 }
 
 
+def _default_main_ruleset() -> dict[str, Any]:
+    return {
+        "name": "Protect main",
+        "required-status-checks": ["CI / Required"],
+        "require-current-branch": True,
+        "required-approvals": 0,
+        "allowed-merge-methods": ["squash"],
+        "prevent-deletion": True,
+        "prevent-force-push": True,
+        "allow-bypass-actors": False,
+    }
+
+
 class ContractError(Exception):
     """Raised when a repository contract cannot be validated and normalized."""
+
+
+MANDATORY_INITIAL_PROFILES = ("common", "documentation")
+DEFAULT_INITIAL_REPOSITORY_OWNED = (
+    "README.md",
+    "LICENSE",
+    "CONTEXT.md",
+    "docs/README.md",
+    "docs/agents/domain.md",
+    "docs/adr/**",
+    "docs/how-to/**",
+)
 
 
 @dataclass(frozen=True)
@@ -131,6 +158,64 @@ class RepositoryContract:
     plan_blockers: tuple[ContractBlocker, ...] = ()
 
 
+@dataclass(frozen=True)
+class InitialProfileSelection:
+    """Mandatory and explicitly selected or uniquely inferred initial profiles."""
+
+    profiles: tuple[str, ...]
+    inferred_profile: str | None
+
+
+@dataclass(frozen=True)
+class InitialRepositoryContract:
+    """A complete validated initial repository declaration."""
+
+    protocol: int
+    release: str
+    selected_profiles: tuple[str, ...]
+    boundaries: tuple[RepositoryBoundary, ...]
+    dependency_updates: tuple[DependencyUpdate, ...]
+    github: GitHubContract
+    variables: tuple[tuple[str, Any], ...]
+    local_fragments: tuple[tuple[str, tuple[str, ...]], ...]
+    repository_owned: tuple[str, ...]
+    inferred_profile: str | None
+
+    def as_mapping(self) -> dict[str, Any]:
+        """Return the normalized JSON manifest written by initialization."""
+
+        return {
+            "standards-version": self.protocol,
+            "standards-release": self.release,
+            "profiles": list(self.selected_profiles),
+            "boundaries": [
+                {
+                    "path": boundary.path,
+                    "type": boundary.boundary_type,
+                    "title": boundary.title,
+                }
+                for boundary in self.boundaries
+            ],
+            "dependency-updates": [
+                {
+                    "ecosystem": update.ecosystem,
+                    "directory": update.directory,
+                    "schedule": update.schedule,
+                }
+                for update in self.dependency_updates
+            ],
+            "github": self.github.as_mapping(),
+            "variables": {
+                name: _thaw_value(value) for name, value in self.variables
+            },
+            "local-fragments": {
+                target: list(fragments)
+                for target, fragments in self.local_fragments
+            },
+            "repository-owned": list(self.repository_owned),
+        }
+
+
 def _freeze_mapping(value: dict[str, Any] | None) -> tuple[tuple[str, Any], ...] | None:
     if value is None:
         return None
@@ -154,6 +239,272 @@ def _thaw_value(value: Any) -> Any:
             return {key: _thaw_value(item) for key, item in value}
         return [_thaw_value(item) for item in value]
     return value
+
+
+def select_initial_profiles(
+    *,
+    standards_root: Path,
+    facts: dict[str, str],
+    explicit_profiles: list[str] | None = None,
+) -> InitialProfileSelection:
+    """Select the mandatory baseline and at most one inferred ecosystem profile."""
+
+    from . import standards
+
+    standards_root = standards_root.expanduser().resolve()
+    selectable: dict[str, dict[str, str]] = {}
+    try:
+        profile_paths = sorted((standards_root / "profiles").glob("*/profile.json"))
+        for path in profile_paths:
+            name = path.parent.name
+            ordered: list[tuple[str, dict[str, Any], Path]] = []
+            standards._load_profile(
+                standards_root, name, ordered, set(), set()
+            )
+            data = next(
+                profile_data
+                for loaded_name, profile_data, _ in ordered
+                if loaded_name == name
+            )
+            applicability = data.get("applicability")
+            has_behavior = bool(data.get("files")) or bool(
+                data.get("github", {}).get("required-labels")
+            )
+            if (
+                name not in MANDATORY_INITIAL_PROFILES
+                and isinstance(applicability, dict)
+                and applicability
+                and has_behavior
+            ):
+                selectable[name] = dict(applicability)
+    except (OSError, StopIteration, standards.StandardsError) as exc:
+        raise ContractError(str(exc)) from exc
+
+    matches = tuple(
+        name
+        for name, applicability in selectable.items()
+        if all(facts.get(key) == value for key, value in applicability.items())
+    )
+    incomplete = {
+        name: tuple(key for key in applicability if key not in facts)
+        for name, applicability in selectable.items()
+        if all(
+            key not in facts or facts[key] == value
+            for key, value in applicability.items()
+        )
+        and any(key not in facts for key in applicability)
+    }
+
+    if incomplete:
+        details = "; ".join(
+            f"{name} (missing {', '.join(missing)})"
+            for name, missing in sorted(incomplete.items())
+        )
+        raise ContractError(
+            "applicability facts are incomplete; cannot prove profile selection: "
+            + details
+        )
+
+    if explicit_profiles is not None:
+        if (
+            not explicit_profiles
+            or not all(isinstance(item, str) and item for item in explicit_profiles)
+            or len(explicit_profiles) != len(set(explicit_profiles))
+        ):
+            raise ContractError("profiles must be a non-empty unique list of names")
+        unsupported = sorted(set(explicit_profiles) - set(selectable))
+        if unsupported:
+            raise ContractError(
+                "profiles are not selectable ecosystem profiles: "
+                + ", ".join(unsupported)
+            )
+        nonmatching = sorted(set(explicit_profiles) - set(matches))
+        if nonmatching:
+            raise ContractError(
+                "explicit profiles do not match the supplied facts: "
+                + ", ".join(nonmatching)
+            )
+        return InitialProfileSelection(
+            tuple(
+                dict.fromkeys(
+                    (*MANDATORY_INITIAL_PROFILES, *explicit_profiles)
+                )
+            ),
+            None,
+        )
+
+    if len(matches) > 1:
+        raise ContractError(
+            "multiple selectable ecosystem profiles match; choose explicitly: "
+            + ", ".join(matches)
+        )
+    inferred = matches[0] if matches else None
+    return InitialProfileSelection(
+        (*MANDATORY_INITIAL_PROFILES, *((inferred,) if inferred else ())),
+        inferred,
+    )
+
+
+def _initial_mapping(value: object, field: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ContractError(f"{field} must be an object")
+    return dict(value)
+
+
+def build_initial_repository_contract(
+    initialization: Mapping[str, Any],
+    *,
+    standards_root: Path,
+) -> InitialRepositoryContract:
+    """Build and validate one initial contract from explicit repository facts."""
+
+    from . import standards
+
+    standards_root = standards_root.expanduser().resolve()
+    allowed = {
+        "standards-release",
+        "repository",
+        "title",
+        "facts",
+        "profiles",
+        "boundaries",
+        "dependency-updates",
+        "github",
+        "variables",
+        "local-fragments",
+        "repository-owned",
+    }
+    unknown = sorted(set(initialization) - allowed)
+    if unknown:
+        raise ContractError(
+            "unknown initialization fields: " + ", ".join(unknown)
+        )
+
+    requested_release = initialization.get("standards-release")
+    if not isinstance(requested_release, str) or not requested_release:
+        raise ContractError("standards-release must be an exact stable version")
+    try:
+        release = (standards_root / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ContractError(f"cannot read selected release VERSION: {exc}") from exc
+    if requested_release != release:
+        raise ContractError(
+            f"selected release checkout declares {release!r}, not {requested_release!r}"
+        )
+
+    repository = initialization.get("repository")
+    if not isinstance(repository, str) or not repository:
+        raise ContractError("repository must be an explicit owner/name")
+    title = initialization.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ContractError("title must be an explicit non-empty string")
+    facts = initialization.get("facts", {})
+    if not isinstance(facts, dict) or not all(
+        isinstance(key, str)
+        and key
+        and isinstance(value, str)
+        and value
+        for key, value in facts.items()
+    ):
+        raise ContractError("facts must be an object of non-empty strings")
+    explicit_profiles = initialization.get("profiles")
+    if explicit_profiles is not None and not isinstance(explicit_profiles, list):
+        raise ContractError("profiles must be a non-empty unique list of names")
+    selection = select_initial_profiles(
+        standards_root=standards_root,
+        facts=facts,
+        explicit_profiles=explicit_profiles,
+    )
+
+    github = _initial_mapping(initialization.get("github", {}), "github")
+    settings = {
+        "delete-branch-on-merge": True,
+        "allow-squash-merge": True,
+        "allow-merge-commit": False,
+        "allow-rebase-merge": False,
+        "squash-merge-commit-title": DEFAULT_SQUASH_MERGE_COMMIT_TITLE,
+        "squash-merge-commit-message": DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE,
+        **_initial_mapping(github.pop("settings", {}), "github.settings"),
+    }
+    features = {
+        **DEFAULT_GITHUB_FEATURES,
+        **_initial_mapping(github.pop("features", {}), "github.features"),
+    }
+    github_contract = {
+        "repository": repository,
+        "default-branch": "main",
+        "settings": settings,
+        "features": features,
+        "ruleset": _default_main_ruleset(),
+        **github,
+    }
+    github_contract["repository"] = repository
+    github_contract["default-branch"] = "main"
+    manifest = {
+        "standards-version": standards.SUPPORTED_STANDARDS_VERSION,
+        "standards-release": release,
+        "profiles": list(selection.profiles),
+        "boundaries": initialization.get(
+            "boundaries",
+            [{"path": ".", "type": "repository", "title": title}],
+        ),
+        "dependency-updates": initialization.get(
+            "dependency-updates",
+            [
+                {
+                    "ecosystem": "github-actions",
+                    "directory": "/",
+                    "schedule": "weekly",
+                }
+            ],
+        ),
+        "github": github_contract,
+        "variables": initialization.get("variables", {}),
+        "local-fragments": initialization.get("local-fragments", {}),
+        "repository-owned": initialization.get(
+            "repository-owned", list(DEFAULT_INITIAL_REPOSITORY_OWNED)
+        ),
+    }
+
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="repository-contract-initialization-"
+        ) as directory:
+            preview = Path(directory)
+            (preview / ".repository-standards.json").write_text(
+                json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+            )
+            _, normalized_manifest = standards._load_manifest(preview, None)
+            for sources in normalized_manifest["local-fragments"].values():
+                for source in sources:
+                    if source == ".repository-standards.json":
+                        raise ContractError(
+                            "local fragment source conflicts with the repository "
+                            "contract: .repository-standards.json"
+                        )
+                    placeholder = preview / source
+                    placeholder.parent.mkdir(parents=True, exist_ok=True)
+                    placeholder.touch(exist_ok=True)
+            resolved = resolve_repository_contract(
+                preview, standards_root=standards_root
+            )
+    except (OSError, standards.StandardsError) as exc:
+        raise ContractError(f"cannot validate initial repository contract: {exc}") from exc
+
+    return InitialRepositoryContract(
+        protocol=resolved.protocol,
+        release=resolved.release,
+        selected_profiles=resolved.selected_profiles,
+        boundaries=resolved.boundaries,
+        dependency_updates=resolved.dependency_updates,
+        github=resolved.github,
+        variables=tuple(
+            (name, _freeze_value(value)) for name, value in resolved.variables
+        ),
+        local_fragments=resolved.local_fragments,
+        repository_owned=resolved.repository_owned,
+        inferred_profile=selection.inferred_profile,
+    )
 
 
 def resolve_repository_contract(

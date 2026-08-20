@@ -1,0 +1,1013 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.request
+from contextlib import nullcontext
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+
+
+STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+IDENTITY = re.compile(r"^[A-Za-z0-9_.-]+$")
+LINE_SEPARATOR = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
+LICENSE_PLACEHOLDER = re.compile(r"\{\{\s*[A-Za-z][A-Za-z0-9_-]*\s*\}\}")
+
+
+class CreationError(Exception):
+    pass
+
+
+class RemoteState(Enum):
+    NOT_ATTEMPTED = "not-attempted"
+    ABSENT = "absent"
+    CREATED = "created"
+    UNKNOWN = "unknown"
+
+
+class RemoteCreationOutcome(Enum):
+    NOT_ATTEMPTED = "not-attempted"
+    ATTEMPTED_UNCONFIRMED = "attempted-unconfirmed"
+    CONFIRMED = "confirmed"
+
+
+class RulesetSupport(Enum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+
+
+class RepositoryContentPath(Enum):
+    README = "README.md"
+    LICENSE = "LICENSE"
+    CONTEXT = "CONTEXT.md"
+    DOCUMENTATION = "docs/README.md"
+    DOMAIN_CONFIGURATION = "docs/agents/domain.md"
+
+
+@dataclass(frozen=True)
+class PreparedLiveState:
+    summary: str
+    findings: tuple[str, ...] = ()
+
+
+def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _latest_release() -> str:
+    overridden = os.environ.get("REPOSITORY_STANDARDS_LATEST_RELEASE")
+    if overridden:
+        return overridden
+    request = urllib.request.Request(
+        "https://github.com/lutzseverino/repository-standards/releases/latest",
+        method="HEAD",
+        headers={"User-Agent": "create-repository"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            final_url = response.geturl()
+    except (OSError, urllib.error.URLError) as exc:
+        raise CreationError(f"cannot resolve latest stable GitHub Release: {exc}") from exc
+    match = re.search(r"/releases/tag/v([^/?#]+)$", final_url)
+    if not match:
+        raise CreationError(
+            f"latest GitHub Release did not resolve to a stable tag: {final_url}"
+        )
+    return match.group(1)
+
+
+def _stable_version(value: str) -> str:
+    if not STABLE_VERSION.fullmatch(value):
+        raise CreationError(
+            f"standards release must be an exact stable semantic version: {value!r}"
+        )
+    return value
+
+
+def _checked_out_release(version: str, temporary_root: Path) -> Path:
+    reusable = os.environ.get("REPOSITORY_STANDARDS_CHECKOUT")
+    if reusable:
+        checkout = Path(reusable).expanduser().resolve()
+    else:
+        source = os.environ.get(
+            "REPOSITORY_STANDARDS_SOURCE",
+            "https://github.com/lutzseverino/repository-standards.git",
+        )
+        tag = f"v{version}"
+        exists = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "--tags", source, f"refs/tags/{tag}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if exists.returncode == 2:
+            raise CreationError(f"stable release tag {tag} was not found at {source}")
+        if exists.returncode != 0:
+            raise CreationError(
+                f"cannot inspect standards source {source}: "
+                f"{exists.stderr.strip() or exists.stdout.strip()}"
+            )
+        checkout = temporary_root / "standards"
+        cloned = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                tag,
+                source,
+                str(checkout),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if cloned.returncode != 0:
+            raise CreationError(
+                f"cannot obtain isolated checkout for {tag}: "
+                f"{cloned.stderr.strip() or cloned.stdout.strip()}"
+            )
+
+    exact_tag = _git(checkout, "describe", "--tags", "--exact-match", "HEAD")
+    if exact_tag.returncode != 0 or exact_tag.stdout.strip() != f"v{version}":
+        actual = exact_tag.stdout.strip() or "no exact tag"
+        raise CreationError(
+            f"standards checkout is not proven at exact tag v{version}: {actual}"
+        )
+    status = _git(checkout, "status", "--porcelain=v1", "--untracked-files=all")
+    if status.returncode != 0:
+        raise CreationError(
+            "cannot inspect exact release checkout: "
+            + (status.stderr.strip() or status.stdout.strip())
+        )
+    if status.stdout.strip():
+        raise CreationError(
+            "exact release checkout must be clean; dirty paths: "
+            + ", ".join(line[3:] for line in status.stdout.splitlines() if line)
+        )
+    try:
+        declared = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise CreationError(f"cannot read release VERSION: {exc}") from exc
+    if declared != version:
+        raise CreationError(
+            f"release tag v{version} declares incompatible VERSION {declared!r}"
+        )
+    for tool in ("init", "sync", "audit", "sync-live", "audit-live"):
+        if not (checkout / "scripts" / tool).is_file():
+            raise CreationError(f"release v{version} is missing scripts/{tool}")
+    return checkout
+
+
+def _destination(value: str) -> Path:
+    requested = Path(value).expanduser()
+    if not requested.is_absolute():
+        raise CreationError("local destination must be an absolute path")
+    if requested == Path(requested.anchor):
+        raise CreationError("local destination must not be a filesystem root")
+    for candidate in (requested, *requested.parents):
+        if candidate == Path(candidate.anchor):
+            break
+        if candidate.is_symlink():
+            raise CreationError(
+                f"local destination traverses a symbolic link: {candidate}"
+            )
+    destination = requested.resolve(strict=False)
+    if destination.exists():
+        if not destination.is_dir() or next(destination.iterdir(), None) is not None:
+            raise CreationError(
+                f"local destination collision; expected an empty path: {destination}"
+            )
+    return destination
+
+
+def _gh(*arguments: str) -> subprocess.CompletedProcess[str]:
+    executable = os.environ.get("REPOSITORY_STANDARDS_GH", "gh")
+    return subprocess.run(
+        [executable, *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _resolve_license(
+    checkout: Path, requested: str, owner: str
+) -> tuple[str, str]:
+    catalog_path = (
+        checkout
+        / ".agents/skills/create-repository/licenses/catalog.json"
+    )
+    try:
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        entries = catalog["licenses"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError(
+            "selected standards release has an invalid license catalog"
+        ) from exc
+    if not isinstance(entries, list):
+        raise CreationError(
+            "selected standards release has an invalid license catalog"
+        )
+    matches = [
+        entry
+        for entry in entries
+        if isinstance(entry, dict)
+        and any(
+            isinstance(identifier, str)
+            and identifier.casefold() == requested.casefold()
+            for identifier in (entry.get("key"), entry.get("spdx-id"))
+        )
+    ]
+    if len(matches) != 1:
+        raise CreationError(
+            "unsupported license identifier for the selected standards release: "
+            f"{requested!r}"
+        )
+    key = matches[0].get("key")
+    canonical_identifier = matches[0].get("spdx-id")
+    if not isinstance(key, str) or not isinstance(canonical_identifier, str):
+        raise CreationError(
+            "selected standards release has an invalid license catalog entry"
+        )
+    relative_file = matches[0].get("file")
+    replacements = matches[0].get("replacements", {})
+    if not isinstance(relative_file, str) or not isinstance(replacements, dict):
+        raise CreationError(
+            "selected standards release has an invalid license catalog entry"
+        )
+    if Path(relative_file).name != relative_file:
+        raise CreationError(
+            "selected standards release has an unsafe license catalog entry"
+        )
+    try:
+        body = (catalog_path.parent / relative_file).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CreationError(
+            f"cannot read pinned license text for {canonical_identifier}: {exc}"
+        ) from exc
+    if not body:
+        raise CreationError(
+            f"pinned license text is empty for {canonical_identifier}"
+        )
+    observed_placeholders = set(LICENSE_PLACEHOLDER.findall(body))
+    if observed_placeholders != set(replacements):
+        raise CreationError(
+            "selected standards release has an invalid license template"
+        )
+    replacement_values = {"owner": owner}
+    for placeholder, variable in replacements.items():
+        if (
+            not isinstance(placeholder, str)
+            or not isinstance(variable, str)
+            or variable not in replacement_values
+        ):
+            raise CreationError(
+                "selected standards release has an invalid license template"
+            )
+        body = body.replace(placeholder, replacement_values[variable])
+    return canonical_identifier, body
+
+
+def _observe_github_repository(
+    repository: str, *, absence_is_conclusive: bool = True
+) -> RemoteState:
+    observed = _gh("api", f"repos/{repository}")
+    if observed.returncode == 0:
+        return RemoteState.CREATED
+    message = observed.stderr.strip() or observed.stdout.strip()
+    if "404" in message or "not found" in message.lower():
+        if absence_is_conclusive:
+            return RemoteState.ABSENT
+    return RemoteState.UNKNOWN
+
+
+def _current_owner_visibility_is_conclusive(owner: str) -> bool:
+    viewer = _gh("api", "user")
+    if viewer.returncode != 0:
+        return False
+    try:
+        viewer_login = json.loads(viewer.stdout)["login"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
+    if isinstance(viewer_login, str) and viewer_login.casefold() == owner.casefold():
+        return True
+    organization_result = _gh(
+        "api",
+        "graphql",
+        "-f",
+        (
+            "query=query($login:String!){organization(login:$login)"
+            "{viewerCanAdminister}}"
+        ),
+        "-F",
+        f"login={owner}",
+    )
+    if organization_result.returncode != 0:
+        return False
+    try:
+        organization = json.loads(organization_result.stdout)["data"][
+            "organization"
+        ]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return False
+    return (
+        isinstance(organization, dict)
+        and organization.get("viewerCanAdminister") is True
+    )
+
+
+def _reobserve_github_repository(owner: str, repository: str) -> RemoteState:
+    try:
+        absence_is_conclusive = _current_owner_visibility_is_conclusive(owner)
+        return _observe_github_repository(
+            repository, absence_is_conclusive=absence_is_conclusive
+        )
+    except OSError:
+        return RemoteState.UNKNOWN
+
+
+def _preflight_github(
+    owner: str, repository: str, visibility: str
+) -> RulesetSupport:
+    authenticated = _gh("auth", "status")
+    if authenticated.returncode != 0:
+        raise CreationError(
+            "GitHub authentication failed: "
+            + (authenticated.stderr.strip() or authenticated.stdout.strip())
+        )
+    viewer = _gh("api", "user")
+    if viewer.returncode != 0:
+        raise CreationError(
+            "cannot inspect the authenticated GitHub user: "
+            + (viewer.stderr.strip() or viewer.stdout.strip())
+        )
+    try:
+        viewer_details = json.loads(viewer.stdout)
+        viewer_login = viewer_details["login"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError(
+            "authenticated GitHub user response did not contain a login"
+        ) from exc
+    if not isinstance(viewer_login, str) or not viewer_login:
+        raise CreationError(
+            "authenticated GitHub user response did not contain a login"
+        )
+    if viewer_login.casefold() == owner.casefold():
+        absence_is_conclusive = True
+        if visibility == "internal":
+            raise CreationError(
+                "internal visibility requires an enterprise-owned GitHub organization"
+            )
+        if visibility == "public":
+            ruleset_support = RulesetSupport.SUPPORTED
+        else:
+            try:
+                viewer_plan = viewer_details["plan"]["name"]
+            except (KeyError, TypeError) as exc:
+                raise CreationError(
+                    "authenticated GitHub user response did not prove private "
+                    "repository ruleset support"
+                ) from exc
+            if viewer_plan == "pro":
+                ruleset_support = RulesetSupport.SUPPORTED
+            elif viewer_plan == "free":
+                ruleset_support = RulesetSupport.UNSUPPORTED
+            else:
+                raise CreationError(
+                    f"unknown GitHub user plan {viewer_plan!r}; cannot prove "
+                    "private repository ruleset support"
+                )
+    else:
+        organization_result = _gh(
+            "api",
+            "graphql",
+            "-f",
+            (
+                "query=query($login:String!){organization(login:$login)"
+                "{viewerCanAdminister viewerCanCreateRepositories}}"
+            ),
+            "-F",
+            f"login={owner}",
+        )
+        if organization_result.returncode != 0:
+            raise CreationError(
+                f"cannot verify GitHub owner {owner}: "
+                + (
+                    organization_result.stderr.strip()
+                    or organization_result.stdout.strip()
+                )
+            )
+        try:
+            organization = json.loads(organization_result.stdout)["data"][
+                "organization"
+            ]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise CreationError(
+                f"GitHub owner verification returned invalid data for {owner}"
+            ) from exc
+        if organization is None:
+            raise CreationError(
+                f"GitHub owner {owner} does not identify the authenticated user "
+                "or an organization"
+            )
+        if not isinstance(organization, dict):
+            raise CreationError(
+                f"GitHub owner verification returned invalid data for {owner}"
+            )
+        if organization.get("viewerCanCreateRepositories") is not True:
+            raise CreationError(
+                "authenticated user cannot create repositories for GitHub "
+                f"organization {owner}"
+            )
+        absence_is_conclusive = organization.get("viewerCanAdminister") is True
+        details_result = _gh("api", f"orgs/{owner}")
+        if details_result.returncode != 0:
+            raise CreationError(
+                f"cannot inspect GitHub organization {owner}: "
+                + (details_result.stderr.strip() or details_result.stdout.strip())
+            )
+        try:
+            details = json.loads(details_result.stdout)
+        except json.JSONDecodeError as exc:
+            raise CreationError(
+                f"GitHub organization response was invalid for {owner}"
+            ) from exc
+        if not isinstance(details, dict):
+            raise CreationError(
+                f"GitHub organization response was invalid for {owner}"
+            )
+        visibility_permission = (
+            f"members_can_create_{visibility}_repositories"
+        )
+        if (
+            organization.get("viewerCanAdminister") is not True
+            and details.get(visibility_permission) is not True
+        ):
+            raise CreationError(
+                f"authenticated user cannot create {visibility} repositories for "
+                f"GitHub organization {owner}"
+            )
+        if visibility == "public":
+            ruleset_support = RulesetSupport.SUPPORTED
+        else:
+            try:
+                plan_name = details["plan"]["name"]
+            except (KeyError, TypeError) as exc:
+                raise CreationError(
+                    f"GitHub organization response did not prove {visibility} "
+                    f"repository ruleset support for {owner}"
+                ) from exc
+            if (
+                visibility == "internal"
+                and plan_name not in {"business_plus", "enterprise"}
+            ):
+                raise CreationError(
+                    f"GitHub organization {owner} does not support internal "
+                    "repositories"
+                )
+            if plan_name in {"team", "business", "business_plus", "enterprise"}:
+                ruleset_support = RulesetSupport.SUPPORTED
+            elif plan_name == "free":
+                ruleset_support = RulesetSupport.UNSUPPORTED
+            else:
+                raise CreationError(
+                    f"unknown GitHub organization plan {plan_name!r}; cannot prove "
+                    f"{visibility} repository ruleset support for {owner}"
+                )
+    observation = _observe_github_repository(
+        repository, absence_is_conclusive=absence_is_conclusive
+    )
+    if observation is RemoteState.CREATED:
+        raise CreationError(f"GitHub identity collision; repository exists: {repository}")
+    if observation is RemoteState.UNKNOWN:
+        if not absence_is_conclusive:
+            raise CreationError(
+                f"cannot prove GitHub identity {repository} is absent; "
+                "organization administrator visibility is required"
+            )
+        raise CreationError(f"cannot verify GitHub identity {repository}")
+    return ruleset_support
+
+
+def _run_phase(
+    label: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    allowed: tuple[int, ...] = (0,),
+) -> None:
+    print(f"\n== {label} ==")
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode not in allowed:
+        raise CreationError(f"{label} failed with exit code {result.returncode}")
+
+
+def _tool(checkout: Path, name: str) -> str:
+    return str(checkout / "scripts" / name)
+
+
+def _observe_prepared_live_state(
+    checkout: Path, destination: Path
+) -> PreparedLiveState:
+    try:
+        result = subprocess.run(
+            [
+                _tool(checkout, "audit-live"),
+                "--lifecycle",
+                "prepared",
+                "--json",
+                str(destination),
+            ],
+            cwd=destination,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return PreparedLiveState(
+            "state unknown; retained-state observation could not run",
+            (str(exc),),
+        )
+    diagnostic = result.stderr.strip() or result.stdout.strip()
+    if result.returncode not in (0, 1):
+        return PreparedLiveState(
+            "state unknown; retained-state observation failed",
+            (diagnostic or f"audit-live exited {result.returncode}",),
+        )
+    try:
+        report = json.loads(result.stdout)
+        errors = report["errors"]
+        pending = report["pending"]
+        applicable_clean = report["applicable-clean"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return PreparedLiveState(
+            "state unknown; retained-state observation was invalid",
+            (diagnostic or "audit-live returned no diagnostic",),
+        )
+    if (
+        not isinstance(errors, list)
+        or not all(isinstance(finding, str) for finding in errors)
+        or not isinstance(pending, list)
+        or not all(isinstance(finding, str) for finding in pending)
+        or not isinstance(applicable_clean, bool)
+        or applicable_clean != (not errors)
+        or result.returncode != (1 if errors else 0)
+    ):
+        return PreparedLiveState(
+            "state unknown; retained-state observation was invalid",
+            (diagnostic or "audit-live returned an incoherent report",),
+        )
+    findings = tuple(
+        [f"applicable drift: {finding}" for finding in errors]
+        + [f"publication pending: {finding}" for finding in pending]
+    )
+    if errors:
+        return PreparedLiveState("re-observed with applicable drift", findings)
+    if pending:
+        return PreparedLiveState(
+            "re-observed; applicable prepared state validated", findings
+        )
+    return PreparedLiveState("re-observed; prepared live state validated")
+
+
+def _write_repository_content(
+    repository: Path,
+    *,
+    name: str,
+    purpose: str,
+    license_text: str,
+) -> None:
+    escaped_purpose = html.escape(purpose)
+    files = {
+        RepositoryContentPath.README.value: (
+            f'<div align="center">\n  <h1>{name}</h1>\n'
+            f"  <p>{escaped_purpose}</p>\n</div>\n\n"
+            "See the [documentation](docs/README.md).\n"
+        ),
+        RepositoryContentPath.LICENSE.value: license_text,
+        RepositoryContentPath.CONTEXT.value: (
+            f"# {name}\n\nCanonical language for "
+            f"{escaped_purpose.rstrip('.').lower()}.\n\n"
+            "## Language\n\nAdd terms here when the repository resolves them.\n"
+        ),
+        RepositoryContentPath.DOCUMENTATION.value: (
+            "# Documentation\n\nRepository documentation is organized by purpose.\n\n"
+            "- `tutorials/` for learning-oriented lessons.\n"
+            "- `how-to/` for task-oriented guides.\n"
+            "- `reference/` for factual lookup.\n"
+            "- `explanation/` for understanding and rationale.\n"
+            "- `adr/` for architectural decisions.\n"
+        ),
+        RepositoryContentPath.DOMAIN_CONFIGURATION.value: (
+            "# Domain docs\n\nThis repository uses a single domain context.\n\n"
+            "Before exploring or naming domain concepts, read `CONTEXT.md` at the "
+            "repository root and relevant records in `docs/adr/`.\n"
+        ),
+    }
+    for relative, content in files.items():
+        path = repository / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+
+def _retained_path_kind(path: Path) -> str | None:
+    if path.is_symlink():
+        return "symbolic link"
+    if path.is_file():
+        return "file"
+    if path.is_dir():
+        return "directory"
+    if path.exists():
+        return "other"
+    return None
+
+
+def _retained_state(
+    destination: Path,
+    *,
+    local_state: str,
+    repository_name: str | None,
+    remote_state: RemoteState,
+    remote_creation: RemoteCreationOutcome,
+    origin_configured: bool,
+    live_state: PreparedLiveState,
+) -> None:
+    print("\nRetained state after failure:", file=sys.stderr)
+    print(
+        f"- local destination: {'present' if destination.exists() else 'not created'} "
+        f"({destination}); last completed phase: {local_state}",
+        file=sys.stderr,
+    )
+    if destination.is_dir():
+        contract = destination / ".repository-standards.json"
+        print(
+            f"- initial contract: {'present' if contract.is_file() else 'absent'}",
+            file=sys.stderr,
+        )
+        git_directory = destination / ".git"
+        if git_directory.is_dir():
+            branch = _git(destination, "symbolic-ref", "--short", "HEAD")
+            branch_name = branch.stdout.strip() if branch.returncode == 0 else "unknown"
+            head = _git(destination, "rev-parse", "--verify", "HEAD")
+            head_state = (
+                head.stdout.strip() if head.returncode == 0 else "unborn"
+            )
+            print(
+                "- local Git repository: initialized; "
+                f"branch: {branch_name}; HEAD: {head_state}",
+                file=sys.stderr,
+            )
+        else:
+            print("- local Git repository: not initialized", file=sys.stderr)
+        retained_paths = []
+        for content_path in RepositoryContentPath:
+            relative = content_path.value
+            kind = _retained_path_kind(destination / relative)
+            if kind:
+                retained_paths.append(f"{relative} ({kind})")
+        print(
+            "- repository-owned paths: "
+            + (", ".join(retained_paths) if retained_paths else "none observed"),
+            file=sys.stderr,
+        )
+    if remote_state is RemoteState.CREATED:
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
+            remote_description = "creation confirmed; repository currently exists"
+        elif remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED:
+            remote_description = (
+                "repository currently exists after an unconfirmed creation "
+                "attempt; attribution unknown"
+            )
+        else:
+            remote_description = (
+                "now exists; creation was not attempted by this operation"
+            )
+    elif remote_state is RemoteState.ABSENT:
+        remote_description = (
+            "creation was confirmed; repository is now absent"
+            if remote_creation is RemoteCreationOutcome.CONFIRMED
+            else "confirmed absent"
+        )
+    elif remote_state is RemoteState.UNKNOWN:
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
+            context = "confirmed creation"
+        elif remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED:
+            context = "an unconfirmed creation attempt"
+        else:
+            context = "the earlier absence check"
+        remote_description = (
+            f"state unknown after {context}; inspect "
+            f"{repository_name or 'the requested identity'} before retry"
+        )
+    else:
+        remote_description = "not created by this operation; creation not attempted"
+    print(f"- GitHub repository: {remote_description}", file=sys.stderr)
+    print(
+        f"- origin: {'configured' if origin_configured else 'not configured'}",
+        file=sys.stderr,
+    )
+    print(
+        f"- prepared live reconciliation: {live_state.summary}",
+        file=sys.stderr,
+    )
+    for finding in live_state.findings:
+        print(f"  - {finding}", file=sys.stderr)
+    print("- no automatic deletion or rollback was attempted", file=sys.stderr)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Create a prepared creation baseline")
+    parser.add_argument("--name", required=True)
+    parser.add_argument("--purpose", required=True)
+    parser.add_argument(
+        "--visibility", required=True, choices=("private", "public", "internal")
+    )
+    parser.add_argument("--license", required=True)
+    parser.add_argument("--owner", required=True)
+    parser.add_argument("--destination", required=True)
+    parser.add_argument("--version")
+    parser.add_argument("--fact", action="append", default=[])
+    parser.add_argument("--profile", action="append", default=[])
+    args = parser.parse_args()
+
+    remote_state = RemoteState.NOT_ATTEMPTED
+    remote_creation = RemoteCreationOutcome.NOT_ATTEMPTED
+    origin_configured = False
+    local_state = "not created"
+    live_state = PreparedLiveState("not started")
+    destination = Path(args.destination).expanduser()
+    repository_name: str | None = None
+    checkout: Path | None = None
+    temporary_checkout: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        if not IDENTITY.fullmatch(args.name) or not IDENTITY.fullmatch(args.owner):
+            raise CreationError("repository name and owner must be explicit GitHub identities")
+        if len(args.name) > 100:
+            raise CreationError("repository name must not exceed 100 characters")
+        if not args.purpose.strip() or LINE_SEPARATOR.search(args.purpose):
+            raise CreationError("purpose must be one explicit non-empty line")
+        if len(args.purpose) > 350:
+            raise CreationError("purpose must not exceed 350 characters")
+        destination = _destination(args.destination)
+        facts: dict[str, str] = {}
+        for declaration in args.fact:
+            if "=" not in declaration:
+                raise CreationError(f"fact must use NAME=VALUE: {declaration!r}")
+            name, value = declaration.split("=", 1)
+            if not name or not value or name in facts:
+                raise CreationError(f"fact must be unique and non-empty: {declaration!r}")
+            facts[name] = value
+        if len(args.profile) != len(set(args.profile)):
+            raise CreationError("explicit profiles must not contain duplicates")
+
+        selected_version = _stable_version(args.version or _latest_release())
+        repository_name = f"{args.owner}/{args.name}"
+        ruleset_support = _preflight_github(
+            args.owner, repository_name, args.visibility
+        )
+        remote_state = RemoteState.ABSENT
+
+        temporary_checkout = tempfile.TemporaryDirectory(
+            prefix="repository-creation-"
+        )
+        # Retain the selected release until failure-state observation completes.
+        with nullcontext(temporary_checkout.name) as directory:
+            temporary_root = Path(directory)
+            checkout = _checked_out_release(selected_version, temporary_root)
+            license_identifier, license_text = _resolve_license(
+                checkout, args.license, args.owner
+            )
+            initialization_path = temporary_root / "initialization.json"
+            initialization: dict[str, object] = {
+                "standards-release": selected_version,
+                "repository": repository_name,
+                "title": args.name,
+                "facts": facts,
+                "variables": {"license": license_identifier},
+            }
+            if args.profile:
+                initialization["profiles"] = args.profile
+            if ruleset_support is RulesetSupport.UNSUPPORTED:
+                initialization["github"] = {"ruleset": None}
+            initialization_path.write_text(
+                json.dumps(initialization, indent=2) + "\n", encoding="utf-8"
+            )
+
+            _run_phase(
+                "Initial contract preview",
+                [
+                    _tool(checkout, "init"),
+                    "--input",
+                    str(initialization_path),
+                    str(destination),
+                ],
+                cwd=temporary_root,
+                allowed=(0, 1),
+            )
+            _run_phase(
+                "Initial contract write",
+                [
+                    _tool(checkout, "init"),
+                    "--input",
+                    str(initialization_path),
+                    "--write",
+                    str(destination),
+                ],
+                cwd=temporary_root,
+            )
+            local_state = "validated initial contract written"
+            initialized = _git(destination, "init", "--quiet", "--initial-branch=main")
+            if initialized.returncode != 0:
+                raise CreationError(
+                    "cannot initialize local Git repository: "
+                    + (initialized.stderr.strip() or initialized.stdout.strip())
+                )
+            _write_repository_content(
+                destination,
+                name=args.name,
+                purpose=args.purpose,
+                license_text=license_text,
+            )
+            local_state = "unborn main with repository-owned content"
+            _run_phase(
+                "Offline synchronization preview",
+                [_tool(checkout, "sync"), str(destination)],
+                cwd=destination,
+                allowed=(0, 1),
+            )
+            _run_phase(
+                "Offline synchronization write",
+                [_tool(checkout, "sync"), "--write", str(destination)],
+                cwd=destination,
+            )
+            _run_phase(
+                "Offline standards audit",
+                [_tool(checkout, "audit"), str(destination)],
+                cwd=destination,
+            )
+            local_state = "offline baseline validated"
+
+            remote_creation = RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
+            created = _gh(
+                "repo",
+                "create",
+                repository_name,
+                f"--{args.visibility}",
+                "--description",
+                args.purpose,
+                "--disable-wiki",
+            )
+            if created.returncode != 0:
+                raise CreationError(
+                    "GitHub repository creation failed: "
+                    + (created.stderr.strip() or created.stdout.strip())
+                )
+            remote_creation = RemoteCreationOutcome.CONFIRMED
+            remote_state = RemoteState.CREATED
+            added = _git(
+                destination,
+                "remote",
+                "add",
+                "origin",
+                f"https://github.com/{repository_name}.git",
+            )
+            if added.returncode != 0:
+                raise CreationError(
+                    "cannot configure origin: "
+                    + (added.stderr.strip() or added.stdout.strip())
+                )
+            origin_configured = True
+
+            _run_phase(
+                "Prepared live synchronization preview",
+                [
+                    _tool(checkout, "sync-live"),
+                    "--lifecycle",
+                    "prepared",
+                    str(destination),
+                ],
+                cwd=destination,
+                allowed=(0, 1),
+            )
+            live_state = PreparedLiveState("preview completed")
+            _run_phase(
+                "Prepared live synchronization write",
+                [
+                    _tool(checkout, "sync-live"),
+                    "--lifecycle",
+                    "prepared",
+                    "--write",
+                    str(destination),
+                ],
+                cwd=destination,
+            )
+            live_state = PreparedLiveState("applicable changes applied")
+            _run_phase(
+                "Prepared live standards audit",
+                [
+                    _tool(checkout, "audit-live"),
+                    "--lifecycle",
+                    "prepared",
+                    str(destination),
+                ],
+                cwd=destination,
+            )
+            live_state = PreparedLiveState(
+                "validated; publication requirements pending"
+            )
+
+        head = _git(destination, "rev-parse", "--verify", "HEAD")
+        if head.returncode == 0:
+            raise CreationError("creation unexpectedly produced a local commit")
+        branches = _gh("api", f"repos/{repository_name}/branches")
+        if branches.returncode != 0:
+            raise CreationError(
+                "cannot verify empty GitHub repository: "
+                + (branches.stderr.strip() or branches.stdout.strip())
+            )
+        try:
+            observed_branches = json.loads(branches.stdout)
+        except json.JSONDecodeError as exc:
+            raise CreationError("GitHub branches response was not valid JSON") from exc
+        if observed_branches:
+            raise CreationError("creation unexpectedly published a GitHub branch")
+    except (CreationError, OSError) as exc:
+        if repository_name and (
+            remote_creation is not RemoteCreationOutcome.NOT_ATTEMPTED
+            or remote_state is RemoteState.ABSENT
+        ):
+            remote_state = _reobserve_github_repository(args.owner, repository_name)
+        if remote_creation is RemoteCreationOutcome.CONFIRMED:
+            if remote_state is RemoteState.CREATED and checkout is not None:
+                live_state = _observe_prepared_live_state(checkout, destination)
+            elif remote_state is RemoteState.ABSENT:
+                live_state = PreparedLiveState(
+                    "not retained; GitHub repository is confirmed absent"
+                )
+            else:
+                live_state = PreparedLiveState(
+                    "state unknown; GitHub repository could not be observed"
+                )
+        elif (
+            remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
+            and remote_state is RemoteState.CREATED
+        ):
+            live_state = PreparedLiveState(
+                "not observed; repository attribution is unknown"
+            )
+        if destination.is_dir():
+            observed_origin = _git(destination, "remote", "get-url", "origin")
+            origin_configured = observed_origin.returncode == 0
+        print(f"error: {exc}", file=sys.stderr)
+        _retained_state(
+            destination,
+            local_state=local_state,
+            repository_name=repository_name,
+            remote_state=remote_state,
+            remote_creation=remote_creation,
+            origin_configured=origin_configured,
+            live_state=live_state,
+        )
+        return 2
+    finally:
+        if temporary_checkout is not None:
+            temporary_checkout.cleanup()
+
+    print(f"\nPrepared creation baseline: {args.owner}/{args.name}")
+    print(f"- local baseline: {destination} (uncommitted on main)")
+    print("- GitHub repository: empty; origin is configured")
+    print("- required next lifecycle operation: first publication")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

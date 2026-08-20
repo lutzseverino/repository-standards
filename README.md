@@ -121,6 +121,9 @@ Requires Python 3.11 or later.
 ```sh
 scripts/audit /path/to/repository
 scripts/audit-live /path/to/repository
+scripts/audit-live --lifecycle prepared /path/to/repository
+scripts/init --input /path/to/initialization.json /path/to/new-repository
+scripts/init --input /path/to/initialization.json --write /path/to/new-repository
 scripts/sync /path/to/repository
 scripts/sync --write /path/to/repository
 scripts/sync-live /path/to/repository
@@ -141,17 +144,40 @@ declare `github.features` to record intentional use. Repositories that cannot
 use rulesets may declare `"ruleset": null` while retaining auditable repository
 settings, features, and labels.
 
+`init` accepts a non-interactive JSON input containing the exact
+`standards-release`, GitHub `repository`, repository `title`, sufficient
+applicability `facts`, and optional explicit ecosystem `profiles`. Facts are
+sufficient when every selectable profile either fully matches or conflicts
+with at least one fact; an unproven profile stops initialization before write.
+The operation inserts the mandatory `common` and `documentation` profiles,
+infers one ecosystem profile only when exactly one selectable profile matches,
+and validates the complete manifest before write mode creates it. The input may
+also supply exact `boundaries`, `dependency-updates`, `github`, `variables`,
+`local-fragments`, and `repository-owned` declarations. Preview mode does not
+mutate the target.
+Local-fragment declarations are validated against selected compose targets
+without requiring their repository-owned source files to exist during
+initialization; author those sources before the first offline sync or audit.
+
+Use `--lifecycle prepared` with live synchronization and audit while a created
+repository still has no published branch. Applicable settings, features, and
+labels remain reconcilable; default-branch and ruleset requirements are
+reported as pending first publication rather than as current.
+
 GitHub omits ruleset bypass actors from read responses unless the caller has
 write access to the ruleset. A complete live audit of a declared ruleset
 therefore requires Administration write permission and fails rather than
 reporting false conformance when that field is not observable.
 
-Participating repositories receive the user-invoked
-`adopt-repository-standards` skill. Give it an exact stable version for a
-reproducible adoption, or omit the version to select the latest stable GitHub
-Release. It previews offline and live changes, applies them with that release's
-own tools, runs the repository's canonical validation and both audits, and
-leaves the prepared changes uncommitted.
+Participating repositories receive two user-invoked lifecycle skills.
+`adopt-repository-standards` prepares an exact or latest stable release through
+that release's own tools and leaves its changes uncommitted. `create-repository`
+reuses settled facts, asks only for missing explicit decisions, validates the
+local baseline before creating an empty GitHub repository, configures `origin`,
+and leaves uncommitted content on unborn `main`. License identifiers and text
+come from the selected release's pinned catalog. First publication remains the
+required next lifecycle operation; creation does not claim standards
+completeness.
 
 Run the canonical validation gate with:
 
@@ -164,7 +190,7 @@ scripts/check
 | Profile | Use |
 | --- | --- |
 | `agent-skills` | Standard repository-local agent skills; inherited by `common` |
-| `repository-lifecycle-skills` | Family-owned adoption skills; inherited by `common` |
+| `repository-lifecycle-skills` | Family-owned adoption and creation skills; inherited by `common` |
 | `common` | Every participating repository |
 | `documentation` | Repositories using the shared Diataxis documentation set |
 | `node-npm` | Standalone npm install units |

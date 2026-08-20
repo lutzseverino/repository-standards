@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from lib.repository_initialization import (
+    InitializationError,
+    apply_repository_initialization,
+    plan_repository_initialization,
+)
+from lib.standards import StandardsError, standards_root
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Preview or write a validated initial repository contract"
+    )
+    parser.add_argument("destination", help="new empty repository destination")
+    parser.add_argument(
+        "--input", required=True, help="JSON file containing explicit repository facts"
+    )
+    parser.add_argument("--write", action="store_true", help="write the contract")
+    args = parser.parse_args()
+
+    try:
+        input_path = Path(args.input).expanduser().resolve()
+        initialization = json.loads(input_path.read_text(encoding="utf-8"))
+        if not isinstance(initialization, dict):
+            raise InitializationError("initialization input must contain an object")
+        plan = plan_repository_initialization(
+            Path(args.destination),
+            initialization,
+            standards_root=standards_root(),
+        )
+    except (OSError, json.JSONDecodeError, InitializationError, StandardsError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if not args.write:
+        print(json.dumps(plan.contract.as_mapping(), indent=2))
+        return 1
+
+    try:
+        manifest_path = apply_repository_initialization(plan)
+    except (OSError, InitializationError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"Initialized validated repository contract at {manifest_path}")
+    if plan.contract.inferred_profile:
+        print(
+            "Inferred selectable ecosystem profile: "
+            f"{plan.contract.inferred_profile}"
+        )
+    else:
+        print("Selected mandatory profile baseline; no ecosystem profile inferred.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
