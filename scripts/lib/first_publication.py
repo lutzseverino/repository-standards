@@ -9,9 +9,9 @@ import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .live_reconciliation import (
@@ -179,7 +179,11 @@ def _validate_offline_baseline(contract: RepositoryContract) -> None:
         )
 
 
-def _initial_tree(repository: Path, git_directory: Path) -> tuple[str, tuple[InitialCommitFile, ...]]:
+def _initial_tree(
+    repository: Path,
+    git_directory: Path,
+    contract: RepositoryContract,
+) -> tuple[str, tuple[InitialCommitFile, ...]]:
     with tempfile.TemporaryDirectory(prefix="first-publication-plan-") as directory:
         temporary = Path(directory)
         object_directory = temporary / "objects"
@@ -213,18 +217,147 @@ def _initial_tree(repository: Path, git_directory: Path) -> tuple[str, tuple[Ini
                 "cannot list the initial commit contents: "
                 + (listed.stderr.strip() or listed.stdout.strip())
             )
-    files: list[InitialCommitFile] = []
-    for record in listed.stdout.split("\0"):
-        if not record:
+        files: list[InitialCommitFile] = []
+        for record in listed.stdout.split("\0"):
+            if not record:
+                continue
+            metadata, path = record.split("\t", 1)
+            mode, object_id, stage = metadata.split(" ", 2)
+            if stage != "0":
+                raise PublicationError(
+                    f"initial commit contains an unresolved stage: {path}"
+                )
+            files.append(InitialCommitFile(path, mode, object_id))
+        if not files:
+            raise PublicationError(
+                "prepared creation baseline has no initial commit contents"
+            )
+        committed_files = tuple(files)
+        _validate_committed_baseline(
+            contract,
+            committed_files,
+            object_environment=environment,
+        )
+        return tree.stdout.strip(), committed_files
+
+
+def _validate_committed_baseline(
+    contract: RepositoryContract,
+    files: tuple[InitialCommitFile, ...],
+    *,
+    object_environment: dict[str, str] | None = None,
+) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="first-publication-committed-baseline-"
+    ) as directory:
+        committed_repository = Path(directory) / "repository"
+        committed_repository.mkdir()
+        for item in files:
+            relative = PurePosixPath(item.path)
+            if (
+                relative.is_absolute()
+                or not relative.parts
+                or any(part in {"", ".", ".."} for part in relative.parts)
+            ):
+                raise PublicationError(
+                    f"initial commit contains an unsafe path: {item.path!r}"
+                )
+            if item.mode not in {"100644", "100755"}:
+                continue
+            blob = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(contract.repository),
+                    "cat-file",
+                    "blob",
+                    item.object_id,
+                ],
+                check=False,
+                capture_output=True,
+                env=object_environment,
+            )
+            if blob.returncode != 0:
+                diagnostic = blob.stderr.decode(errors="replace").strip()
+                raise PublicationError(
+                    f"cannot read initial commit content for {item.path!r}"
+                    + (f": {diagnostic}" if diagnostic else "")
+                )
+            target = committed_repository.joinpath(*relative.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(blob.stdout)
+        try:
+            committed_contract = resolve_repository_contract(
+                committed_repository,
+                standards_root=contract.standards_root,
+            )
+            _validate_offline_baseline(committed_contract)
+            comparable_contract = replace(
+                committed_contract,
+                repository=contract.repository,
+                manifest_path=contract.manifest_path,
+            )
+            if comparable_contract != contract:
+                raise PublicationError(
+                    "committed repository contract differs from the prepared "
+                    "creation baseline"
+                )
+        except (ContractError, StandardsError) as exc:
+            raise PublicationError(str(exc)) from exc
+
+
+def _validate_no_external_git_filters(repository: Path) -> None:
+    listed = _git(
+        repository,
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+    )
+    if listed.returncode != 0:
+        raise PublicationError(
+            "cannot inspect prepared paths for external Git filters: "
+            + (listed.stderr.strip() or listed.stdout.strip())
+        )
+    attributes = _git(
+        repository,
+        "check-attr",
+        "-z",
+        "--stdin",
+        "filter",
+        input_text=listed.stdout,
+    )
+    if attributes.returncode != 0:
+        raise PublicationError(
+            "cannot inspect prepared Git filter attributes: "
+            + (attributes.stderr.strip() or attributes.stdout.strip())
+        )
+    fields = attributes.stdout.split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    if len(fields) % 3:
+        raise PublicationError("prepared Git filter attributes were invalid")
+    for path, attribute, driver in zip(fields[::3], fields[1::3], fields[2::3]):
+        if attribute != "filter" or driver in {"set", "unset", "unspecified"}:
             continue
-        metadata, path = record.split("\t", 1)
-        mode, object_id, stage = metadata.split(" ", 2)
-        if stage != "0":
-            raise PublicationError(f"initial commit contains an unresolved stage: {path}")
-        files.append(InitialCommitFile(path, mode, object_id))
-    if not files:
-        raise PublicationError("prepared creation baseline has no initial commit contents")
-    return tree.stdout.strip(), tuple(files)
+        for command_type in ("process", "clean"):
+            configured = _git(
+                repository,
+                "config",
+                "--get-all",
+                f"filter.{driver}.{command_type}",
+            )
+            if configured.returncode == 0:
+                raise PublicationError(
+                    f"prepared path {path!r} selects external Git {command_type} "
+                    f"filter {driver!r}; Plan cannot run clean or process filters"
+                )
+            if configured.returncode != 1:
+                raise PublicationError(
+                    f"cannot inspect external Git {command_type} filter {driver!r}: "
+                    + (configured.stderr.strip() or configured.stdout.strip())
+                )
 
 
 def _collect_pages(adapter: GitHubAdapter, endpoint: str) -> tuple[dict[str, Any], ...]:
@@ -503,7 +636,8 @@ def plan_first_publication(
             + ", ".join(reference for _, reference in git_refs)
         )
 
-    tree_oid, files = _initial_tree(repository, git_directory)
+    _validate_no_external_git_filters(repository)
+    tree_oid, files = _initial_tree(repository, git_directory, contract)
     instant = now or datetime.now(timezone.utc)
     if instant.tzinfo is None or instant.utcoffset() is None:
         raise PublicationError("publication plan time must include a timezone")
@@ -995,6 +1129,10 @@ def _verify_committed_content(
     tree = _git(plan.repository, "rev-parse", "HEAD^{tree}")
     if tree.returncode != 0 or tree.stdout.strip() != plan.commit.tree_oid:
         return "committed tree does not match the planned initial content"
+    try:
+        _validate_committed_baseline(contract, plan.commit.files)
+    except PublicationError as exc:
+        return str(exc)
     status = _git(
         plan.repository,
         "status",

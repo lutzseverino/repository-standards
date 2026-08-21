@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -452,6 +453,91 @@ print(json.dumps(responses[endpoint]))
         )
         with self.assertRaisesRegex(Exception, "must have no commits"):
             self.plan()
+
+    def test_plan_rejects_required_managed_content_missing_from_initial_tree(
+        self,
+    ) -> None:
+        (self.repository / ".git/info/exclude").write_text(
+            "AGENTS.md\n", encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(Exception, "AGENTS.md: missing"):
+            self.plan()
+
+    def test_plan_rejects_contract_manifest_missing_from_initial_tree(self) -> None:
+        (self.repository / ".git/info/exclude").write_text(
+            ".repository-standards.json\n", encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(Exception, "no repository standards manifest"):
+            self.plan()
+
+    def test_plan_rejects_a_staged_contract_that_differs_from_the_worktree(
+        self,
+    ) -> None:
+        manifest = self.repository / ".repository-standards.json"
+        worktree_content = manifest.read_text(encoding="utf-8")
+        staged_contract = json.loads(worktree_content)
+        staged_contract["github"]["repository"] = "owner/other"
+        manifest.write_text(
+            json.dumps(staged_contract, indent=2) + "\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", ".repository-standards.json"],
+            cwd=self.repository,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "update-index", "--assume-unchanged", ".repository-standards.json"],
+            cwd=self.repository,
+            check=True,
+        )
+        manifest.write_text(worktree_content, encoding="utf-8")
+
+        with self.assertRaisesRegex(Exception, "committed repository contract differs"):
+            self.plan()
+
+    def test_plan_rejects_an_external_clean_filter_without_running_it(self) -> None:
+        marker = self.repository / ".git/filter-ran"
+        (self.repository / ".git/info/attributes").write_text(
+            "*.md filter=plan-side-effect\n", encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "filter.plan-side-effect.clean",
+                f"touch {shlex.quote(str(marker))}; cat",
+            ],
+            cwd=self.repository,
+            check=True,
+        )
+
+        with self.assertRaisesRegex(Exception, "external Git clean filter"):
+            self.plan()
+
+        self.assertFalse(marker.exists())
+
+    def test_plan_rejects_an_external_process_filter_without_running_it(self) -> None:
+        marker = self.repository / ".git/filter-ran"
+        (self.repository / ".git/info/attributes").write_text(
+            "*.md filter=plan-side-effect\n", encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "filter.plan-side-effect.process",
+                f"touch {shlex.quote(str(marker))}; cat",
+            ],
+            cwd=self.repository,
+            check=True,
+        )
+
+        with self.assertRaisesRegex(Exception, "external Git process filter"):
+            self.plan()
+
+        self.assertFalse(marker.exists())
 
     def test_plan_rejects_multiple_origin_push_destinations(self) -> None:
         second_remote = self.directory / "second-remote.git"
