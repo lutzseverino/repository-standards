@@ -81,6 +81,7 @@ class LiveReconciliationTests(unittest.TestCase):
                 "has_projects": False,
                 "has_wiki": False,
             },
+            branches=({"name": "main"}, {"name": "trunk"}),
             label_names=frozenset({"repository-specific"}),
             rulesets=(
                 {
@@ -134,7 +135,7 @@ class LiveReconciliationTests(unittest.TestCase):
             any("Repository local" in operation.description for operation in delta.operations)
         )
 
-    def test_replaceable_adapter_observes_paginated_labels_and_rulesets(self) -> None:
+    def test_replaceable_adapter_observes_branches_labels_and_rulesets(self) -> None:
         class FakeAdapter(GitHubAdapter):
             def __init__(self) -> None:
                 self.requests: list[tuple[str, str]] = []
@@ -199,6 +200,9 @@ class LiveReconciliationTests(unittest.TestCase):
                         "bypass_actors": [],
                         "rules": [],
                     },
+                    "repos/owner/example/branches?per_page=100&page=1": [
+                        {"name": "main"}
+                    ],
                 }
                 return responses[endpoint]
 
@@ -206,6 +210,7 @@ class LiveReconciliationTests(unittest.TestCase):
 
         snapshot = adapter.observe(self.contract())
 
+        self.assertEqual(snapshot.branches, ({"name": "main"},))
         self.assertIn("bug", snapshot.label_names)
         self.assertEqual(snapshot.rulesets[0]["id"], 101)
         self.assertIn(
@@ -312,6 +317,7 @@ class LiveReconciliationTests(unittest.TestCase):
                 "has_projects": False,
                 "has_wiki": False,
             },
+            branches=({"name": "main"},),
             label_names=frozenset({"bug"}),
             rulesets=(drifted_ruleset,),
         )
@@ -337,6 +343,7 @@ class LiveReconciliationTests(unittest.TestCase):
             self.contract(),
             GitHubSnapshot(
                 repository=snapshot.repository,
+                branches=snapshot.branches,
                 label_names=snapshot.label_names,
                 rulesets=({"id": 7, **operation.payload},),
             ),
@@ -358,6 +365,7 @@ class LiveReconciliationTests(unittest.TestCase):
                 "has_projects": False,
                 "has_wiki": False,
             },
+            branches=({"name": "main"},),
             label_names=frozenset({"bug"}),
             rulesets=(
                 {
@@ -423,6 +431,7 @@ class LiveReconciliationTests(unittest.TestCase):
                     "has_projects": False,
                     "has_wiki": False,
                 },
+                branches=(),
                 label_names=frozenset({"bug"}),
                 rulesets=(),
                 lifecycle=LiveLifecycle.PREPARED,
@@ -435,6 +444,36 @@ class LiveReconciliationTests(unittest.TestCase):
         self.assertTrue(
             all("pending first publication" in item for item in delta.pending_findings)
         )
+
+    def test_empty_observed_branch_set_requires_default_branch_establishment(
+        self,
+    ) -> None:
+        delta = reconcile_live_github(
+            self.contract(),
+            GitHubSnapshot(
+                repository={
+                    "default_branch": "main",
+                    "delete_branch_on_merge": True,
+                    "allow_squash_merge": True,
+                    "allow_merge_commit": False,
+                    "allow_rebase_merge": False,
+                    "squash_merge_commit_title": "PR_TITLE",
+                    "squash_merge_commit_message": "PR_BODY",
+                    "has_issues": True,
+                    "has_projects": False,
+                    "has_wiki": False,
+                },
+                branches=(),
+                label_names=frozenset({"bug"}),
+                rulesets=(),
+            ),
+        )
+
+        operation = delta.operations[0]
+        self.assertEqual(operation.description, "ESTABLISH default branch 'main'")
+        self.assertEqual(operation.method, "PATCH")
+        self.assertEqual(operation.endpoint, "repos/owner/example")
+        self.assertEqual(operation.payload, {"default_branch": "main"})
 
     def test_required_label_case_collisions_are_renamed_in_place(self) -> None:
         delta = reconcile_live_github(
@@ -452,6 +491,7 @@ class LiveReconciliationTests(unittest.TestCase):
                     "has_projects": False,
                     "has_wiki": False,
                 },
+                branches=({"name": "main"},),
                 label_names=frozenset({"Bug", "repository-specific"}),
                 rulesets=(),
             ),
@@ -506,6 +546,7 @@ class LiveReconciliationTests(unittest.TestCase):
                     "has_projects": False,
                     "has_wiki": False,
                 },
+                branches=({"name": "main"}, {"name": "trunk"}),
                 label_names=frozenset(),
                 rulesets=(),
             ),
@@ -552,6 +593,7 @@ class LiveReconciliationTests(unittest.TestCase):
                     "has_wiki": False,
                     "has_discussions": True,
                 },
+                branches=({"name": "main"},),
                 label_names=frozenset({"bug"}),
                 rulesets=(
                     {

@@ -126,6 +126,32 @@ def _required_git_value(repository: Path, *arguments: str, label: str) -> str:
     return value
 
 
+def _validate_git_identity(repository: Path, name: str, email: str) -> None:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GIT_AUTHOR_NAME": name,
+            "GIT_AUTHOR_EMAIL": email,
+            "GIT_AUTHOR_DATE": "@0 +0000",
+        }
+    )
+    result = _git(
+        repository,
+        "var",
+        "GIT_AUTHOR_IDENT",
+        environment=environment,
+    )
+    if result.returncode != 0:
+        raise PublicationError(
+            "cannot validate effective Git identity: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    if result.stdout.rstrip("\r\n") != f"{name} <{email}> 0 +0000":
+        raise PublicationError(
+            "effective Git identity contains characters Git strips or normalizes"
+        )
+
+
 def _validate_offline_baseline(contract: RepositoryContract) -> None:
     managed = inspect(contract.repository, contract.managed_files)
     drift = [result for result in managed if result.status != "ok"]
@@ -420,6 +446,7 @@ def plan_first_publication(
         raise PublicationError(
             "effective Git identity must use single-line name and email values"
         )
+    _validate_git_identity(repository, author_name, author_email)
 
     remote_url = _required_git_value(
         repository,
@@ -513,7 +540,7 @@ def plan_first_publication(
             + ", ".join(missing_permissions)
         )
     endpoint = f"repos/{repository_name}"
-    branches = _collect_pages(adapter, f"{endpoint}/branches")
+    branches = snapshot.branches
     pulls = _collect_pages(adapter, f"{endpoint}/pulls?state=all")
     if branches:
         raise PublicationError("GitHub repository is not empty; remote branches already exist")
@@ -522,6 +549,7 @@ def plan_first_publication(
 
     prepared_snapshot = GitHubSnapshot(
         repository=snapshot.repository,
+        branches=snapshot.branches,
         label_names=snapshot.label_names,
         rulesets=snapshot.rulesets,
         lifecycle=LiveLifecycle.PREPARED,
@@ -995,9 +1023,6 @@ def _verify_live_state(
     try:
         snapshot = adapter.observe(contract, lifecycle=LiveLifecycle.PUBLISHED)
         delta = reconcile_live_github(contract, snapshot)
-        branches = _collect_pages(
-            adapter, f"repos/{plan.repository_name}/branches"
-        )
         pulls = _collect_pages(
             adapter, f"repos/{plan.repository_name}/pulls?state=all"
         )
@@ -1009,7 +1034,7 @@ def _verify_live_state(
         return "live GitHub state remains non-conforming:\n- " + "\n- ".join(
             delta.findings
         )
-    if not any(branch.get("name") == plan.branch for branch in branches):
+    if not any(branch.get("name") == plan.branch for branch in snapshot.branches):
         return f"GitHub did not re-observe published branch {plan.branch!r}"
     if pulls:
         return "first publication unexpectedly left a pull request"

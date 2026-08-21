@@ -285,6 +285,17 @@ class FirstPublicationTests(unittest.TestCase):
             ),
         )
 
+    def test_plan_establishes_named_default_branch_when_remote_is_empty(self) -> None:
+        self.github.repository["default_branch"] = "main"
+
+        plan = self.plan()
+
+        operation = plan.live_delta.operations[0]
+        self.assertEqual(operation.description, "ESTABLISH default branch 'main'")
+        self.assertEqual(operation.method, "PATCH")
+        self.assertEqual(operation.endpoint, "repos/owner/example")
+        self.assertEqual(operation.payload, {"default_branch": "main"})
+
     def test_plan_command_surfaces_complete_live_operations(self) -> None:
         subprocess.run(
             [
@@ -555,6 +566,42 @@ print(json.dumps(responses[endpoint]))
         self.github.repository["has_issues"] = False
         with self.assertRaisesRegex(Exception, "prepared GitHub state has applicable drift"):
             self.plan()
+
+    def test_plan_rejects_identity_characters_git_strips(self) -> None:
+        invalid_identities = [
+            ("user.name", "Publication <Tester"),
+            ("user.name", "Publication >Tester"),
+            ("user.email", "publication<@example.com"),
+            ("user.email", "publication>@example.com"),
+        ]
+        for character in ",:;\"\\'":
+            invalid_identities.extend(
+                (
+                    ("user.name", f"Publication Tester{character}"),
+                    ("user.email", f"publication@example.com{character}"),
+                )
+            )
+
+        for field, value in invalid_identities:
+            with self.subTest(field=field, value=value):
+                subprocess.run(
+                    ["git", "config", "user.name", "Publication Tester"],
+                    cwd=self.repository,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "config", "user.email", "publication@example.com"],
+                    cwd=self.repository,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "config", field, value],
+                    cwd=self.repository,
+                    check=True,
+                )
+
+                with self.assertRaisesRegex(Exception, "characters Git strips"):
+                    self.plan()
 
     def test_plan_uses_effective_identity_without_writing_local_config(self) -> None:
         subprocess.run(

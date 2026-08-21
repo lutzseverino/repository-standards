@@ -63,6 +63,8 @@ class LiveSyncCommandTests(unittest.TestCase):
                     response = state["repository"]
                 elif method == "GET" and endpoint.startswith("repos/owner/example/labels?"):
                     response = state["labels"]
+                elif method == "GET" and endpoint.startswith("repos/owner/example/branches?"):
+                    response = state["branches"]
                 elif method == "GET" and endpoint.startswith("repos/owner/example/rulesets?"):
                     response = [
                         {"id": item["id"], "name": item["name"]}
@@ -210,6 +212,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "has_projects": False,
                 "has_wiki": False,
             },
+            "branches": [],
             "labels": [{"name": name} for name in required_labels],
             "rulesets": [],
         }
@@ -257,6 +260,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "allow_merge_commit": False,
                 "allow_rebase_merge": False,
             },
+            "branches": [{"name": "main"}, {"name": "trunk"}],
             "labels": [
                 {"name": "bug"},
                 {"name": "repository-specific"},
@@ -297,6 +301,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "allow_merge_commit": False,
                 "allow_rebase_merge": False,
             },
+            "branches": [{"name": "main"}, {"name": "trunk"}],
             "labels": [{"name": "repository-specific"}],
             "rulesets": [extra_ruleset],
         }
@@ -332,6 +337,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "allow_merge_commit": False,
                 "allow_rebase_merge": False,
             },
+            "branches": [{"name": "main"}, {"name": "trunk"}],
             "labels": [],
             "rulesets": [],
             "fail_on_write": 2,
@@ -415,6 +421,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "allow_merge_commit": False,
                 "allow_rebase_merge": False,
             },
+            "branches": [{"name": "main"}],
             "labels": [{"name": name} for name in required_labels],
             "rulesets": [local_ruleset, drifted_ruleset],
         }
@@ -455,6 +462,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                 "has_projects": False,
                 "has_wiki": False,
             },
+            "branches": [{"name": "main"}],
             "labels": [
                 {"name": name}
                 for name in (
@@ -500,6 +508,7 @@ class LiveSyncCommandTests(unittest.TestCase):
                         "allow_merge_commit": False,
                         "allow_rebase_merge": False,
                     },
+                    "branches": [{"name": "main"}, {"name": "trunk"}],
                     "labels": [],
                     "rulesets": [],
                     "fail_on_write": 1,
