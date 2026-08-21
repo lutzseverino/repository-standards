@@ -19,6 +19,13 @@ class PublicationAdapterError(Exception):
     pass
 
 
+def _lexical_absolute_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path.parent.resolve() / path.name
+
+
 def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repository), *arguments],
@@ -147,7 +154,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        plan_file = Path(args.plan_file).expanduser().resolve()
+        plan_file = _lexical_absolute_path(args.plan_file)
         repository = (
             Path(args.repository).expanduser().resolve()
             if args.operation == "plan"

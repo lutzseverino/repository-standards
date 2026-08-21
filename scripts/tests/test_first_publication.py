@@ -331,6 +331,9 @@ print(json.dumps(responses[endpoint]))
         )
         fake_gh.chmod(0o755)
         plan_path = self.directory / "publication-plan.json"
+        victim = self.directory / "unrelated.json"
+        victim.write_text("unrelated content\n", encoding="utf-8")
+        plan_path.symlink_to(victim)
         responses = {
             "repos/owner/example": self.github.repository,
             "repos/owner/example/labels?per_page=100&page=1": [
@@ -371,6 +374,10 @@ print(json.dumps(responses[endpoint]))
         self.assertIn('"endpoint": "repos/owner/example"', result.stdout)
         self.assertIn('"default_branch": "main"', result.stdout)
         self.assertIn('"required_approving_review_count": 0', result.stdout)
+        self.assertEqual(
+            victim.read_text(encoding="utf-8"), "unrelated content\n"
+        )
+        self.assertFalse(plan_path.is_symlink())
         self.assertTrue(plan_path.is_file())
 
     def test_publish_completes_the_planned_transition_and_proves_conformance(

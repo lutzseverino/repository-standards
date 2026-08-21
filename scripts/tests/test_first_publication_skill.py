@@ -99,6 +99,9 @@ if arguments[0] == "plan":
         self.assertIn("Stop and ask the human for explicit confirmation", skill)
         self.assertIn("Do not enter Publish", skill)
         self.assertIn("execution adapter", skill)
+        victim = self.directory / "unrelated.json"
+        victim.write_text("unrelated content\n", encoding="utf-8")
+        self.plan_file.symlink_to(victim)
 
         planned = self.run_runner(
             "plan",
@@ -130,6 +133,9 @@ if arguments[0] == "plan":
         self.assertEqual(operations[0][0], "plan")
         self.assertEqual(operations[1][0], "publish")
         self.assertIn("--confirm", operations[1])
+        for operation in operations:
+            plan_path = operation[operation.index("--plan-file") + 1]
+            self.assertEqual(plan_path, str(self.plan_file))
 
 
 if __name__ == "__main__":
