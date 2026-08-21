@@ -311,6 +311,7 @@ def _plan_identity_payload(
 def _publication_steps(delta: LiveDesiredStateDelta) -> tuple[str, ...]:
     return (
         "CREATE   initial commit",
+        "INSTALL  initial Git index",
         "PUBLISH  main to origin",
         *(operation.description for operation in delta.operations),
         "VERIFY   committed content",
@@ -1176,10 +1177,14 @@ def publish_first_publication(
         try:
             os.replace(index_lock, existing_index)
         except OSError as exc:
-            return _uncertain_report(
+            try:
+                index_lock.unlink()
+            except OSError:
+                pass
+            return _failed_report(
                 steps,
-                0,
-                f"initial commit exists but its Git index installation is unknown: {exc}",
+                1,
+                f"cannot install the initial Git index: {exc}",
                 commit_oid=commit_oid,
             )
 
@@ -1197,21 +1202,21 @@ def publish_first_publication(
             if observation_error:
                 return _uncertain_report(
                     steps,
-                    1,
+                    2,
                     f"{push_error}; completion is unknown because re-observation "
                     f"failed: {observation_error}",
                     commit_oid=commit_oid,
                 )
             return _failed_report(
                 steps,
-                1,
+                2,
                 push_error,
                 commit_oid=commit_oid,
             )
 
     operations = plan.live_delta.operations
     for live_index, operation in enumerate(operations):
-        operation_index = live_index + 2
+        operation_index = live_index + 3
         try:
             adapter.apply(operation)
         except (StandardsError, OSError) as exc:

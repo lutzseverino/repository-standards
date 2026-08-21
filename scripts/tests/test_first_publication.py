@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -274,6 +275,7 @@ class FirstPublicationTests(unittest.TestCase):
             plan.steps,
             (
                 "CREATE   initial commit",
+                "INSTALL  initial Git index",
                 "PUBLISH  main to origin",
                 "ESTABLISH default branch 'main'",
                 "CREATE   ruleset 'Protect main'",
@@ -641,6 +643,37 @@ class FirstPublicationTests(unittest.TestCase):
         self.assertTrue(report.complete, report.error)
         self.assertEqual(self.git_status(), "")
 
+    def test_index_install_failure_reports_the_established_commit(self) -> None:
+        plan = self.plan()
+
+        with patch(
+            "lib.first_publication.os.replace",
+            side_effect=OSError("index destination denied"),
+        ):
+            report = publish_first_publication(
+                plan,
+                self.github,
+                standards_root=ROOT,
+                confirmation=plan.confirmation,
+            )
+
+        self.assertEqual(report.completed, ("CREATE   initial commit",))
+        self.assertEqual(report.failed, "INSTALL  initial Git index")
+        self.assertIsNone(report.uncertain)
+        self.assertEqual(report.remaining, plan.steps[2:])
+        self.assertEqual(
+            subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=self.repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            report.commit_oid,
+        )
+        self.assertFalse((self.repository / ".git/index.lock").exists())
+        self.assertEqual(self.github.mutations, [])
+
     def test_push_failure_retains_the_initial_commit_without_rollback(self) -> None:
         plan = self.plan()
         hook = self.remote / "hooks/pre-receive"
@@ -654,9 +687,9 @@ class FirstPublicationTests(unittest.TestCase):
             confirmation=plan.confirmation,
         )
 
-        self.assertEqual(report.completed, ("CREATE   initial commit",))
+        self.assertEqual(report.completed, plan.steps[:2])
         self.assertEqual(report.failed, "PUBLISH  main to origin")
-        self.assertEqual(report.remaining, plan.steps[2:])
+        self.assertEqual(report.remaining, plan.steps[3:])
         self.assertIsNotNone(report.commit_oid)
         self.assertEqual(self.github.mutations, [])
 
@@ -676,10 +709,10 @@ class FirstPublicationTests(unittest.TestCase):
             confirmation=plan.confirmation,
         )
 
-        self.assertEqual(report.completed, ("CREATE   initial commit",))
+        self.assertEqual(report.completed, plan.steps[:2])
         self.assertIsNone(report.failed)
         self.assertEqual(report.uncertain, "PUBLISH  main to origin")
-        self.assertEqual(report.remaining, plan.steps[2:])
+        self.assertEqual(report.remaining, plan.steps[3:])
         self.assertIn("completion is unknown", report.error or "")
         self.assertEqual(self.github.mutations, [])
 
@@ -696,9 +729,9 @@ class FirstPublicationTests(unittest.TestCase):
             confirmation=plan.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:2])
+        self.assertEqual(report.completed, plan.steps[:3])
         self.assertEqual(report.failed, "ESTABLISH default branch 'main'")
-        self.assertEqual(report.remaining, plan.steps[3:])
+        self.assertEqual(report.remaining, plan.steps[4:])
         self.assertEqual(self.github.rulesets, [])
 
     def test_live_application_failure_preserves_the_published_default_branch(self) -> None:
@@ -712,9 +745,9 @@ class FirstPublicationTests(unittest.TestCase):
             confirmation=plan.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:3])
+        self.assertEqual(report.completed, plan.steps[:4])
         self.assertEqual(report.failed, "CREATE   ruleset 'Protect main'")
-        self.assertEqual(report.remaining, plan.steps[4:])
+        self.assertEqual(report.remaining, plan.steps[5:])
         self.assertEqual(self.github.repository["default_branch"], "main")
 
     def test_lost_live_write_response_is_reobserved_before_classification(self) -> None:
@@ -743,10 +776,10 @@ class FirstPublicationTests(unittest.TestCase):
             confirmation=plan.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:3])
+        self.assertEqual(report.completed, plan.steps[:4])
         self.assertIsNone(report.failed)
         self.assertEqual(report.uncertain, "CREATE   ruleset 'Protect main'")
-        self.assertEqual(report.remaining, plan.steps[4:])
+        self.assertEqual(report.remaining, plan.steps[5:])
         self.assertIn("completion is unknown", report.error or "")
         self.assertEqual(len(self.github.rulesets), 1)
 
