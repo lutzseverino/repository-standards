@@ -285,6 +285,94 @@ class FirstPublicationTests(unittest.TestCase):
             ),
         )
 
+    def test_plan_command_surfaces_complete_live_operations(self) -> None:
+        subprocess.run(
+            [
+                "git",
+                "remote",
+                "set-url",
+                "--push",
+                "origin",
+                "https://github.com/owner/example.git",
+            ],
+            cwd=self.repository,
+            check=True,
+        )
+        git_exec_path = self.directory / "git-exec"
+        git_exec_path.mkdir()
+        remote_helper = git_exec_path / "git-remote-https"
+        remote_helper.write_text(
+            """#!/usr/bin/env python3
+import sys
+
+for command in sys.stdin:
+    if command.strip() in {"capabilities", "list"}:
+        print()
+        sys.stdout.flush()
+""",
+            encoding="utf-8",
+        )
+        remote_helper.chmod(0o755)
+        fake_gh = self.directory / "fake-gh"
+        fake_gh.write_text(
+            """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+responses = json.loads(os.environ["FAKE_GITHUB_RESPONSES"])
+endpoint = sys.argv[2]
+if endpoint not in responses:
+    print(f"unexpected endpoint: {endpoint}", file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps(responses[endpoint]))
+""",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
+        plan_path = self.directory / "publication-plan.json"
+        responses = {
+            "repos/owner/example": self.github.repository,
+            "repos/owner/example/labels?per_page=100&page=1": [
+                {"name": name} for name in sorted(self.github.labels)
+            ],
+            "repos/owner/example/rulesets?includes_parents=false&per_page=100&page=1": [],
+            "repos/owner/example/branches?per_page=100&page=1": [],
+            "repos/owner/example/pulls?state=all&per_page=100&page=1": [],
+        }
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "REPOSITORY_STANDARDS_GH": str(fake_gh),
+                "FAKE_GITHUB_RESPONSES": json.dumps(responses),
+                "GIT_EXEC_PATH": str(git_exec_path),
+            }
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/first-publication"),
+                "plan",
+                str(self.repository),
+                "--plan-file",
+                str(plan_path),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Live desired-state operations:", result.stdout)
+        self.assertIn('"method": "PATCH"', result.stdout)
+        self.assertIn('"endpoint": "repos/owner/example"', result.stdout)
+        self.assertIn('"default_branch": "main"', result.stdout)
+        self.assertIn('"required_approving_review_count": 0', result.stdout)
+        self.assertTrue(plan_path.is_file())
+
     def test_publish_completes_the_planned_transition_and_proves_conformance(
         self,
     ) -> None:
@@ -621,6 +709,26 @@ class FirstPublicationTests(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
         with self.assertRaisesRegex(Exception, "steps do not match"):
             load_publication_plan(path, _allow_local_push_for_testing=True)
+
+    def test_plan_record_uses_a_private_exclusive_temporary_file(self) -> None:
+        plan = self.plan()
+        path = self.directory / "publication-plan.json"
+        victim = self.directory / "unrelated.json"
+        victim.write_text("unrelated content\n", encoding="utf-8")
+        predictable_temporary = self.directory / ".publication-plan.json.tmp"
+        predictable_temporary.symlink_to(victim)
+
+        write_publication_plan(plan, path)
+
+        self.assertEqual(
+            victim.read_text(encoding="utf-8"), "unrelated content\n"
+        )
+        self.assertFalse(path.is_symlink())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(predictable_temporary.is_symlink())
+        self.assertEqual(
+            list(self.directory.glob(".publication-plan.json.*.tmp")), []
+        )
 
     def test_publish_requires_exact_confirmation_before_any_revalidation(self) -> None:
         plan = self.plan()

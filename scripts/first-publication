@@ -47,6 +47,22 @@ def _render_plan(plan: PublicationPlan, path: Path) -> None:
     print("\nLive desired-state findings:")
     for finding in plan.live_delta.findings:
         print(f"- {finding}")
+    print("\nLive desired-state operations:")
+    print(
+        json.dumps(
+            [
+                {
+                    "description": operation.description,
+                    "method": operation.method,
+                    "endpoint": operation.endpoint,
+                    "payload": operation.payload,
+                }
+                for operation in plan.live_delta.operations
+            ],
+            indent=2,
+            sort_keys=True,
+        )
+    )
     print("\nObserved GitHub state and permissions:")
     print(json.dumps(plan.observed_github_state, indent=2, sort_keys=True))
     print(f"\nPlan record: {path}")

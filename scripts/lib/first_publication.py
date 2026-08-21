@@ -797,16 +797,31 @@ def write_publication_plan(plan: PublicationPlan, path: Path) -> None:
         )
     if not path.parent.is_dir():
         raise PublicationError(f"publication Plan directory does not exist: {path.parent}")
-    temporary = path.with_name(f".{path.name}.tmp")
+    descriptor: int | None = None
+    temporary: Path | None = None
     try:
-        temporary.write_text(
-            json.dumps(publication_plan_mapping(plan), indent=2) + "\n",
-            encoding="utf-8",
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
         )
-        temporary.chmod(0o600)
+        temporary = Path(temporary_name)
+        stream = os.fdopen(descriptor, "w", encoding="utf-8")
+        descriptor = None
+        with stream:
+            stream.write(json.dumps(publication_plan_mapping(plan), indent=2) + "\n")
         os.replace(temporary, path)
+        temporary = None
     except OSError as exc:
         raise PublicationError(f"cannot write publication Plan: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
 
 
 def load_publication_plan(
