@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -404,8 +405,17 @@ class FirstPublicationTests(unittest.TestCase):
             cwd=self.repository,
             check=True,
         )
-        with self.assertRaisesRegex(Exception, "local Git user.email"):
-            self.plan()
+        empty_global_config = self.directory / "empty.gitconfig"
+        empty_global_config.write_text("", encoding="utf-8")
+        with patch.dict(
+            os.environ,
+            {
+                "GIT_CONFIG_GLOBAL": str(empty_global_config),
+                "GIT_CONFIG_NOSYSTEM": "1",
+            },
+        ):
+            with self.assertRaisesRegex(Exception, "effective Git user.email"):
+                self.plan()
 
         subprocess.run(
             ["git", "config", "user.email", "publication@example.com"],
@@ -420,6 +430,71 @@ class FirstPublicationTests(unittest.TestCase):
         self.github.repository["has_issues"] = False
         with self.assertRaisesRegex(Exception, "prepared GitHub state has applicable drift"):
             self.plan()
+
+    def test_plan_uses_effective_identity_without_writing_local_config(self) -> None:
+        subprocess.run(
+            ["git", "config", "--local", "--unset-all", "user.name"],
+            cwd=self.repository,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "--local", "--unset-all", "user.email"],
+            cwd=self.repository,
+            check=True,
+        )
+        global_config = self.directory / "global.gitconfig"
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "--file",
+                str(global_config),
+                "user.name",
+                "Effective Publication Tester",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "--file",
+                str(global_config),
+                "user.email",
+                "effective-publication@example.com",
+            ],
+            check=True,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "GIT_CONFIG_GLOBAL": str(global_config),
+                "GIT_CONFIG_NOSYSTEM": "1",
+            },
+        ):
+            plan = self.plan()
+
+        self.assertEqual(plan.commit.author_name, "Effective Publication Tester")
+        self.assertEqual(
+            plan.commit.author_email, "effective-publication@example.com"
+        )
+        local_name = subprocess.run(
+            ["git", "config", "--local", "--get", "user.name"],
+            cwd=self.repository,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        local_email = subprocess.run(
+            ["git", "config", "--local", "--get", "user.email"],
+            cwd=self.repository,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(local_name.returncode, 0)
+        self.assertNotEqual(local_email.returncode, 0)
 
     def test_publish_rejects_stale_local_and_remote_inputs_before_mutation(self) -> None:
         plan = self.plan()

@@ -405,21 +405,21 @@ def plan_first_publication(
     author_name = _required_git_value(
         repository,
         "config",
-        "--local",
         "--get",
         "user.name",
-        label="local Git user.name",
+        label="effective Git user.name",
     )
     author_email = _required_git_value(
         repository,
         "config",
-        "--local",
         "--get",
         "user.email",
-        label="local Git user.email",
+        label="effective Git user.email",
     )
     if any(character in author_name + author_email for character in "\r\n"):
-        raise PublicationError("local Git identity must use single-line name and email values")
+        raise PublicationError(
+            "effective Git identity must use single-line name and email values"
+        )
 
     remote_url = _required_git_value(
         repository,
