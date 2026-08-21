@@ -435,6 +435,36 @@ print(json.dumps(responses[endpoint]))
         with self.assertRaisesRegex(Exception, "must have no commits"):
             self.plan()
 
+    def test_plan_rejects_multiple_origin_push_destinations(self) -> None:
+        second_remote = self.directory / "second-remote.git"
+        subprocess.run(
+            ["git", "init", "--quiet", "--bare", str(second_remote)], check=True
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "--add",
+                "remote.origin.pushurl",
+                str(second_remote),
+            ],
+            cwd=self.repository,
+            check=True,
+        )
+
+        with self.assertRaisesRegex(Exception, "exactly one push URL"):
+            self.plan()
+
+        self.assertEqual(self.github.mutations, [])
+        for remote in (self.remote, second_remote):
+            refs = subprocess.run(
+                ["git", "--git-dir", str(remote), "show-ref"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(refs.returncode, 1, refs.stderr)
+
     def test_plan_rejects_nonbranch_remote_refs_and_non_head_local_refs(self) -> None:
         seed = self.directory / "seed"
         seed.mkdir()
@@ -730,6 +760,27 @@ print(json.dumps(responses[endpoint]))
             list(self.directory.glob(".publication-plan.json.*.tmp")), []
         )
 
+    def test_plan_record_replaces_a_destination_symlink_without_following_it(
+        self,
+    ) -> None:
+        plan = self.plan()
+        victim = self.directory / "unrelated.json"
+        victim.write_text("unrelated content\n", encoding="utf-8")
+        path = self.directory / "publication-plan.json"
+        path.symlink_to(victim)
+
+        write_publication_plan(plan, path)
+
+        self.assertEqual(
+            victim.read_text(encoding="utf-8"), "unrelated content\n"
+        )
+        self.assertFalse(path.is_symlink())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(
+            load_publication_plan(path, _allow_local_push_for_testing=True),
+            plan,
+        )
+
     def test_publish_requires_exact_confirmation_before_any_revalidation(self) -> None:
         plan = self.plan()
         observations = self.github.repository_observations
@@ -768,6 +819,56 @@ print(json.dumps(responses[endpoint]))
             all(line.startswith("?? ") for line in self.git_status().splitlines())
         )
         self.assertFalse((self.repository / ".git/index").exists())
+
+    def test_unobservable_commit_ref_failure_reports_unknown_completion(self) -> None:
+        plan = self.plan()
+        real_run = subprocess.run
+        update_attempted = False
+
+        def run_with_unobservable_ref(command, *args, **kwargs):
+            nonlocal update_attempted
+            if "update-ref" in command:
+                update_attempted = True
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr="simulated ref update failure",
+                )
+            if update_attempted and (
+                "show-ref" in command
+                or "for-each-ref" in command
+                or (
+                    "rev-parse" in command
+                    and f"refs/heads/{plan.branch}" in command
+                )
+            ):
+                return subprocess.CompletedProcess(
+                    command,
+                    128,
+                    stdout="",
+                    stderr="simulated ref observation failure",
+                )
+            return real_run(command, *args, **kwargs)
+
+        with patch(
+            "lib.first_publication.subprocess.run",
+            side_effect=run_with_unobservable_ref,
+        ):
+            report = publish_first_publication(
+                plan,
+                self.github,
+                standards_root=ROOT,
+                confirmation=plan.confirmation,
+            )
+
+        self.assertEqual(report.completed, ())
+        self.assertIsNone(report.failed)
+        self.assertEqual(report.uncertain, "CREATE   initial commit")
+        self.assertEqual(report.remaining, plan.steps[1:])
+        self.assertIn("completion is unknown", report.error or "")
+        self.assertFalse((self.repository / ".git/index.lock").exists())
+        self.assertEqual(self.github.mutations, [])
 
     def test_commit_hooks_cannot_change_planned_metadata(self) -> None:
         plan = self.plan()

@@ -436,9 +436,29 @@ def plan_first_publication(
             f"origin identifies {remote_repository or remote_url!r}; "
             f"the repository contract requires {contract.github.repository!r}"
         )
-    push_url = _required_git_value(
-        repository, "remote", "get-url", "--push", "origin", label="origin push URL"
+    push_urls_result = _git(
+        repository, "remote", "get-url", "--push", "--all", "origin"
     )
+    push_urls = tuple(
+        line.strip()
+        for line in push_urls_result.stdout.splitlines()
+        if line.strip()
+    )
+    if push_urls_result.returncode != 0 or not push_urls:
+        raise PublicationError(
+            "cannot read origin push URL: "
+            + (
+                push_urls_result.stderr.strip()
+                or push_urls_result.stdout.strip()
+                or "value is missing"
+            )
+        )
+    if len(push_urls) != 1:
+        raise PublicationError(
+            "origin must have exactly one push URL; found "
+            + ", ".join(repr(url) for url in push_urls)
+        )
+    push_url = push_urls[0]
     push_match = GITHUB_REMOTE.fullmatch(push_url)
     push_repository = push_match.group("repository") if push_match else None
     if (
@@ -786,7 +806,10 @@ def publication_plan_from_mapping(
 def write_publication_plan(plan: PublicationPlan, path: Path) -> None:
     """Persist a Plan outside the target repository without changing the target."""
 
-    path = path.expanduser().resolve()
+    expanded_path = path.expanduser()
+    if not expanded_path.is_absolute():
+        expanded_path = Path.cwd() / expanded_path
+    path = expanded_path.parent.resolve() / expanded_path.name
     for protected in (plan.repository, plan.git_directory):
         try:
             path.relative_to(protected)
@@ -1160,13 +1183,38 @@ def publish_first_publication(
             "",
         )
         if updated.returncode != 0:
+            reference = f"refs/heads/{plan.branch}"
             current = _git(
                 plan.repository,
-                "rev-parse",
-                "--verify",
-                f"refs/heads/{plan.branch}",
+                "for-each-ref",
+                "--format=%(refname)%00%(objectname)",
+                reference,
             )
             if current.returncode != 0:
+                try:
+                    index_lock.unlink()
+                except OSError:
+                    pass
+                update_error = updated.stderr.strip() or updated.stdout.strip()
+                observation_error = (
+                    current.stderr.strip()
+                    or current.stdout.strip()
+                    or "ref observation failed"
+                )
+                return _uncertain_report(
+                    steps,
+                    0,
+                    "local branch update failed and re-observation failed; "
+                    f"completion is unknown: {update_error}; {observation_error}",
+                    commit_oid=commit_oid,
+                )
+            current_oid = None
+            for line in current.stdout.splitlines():
+                ref_name, separator, object_id = line.partition("\0")
+                if separator and ref_name == reference:
+                    current_oid = object_id
+                    break
+            if current_oid is None:
                 try:
                     index_lock.unlink()
                 except OSError:
@@ -1177,7 +1225,7 @@ def publish_first_publication(
                     updated.stderr.strip() or updated.stdout.strip(),
                     commit_oid=commit_oid,
                 )
-            if current.stdout.strip() != commit_oid:
+            if current_oid != commit_oid:
                 try:
                     index_lock.unlink()
                 except OSError:
