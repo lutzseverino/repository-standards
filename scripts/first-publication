@@ -42,7 +42,11 @@ def _render_plan(plan: PublicationPlan, path: Path) -> None:
     print(f"- push target: {plan.push_url}")
     print("\nInitial commit metadata:")
     print(f"- message: {plan.commit.message}")
-    print(f"- author and committer: {plan.commit.author_name} <{plan.commit.author_email}>")
+    print(
+        "- author and committer: "
+        f"{json.dumps(plan.commit.author_name)} "
+        f"<{json.dumps(plan.commit.author_email)}>"
+    )
     print(f"- timestamp: {timestamp}")
     print(f"- tree: {plan.commit.tree_oid}")
     print("\nInitial commit contents:")

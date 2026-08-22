@@ -310,9 +310,21 @@ class FirstPublicationTests(unittest.TestCase):
         self.assertEqual(operation.endpoint, "repos/owner/example")
         self.assertEqual(operation.payload, {"default_branch": "main"})
 
-    def test_plan_command_escapes_paths_and_surfaces_complete_live_operations(
+    def test_plan_command_escapes_identity_and_paths_and_surfaces_live_operations(
         self,
     ) -> None:
+        unsafe_name = "Publication\x1b[2J Tester"
+        unsafe_email = "publication\x1b[2J@example.com"
+        subprocess.run(
+            ["git", "config", "user.name", unsafe_name],
+            cwd=self.repository,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", unsafe_email],
+            cwd=self.repository,
+            check=True,
+        )
         unsafe_path = "misleading\nCREATE fake operation\x1b[2J.md"
         (self.repository / unsafe_path).write_text(
             "unsafe name\n", encoding="utf-8"
@@ -405,7 +417,11 @@ print(json.dumps(responses[endpoint]))
         self.assertIn('"endpoint": "repos/owner/example"', result.stdout)
         self.assertIn('"default_branch": "main"', result.stdout)
         self.assertIn('"required_approving_review_count": 0', result.stdout)
+        self.assertIn(json.dumps(unsafe_name), result.stdout)
+        self.assertIn(json.dumps(unsafe_email), result.stdout)
         self.assertIn(json.dumps(unsafe_path), result.stdout)
+        self.assertNotIn(unsafe_name, result.stdout)
+        self.assertNotIn(unsafe_email, result.stdout)
         self.assertNotIn(unsafe_path, result.stdout)
         self.assertEqual(
             victim.read_text(encoding="utf-8"), "unrelated content\n"
