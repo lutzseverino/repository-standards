@@ -53,6 +53,7 @@ class GitHubSnapshot:
     """The complete GitHub state used by one reconciliation decision."""
 
     repository: dict[str, Any]
+    branches: tuple[dict[str, Any], ...]
     label_names: frozenset[str]
     rulesets: tuple[dict[str, Any], ...]
     lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED
@@ -203,8 +204,18 @@ class GitHubAdapter:
                     )
                 observed_rulesets = ({**summary, **ruleset},)
 
+        branches = self._collect_pages(f"{endpoint}/branches")
+        if not all(
+            isinstance(branch, dict)
+            and isinstance(branch.get("name"), str)
+            and branch["name"]
+            for branch in branches
+        ):
+            raise StandardsError("GitHub branches API must return named objects")
+
         return GitHubSnapshot(
             repository=dict(repository),
+            branches=tuple(dict(branch) for branch in branches),
             label_names=label_names,
             rulesets=observed_rulesets,
             lifecycle=lifecycle,
@@ -469,13 +480,36 @@ def reconcile_live_github(
                 pending=True,
             )
         )
-    elif snapshot.repository.get("default_branch") != github["default-branch"]:
-        repository_findings.append(
-            f"github.default-branch is "
-            f"{snapshot.repository.get('default_branch')!r}; "
-            f"expected {github['default-branch']!r}"
+    elif (
+        snapshot.repository.get("default_branch") != github["default-branch"]
+        or not any(
+            branch.get("name") == github["default-branch"]
+            for branch in snapshot.branches
         )
-        repository_payload["default_branch"] = github["default-branch"]
+    ):
+        if snapshot.repository.get("default_branch") == github["default-branch"]:
+            default_branch_finding = (
+                f"github.default-branch {github['default-branch']!r} is not established"
+            )
+        else:
+            default_branch_finding = (
+                f"github.default-branch is "
+                f"{snapshot.repository.get('default_branch')!r}; "
+                f"expected {github['default-branch']!r}"
+            )
+        differences.append(
+            LiveDifference(
+                (default_branch_finding,),
+                (
+                    LiveOperation(
+                        f"ESTABLISH default branch {github['default-branch']!r}",
+                        "PATCH",
+                        endpoint,
+                        {"default_branch": github["default-branch"]},
+                    ),
+                ),
+            )
+        )
 
     for contract_name, api_name in SETTINGS_MAPPING.items():
         expected = github["settings"][contract_name]

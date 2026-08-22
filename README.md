@@ -169,15 +169,30 @@ write access to the ruleset. A complete live audit of a declared ruleset
 therefore requires Administration write permission and fails rather than
 reporting false conformance when that field is not observable.
 
-Participating repositories receive two user-invoked lifecycle skills.
+Participating repositories receive three user-invoked lifecycle skills.
 `adopt-repository-standards` prepares an exact or latest stable release through
 that release's own tools and leaves its changes uncommitted. `create-repository`
 reuses settled facts, asks only for missing explicit decisions, validates the
 local baseline before creating an empty GitHub repository, configures `origin`,
 and leaves uncommitted content on unborn `main`. License identifiers and text
-come from the selected release's pinned catalog. First publication remains the
-required next lifecycle operation; creation does not claim standards
-completeness.
+come from the selected release's pinned catalog. `first-publication` then
+previews the complete initial commit, publication of `main`, default-branch
+establishment, and live desired-state delta without target mutation. After the
+human explicitly confirms that current Plan, Publish revalidates its recorded
+inputs, performs the transition without a pull request, and proves the result
+standards-complete.
+
+The actor-neutral first-publication command used by that skill is also
+available directly. Keep the Plan file outside the target repository:
+
+```sh
+scripts/first-publication plan \
+  --plan-file /tmp/example-first-publication.json \
+  /path/to/repository
+scripts/first-publication publish \
+  --plan-file /tmp/example-first-publication.json \
+  --confirm 'EXACT PHRASE PRINTED BY PLAN'
+```
 
 Run the canonical validation gate with:
 

@@ -253,6 +253,7 @@ responses.
         for name, runner_name in (
             ("adopt-repository-standards", "adopt"),
             ("create-repository", "create"),
+            ("first-publication", "publish"),
         ):
             skill = repository / f".agents/skills/{name}/SKILL.md"
             runner = repository / f".agents/skills/{name}/scripts/{runner_name}"
@@ -276,7 +277,11 @@ responses.
         self.assertEqual(inventory["bundle"]["license"], "MIT")
         self.assertEqual(
             inventory["bundle"]["skills"],
-            ["adopt-repository-standards", "create-repository"],
+            [
+                "adopt-repository-standards",
+                "create-repository",
+                "first-publication",
+            ],
         )
         license_text = (
             repository / ".agents/licenses/repository-lifecycle-skills.txt"
