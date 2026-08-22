@@ -47,7 +47,7 @@ def _render_plan(plan: PublicationPlan, path: Path) -> None:
     print(f"- tree: {plan.commit.tree_oid}")
     print("\nInitial commit contents:")
     for item in plan.commit.files:
-        print(f"- {item.mode} {item.object_id} {item.path}")
+        print(f"- {item.mode} {item.object_id} {json.dumps(item.path)}")
     print("\nComplete ordered transition:")
     for step in plan.steps:
         print(f"- {step}")

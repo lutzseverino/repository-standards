@@ -188,6 +188,9 @@ def _initial_tree(
         temporary = Path(directory)
         object_directory = temporary / "objects"
         object_directory.mkdir()
+        hooks_directory = temporary / "hooks"
+        hooks_directory.mkdir()
+        hook_override = ("-c", f"core.hooksPath={hooks_directory}")
         environment = os.environ.copy()
         environment.update(
             {
@@ -199,19 +202,37 @@ def _initial_tree(
         existing_index = git_directory / "index"
         if existing_index.is_file():
             shutil.copyfile(existing_index, temporary / "index")
-        added = _git(repository, "add", "--all", environment=environment)
+        added = _git(
+            repository,
+            *hook_override,
+            "add",
+            "--all",
+            environment=environment,
+        )
         if added.returncode != 0:
             raise PublicationError(
                 "cannot construct the initial commit preview: "
                 + (added.stderr.strip() or added.stdout.strip())
             )
-        tree = _git(repository, "write-tree", environment=environment)
+        tree = _git(
+            repository,
+            *hook_override,
+            "write-tree",
+            environment=environment,
+        )
         if tree.returncode != 0:
             raise PublicationError(
                 "cannot compute the initial Git tree: "
                 + (tree.stderr.strip() or tree.stdout.strip())
             )
-        listed = _git(repository, "ls-files", "--stage", "-z", environment=environment)
+        listed = _git(
+            repository,
+            *hook_override,
+            "ls-files",
+            "--stage",
+            "-z",
+            environment=environment,
+        )
         if listed.returncode != 0:
             raise PublicationError(
                 "cannot list the initial commit contents: "
@@ -333,30 +354,44 @@ def _validate_no_external_git_filters(repository: Path) -> None:
             "cannot inspect prepared Git filter attributes: "
             + (attributes.stderr.strip() or attributes.stdout.strip())
         )
+    configured = _git(
+        repository,
+        "config",
+        "--null",
+        "--get-regexp",
+        r"^filter\..*\.(clean|process)$",
+    )
+    if configured.returncode not in {0, 1}:
+        raise PublicationError(
+            "cannot inspect external Git filters: "
+            + (configured.stderr.strip() or configured.stdout.strip())
+        )
+    configured_commands: set[tuple[str, str]] = set()
+    for record in configured.stdout.split("\0"):
+        if not record:
+            continue
+        key, separator, _ = record.partition("\n")
+        if not separator or not key.startswith("filter."):
+            raise PublicationError("configured Git filter response was invalid")
+        driver, separator, command_type = key.removeprefix("filter.").rpartition(
+            "."
+        )
+        if not separator or command_type not in {"clean", "process"}:
+            raise PublicationError("configured Git filter response was invalid")
+        configured_commands.add((driver, command_type))
     fields = attributes.stdout.split("\0")
     if fields and fields[-1] == "":
         fields.pop()
     if len(fields) % 3:
         raise PublicationError("prepared Git filter attributes were invalid")
     for path, attribute, driver in zip(fields[::3], fields[1::3], fields[2::3]):
-        if attribute != "filter" or driver in {"set", "unset", "unspecified"}:
+        if attribute != "filter":
             continue
         for command_type in ("process", "clean"):
-            configured = _git(
-                repository,
-                "config",
-                "--get-all",
-                f"filter.{driver}.{command_type}",
-            )
-            if configured.returncode == 0:
+            if (driver, command_type) in configured_commands:
                 raise PublicationError(
                     f"prepared path {path!r} selects external Git {command_type} "
                     f"filter {driver!r}; Plan cannot run clean or process filters"
-                )
-            if configured.returncode != 1:
-                raise PublicationError(
-                    f"cannot inspect external Git {command_type} filter {driver!r}: "
-                    + (configured.stderr.strip() or configured.stdout.strip())
                 )
 
 

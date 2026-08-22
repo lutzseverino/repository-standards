@@ -286,6 +286,19 @@ class FirstPublicationTests(unittest.TestCase):
             ),
         )
 
+    def test_plan_disables_git_hooks_while_constructing_the_preview(self) -> None:
+        marker = self.repository / ".git/hook-ran"
+        hook = self.repository / ".git/hooks/post-index-change"
+        hook.write_text(
+            "#!/bin/sh\n" f"touch {shlex.quote(str(marker))}\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        self.plan()
+
+        self.assertFalse(marker.exists())
+
     def test_plan_establishes_named_default_branch_when_remote_is_empty(self) -> None:
         self.github.repository["default_branch"] = "main"
 
@@ -297,7 +310,13 @@ class FirstPublicationTests(unittest.TestCase):
         self.assertEqual(operation.endpoint, "repos/owner/example")
         self.assertEqual(operation.payload, {"default_branch": "main"})
 
-    def test_plan_command_surfaces_complete_live_operations(self) -> None:
+    def test_plan_command_escapes_paths_and_surfaces_complete_live_operations(
+        self,
+    ) -> None:
+        unsafe_path = "misleading\nCREATE fake operation\x1b[2J.md"
+        (self.repository / unsafe_path).write_text(
+            "unsafe name\n", encoding="utf-8"
+        )
         subprocess.run(
             [
                 "git",
@@ -386,6 +405,8 @@ print(json.dumps(responses[endpoint]))
         self.assertIn('"endpoint": "repos/owner/example"', result.stdout)
         self.assertIn('"default_branch": "main"', result.stdout)
         self.assertIn('"required_approving_review_count": 0', result.stdout)
+        self.assertIn(json.dumps(unsafe_path), result.stdout)
+        self.assertNotIn(unsafe_path, result.stdout)
         self.assertEqual(
             victim.read_text(encoding="utf-8"), "unrelated content\n"
         )
@@ -535,6 +556,27 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "external Git process filter"):
+            self.plan()
+
+        self.assertFalse(marker.exists())
+
+    def test_plan_rejects_a_filter_named_like_an_attribute_state(self) -> None:
+        marker = self.repository / ".git/filter-ran"
+        (self.repository / ".git/info/attributes").write_text(
+            "*.md filter=set\n", encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                "git",
+                "config",
+                "filter.set.clean",
+                f"touch {shlex.quote(str(marker))}; cat",
+            ],
+            cwd=self.repository,
+            check=True,
+        )
+
+        with self.assertRaisesRegex(Exception, "external Git clean filter"):
             self.plan()
 
         self.assertFalse(marker.exists())
