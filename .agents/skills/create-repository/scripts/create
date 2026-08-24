@@ -902,6 +902,7 @@ def main() -> int:
             )
             print("Initial repository contract:")
             print(json.dumps(initial_contract, indent=2))
+            destination = _destination(args.destination)
             destination.mkdir(parents=True, exist_ok=True)
             (destination / ".repository-standards.json").write_text(
                 json.dumps(initial_contract, indent=2) + "\n",

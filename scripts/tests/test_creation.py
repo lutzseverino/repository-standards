@@ -162,6 +162,12 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                         initialization,
                         standards_root=Path(__file__).resolve().parents[1],
                     )
+                    raced_destination = os.environ.get("FAKE_RACED_DESTINATION")
+                    if raced_destination:
+                        Path(raced_destination).symlink_to(
+                            os.environ["FAKE_RACED_OUTSIDE"],
+                            target_is_directory=True,
+                        )
                     print(json.dumps(contract.as_mapping(), indent=2))
                     raise SystemExit(0)
                 repository = Path(sys.argv[-1])
@@ -561,6 +567,29 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "standards check content",
                 "canonical validation",
             ],
+        )
+
+    def test_destination_replaced_during_preflight_is_rejected_before_write(
+        self,
+    ) -> None:
+        outside = self.directory / "raced-outside"
+        outside.mkdir()
+        sentinel = outside / "keep.txt"
+        sentinel.write_text("keep\n", encoding="utf-8")
+
+        result = self.run_create(
+            extra_environment={
+                "FAKE_RACED_DESTINATION": str(self.destination),
+                "FAKE_RACED_OUTSIDE": str(outside),
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("local destination traverses a symbolic link", result.stderr)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
+        self.assertFalse((outside / ".repository-standards.json").exists())
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
         )
 
     def test_local_content_failure_reports_observed_retained_state(self) -> None:
