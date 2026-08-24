@@ -16,7 +16,7 @@ class PublishReleaseCommandTests(unittest.TestCase):
         maintenance = (ROOT / "standards/maintenance-and-rollout.md").read_text(
             encoding="utf-8"
         )
-        recovery = maintenance.split("### Recover a tag whose release failed", 1)[1]
+        recovery = maintenance.split("### Recover a failed release publication", 1)[1]
         recovery = recovery.split("## Adopt a standards release", 1)[0]
 
         self.assertIn("git checkout vMAJOR.MINOR.PATCH", recovery)

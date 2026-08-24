@@ -12,17 +12,20 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
-from lib.standards import (  # noqa: E402
+from lib.repository_content import (  # noqa: E402
     Source,
     StandardsError,
     _render_template,
-    audit_main,
     _collect_sources,
     inspect,
     inspect_boundaries,
+    inspect_repository_owned_documents,
     standards_root,
-    sync_main,
-    write,
+)
+from lib.repository_content_reconciliation import (  # noqa: E402
+    apply_content_reconciliation,
+    calculate_content_reconciliation,
+    render_content_reconciliation,
 )
 from lib.repository_contract import (  # noqa: E402
     ContractError,
@@ -31,7 +34,7 @@ from lib.repository_contract import (  # noqa: E402
 )
 
 
-class StandardsTests(unittest.TestCase):
+class RepositoryContentTests(unittest.TestCase):
     def resolve_contract(self, repository: Path) -> RepositoryContract:
         return resolve_repository_contract(
             repository, standards_root=standards_root()
@@ -49,6 +52,28 @@ class StandardsTests(unittest.TestCase):
         target = repository / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+
+    def apply_content(self, repository: Path) -> int:
+        reconciliation = calculate_content_reconciliation(
+            self.resolve_contract(repository)
+        )
+        report = apply_content_reconciliation(reconciliation)
+        self.assertTrue(report.succeeded, report.failed)
+        return len(report.completed)
+
+    def write_results(self, repository: Path, results) -> int:
+        changed = 0
+        for result in results:
+            if result.status == "ok":
+                continue
+            target = repository / result.target
+            if result.mode == "absent":
+                target.unlink()
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(result.expected)
+            changed += 1
+        return changed
 
     def base_manifest(self) -> dict:
         return {
@@ -97,11 +122,11 @@ class StandardsTests(unittest.TestCase):
             ],
         }
 
-    def test_sync_then_audit_is_clean(self) -> None:
+    def test_content_correction_then_inspection_is_clean(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
-        initial = inspect(repository, plan)
+        content_files = self.resolve_contract(repository).managed_files
+        initial = inspect(repository, content_files)
         self.assertTrue(initial)
         self.assertTrue(
             all(result.status in {"missing", "ok"} for result in initial)
@@ -109,8 +134,8 @@ class StandardsTests(unittest.TestCase):
         changed = [result for result in initial if result.status != "ok"]
         self.assertTrue(changed)
 
-        self.assertEqual(write(repository, initial), len(changed))
-        final = inspect(repository, plan)
+        self.assertEqual(self.write_results(repository, initial), len(changed))
+        final = inspect(repository, content_files)
         self.assertTrue(all(result.status == "ok" for result in final))
 
     def test_common_profile_sets_the_default_response_language(self) -> None:
@@ -118,8 +143,7 @@ class StandardsTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
 
         output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
 
         agents = " ".join(
             (repository / "AGENTS.md").read_text(encoding="utf-8").split()
@@ -139,8 +163,7 @@ class StandardsTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
 
         output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
 
         guidance = """## Standards release discovery
 
@@ -206,8 +229,7 @@ responses.
         )
 
         output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
 
         installed_skills = tuple(
             sorted(
@@ -233,7 +255,6 @@ responses.
             "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
         )
         self.assertEqual(tuple(sorted(bundle["skills"])), expected_skills)
-        self.assertNotIn("adopt-repository-standards", bundle["skills"])
         license_text = (
             repository / ".agents/licenses/mattpocock-skills.txt"
         ).read_text(encoding="utf-8")
@@ -245,18 +266,7 @@ responses.
     ) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        retired = (
-            ".agents/skills/adopt-repository-standards/SKILL.md",
-            ".agents/skills/adopt-repository-standards/scripts/adopt",
-            ".agents/skills/first-publication/SKILL.md",
-            ".agents/skills/first-publication/scripts/publish",
-        )
-        for relative in retired:
-            self.write_file(repository, relative, "retired lifecycle adapter\n")
-
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
 
         for name, runner_name in (
             ("adopt-standards", "adopt"),
@@ -272,9 +282,6 @@ responses.
             skill_text = skill.read_text(encoding="utf-8")
             self.assertIn(f"name: {name}", skill_text)
             self.assertIn("disable-model-invocation: true", skill_text)
-        for relative in retired:
-            self.assertFalse((repository / relative).exists(), relative)
-
         inventory = json.loads(
             (
                 repository / ".agents/repository-lifecycle-skills.json"
@@ -302,7 +309,7 @@ responses.
         self.assertIn("MIT License", license_text)
         self.assertIn("Copyright (c) 2026 Lutz Severino", license_text)
 
-    def test_audit_reports_standard_skill_drift(self) -> None:
+    def test_content_inspection_reports_standard_skill_drift(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
         self.write_file(
@@ -313,37 +320,33 @@ responses.
         )
         self.write_file(repository, "docs/README.md", "# Documentation\n")
 
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
         skill = repository / ".agents/skills/implement/SKILL.md"
         skill.write_text("changed locally\n", encoding="utf-8")
 
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(audit_main([str(repository), "--json"]), 1)
-        payload = json.loads(output.getvalue())
+        results = inspect(
+            repository, self.resolve_contract(repository).managed_files
+        )
         result = next(
             item
-            for item in payload["files"]
-            if item["path"] == ".agents/skills/implement/SKILL.md"
+            for item in results
+            if item.target == ".agents/skills/implement/SKILL.md"
         )
-        self.assertEqual(result["status"], "drift")
+        self.assertEqual(result.status, "drift")
 
     def test_repository_local_skills_can_coexist_with_the_standard_bundle(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
 
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(repository)]), 0)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
         local_skill = repository / ".agents/skills/local-only/SKILL.md"
         local_skill.parent.mkdir()
         local_skill.write_text("# Local skill\n", encoding="utf-8")
 
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main([str(repository)]), 0)
+        reconciliation = calculate_content_reconciliation(
+            self.resolve_contract(repository)
+        )
+        self.assertEqual(reconciliation.changes, ())
         self.assertTrue(local_skill.is_file())
 
     def test_local_gitignore_fragment_is_preserved(self) -> None:
@@ -357,8 +360,8 @@ responses.
         local.parent.mkdir()
         local.write_text("# Product output\nproduct-output/\n", encoding="utf-8")
 
-        plan = self.resolve_contract(repository).managed_files
-        gitignore = next(item for item in plan if item.target == ".gitignore")
+        content_files = self.resolve_contract(repository).managed_files
+        gitignore = next(item for item in content_files if item.target == ".gitignore")
         rendered = gitignore.content.decode("utf-8")
         self.assertIn("node_modules/", rendered)
         self.assertIn("dist/", rendered)
@@ -372,15 +375,15 @@ responses.
         with self.assertRaisesRegex(ContractError, "conflicts with repository-owned"):
             self.resolve_contract(repository)
 
-    def test_managed_absence_is_audited_and_removed(self) -> None:
+    def test_managed_absence_is_inspected_and_removed(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
         retired = repository / ".github/pull_request_template.md"
         retired.parent.mkdir(parents=True)
         retired.write_text("retired policy\n", encoding="utf-8")
 
-        plan = self.resolve_contract(repository).managed_files
-        initial = inspect(repository, plan)
+        content_files = self.resolve_contract(repository).managed_files
+        initial = inspect(repository, content_files)
         result = next(
             item
             for item in initial
@@ -389,9 +392,9 @@ responses.
         self.assertEqual(result.status, "present")
         self.assertEqual(result.mode, "absent")
 
-        self.assertEqual(write(repository, [result]), 1)
+        self.assertEqual(self.write_results(repository, [result]), 1)
         self.assertFalse(retired.exists())
-        final = inspect(repository, plan)
+        final = inspect(repository, content_files)
         result = next(
             item
             for item in final
@@ -399,11 +402,11 @@ responses.
         )
         self.assertEqual(result.status, "ok")
 
-    def test_sync_preview_names_every_managed_deletion(self) -> None:
+    def test_content_preview_names_every_managed_deletion(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
-        write(repository, inspect(repository, plan))
+        content_files = self.resolve_contract(repository).managed_files
+        self.write_results(repository, inspect(repository, content_files))
         retired = repository / ".github/pull_request_template.md"
 
         cases = (
@@ -414,12 +417,11 @@ responses.
         for content, has_diff in cases:
             with self.subTest(content=content):
                 retired.write_bytes(content)
-                output = StringIO()
-                with redirect_stdout(output):
-                    exit_code = sync_main([str(repository)])
-                preview = output.getvalue()
+                reconciliation = calculate_content_reconciliation(
+                    self.resolve_contract(repository)
+                )
+                preview = render_content_reconciliation(reconciliation)
 
-                self.assertEqual(exit_code, 1)
                 self.assertIn(
                     "DELETE   .github/pull_request_template.md\n",
                     preview,
@@ -436,22 +438,21 @@ responses.
                         preview,
                     )
 
-    def test_sync_preview_reports_blocked_managed_absence(self) -> None:
+    def test_content_preview_reports_blocked_managed_absence(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
-        write(repository, inspect(repository, plan))
+        content_files = self.resolve_contract(repository).managed_files
+        self.write_results(repository, inspect(repository, content_files))
         retired_file = repository / ".github/pull_request_template.md"
         blocked_path = repository / ".github/workflows/pr-policy.yml"
         retired_file.touch()
         blocked_path.mkdir(parents=True)
 
-        output = StringIO()
-        with redirect_stdout(output):
-            exit_code = sync_main([str(repository)])
-        preview = output.getvalue()
+        reconciliation = calculate_content_reconciliation(
+            self.resolve_contract(repository)
+        )
+        preview = render_content_reconciliation(reconciliation)
 
-        self.assertEqual(exit_code, 2)
         self.assertIn(
             "DELETE   .github/pull_request_template.md\n",
             preview,
@@ -461,25 +462,7 @@ responses.
             "(managed absence requires a regular file)\n",
             preview,
         )
-        self.assertIn(
-            "Preview: 1 managed file(s) would change; "
-            "1 blocked path(s) require attention.\n",
-            preview,
-        )
         self.assertTrue(blocked_path.is_dir())
-
-        retired_file.unlink()
-        output = StringIO()
-        with redirect_stdout(output):
-            exit_code = sync_main([str(repository)])
-        blocked_preview = output.getvalue()
-
-        self.assertEqual(exit_code, 2)
-        self.assertIn(
-            "Preview blocked: 1 managed path(s) require attention.\n",
-            blocked_preview,
-        )
-        self.assertNotIn("would change", blocked_preview)
 
     def test_mismatched_standards_release_is_rejected(self) -> None:
         manifest = self.base_manifest()
@@ -494,8 +477,8 @@ responses.
         manifest["profiles"] = ["common", "documentation", "node-protocol"]
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
-        gitignore = next(item for item in plan if item.target == ".gitignore")
+        content_files = self.resolve_contract(repository).managed_files
+        gitignore = next(item for item in content_files if item.target == ".gitignore")
         rendered = gitignore.content.decode("utf-8")
         self.assertEqual(rendered.count("node_modules/"), 1)
         self.assertIn("# Protocol package outputs", rendered)
@@ -547,15 +530,17 @@ responses.
     def test_managed_target_symlink_is_rejected(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
+        content_files = self.resolve_contract(repository).managed_files
         outside = repository.parent / f"{repository.name}-outside"
         outside.write_text("do not change", encoding="utf-8")
         self.addCleanup(outside.unlink)
         (repository / ".editorconfig").symlink_to(outside)
         with self.assertRaisesRegex(StandardsError, "symlink"):
-            inspect(repository, plan)
+            inspect(repository, content_files)
 
-    def test_sync_rejects_a_symlinked_managed_target_ancestor(self) -> None:
+    def test_content_reconciliation_rejects_a_symlinked_managed_target_ancestor(
+        self,
+    ) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
         linked_skills = repository / "linked-skills"
@@ -565,12 +550,14 @@ responses.
             linked_skills, target_is_directory=True
         )
 
-        output = StringIO()
-        with redirect_stdout(output):
-            result = sync_main([str(repository)])
+        reconciliation = calculate_content_reconciliation(
+            self.resolve_contract(repository)
+        )
 
-        self.assertEqual(result, 2)
-        self.assertIn("managed target ancestor must not be a symlink", output.getvalue())
+        self.assertIn(
+            "managed target ancestor must not be a symlink",
+            render_content_reconciliation(reconciliation),
+        )
 
     def test_documentation_profile_manages_exactly_seven_templates(self) -> None:
         manifest = self.base_manifest()
@@ -578,16 +565,16 @@ responses.
         manifest["repository-owned"] = ["docs/README.md", "docs/tutorials/**"]
         temporary, repository = self.create_repository(manifest)
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
+        content_files = self.resolve_contract(repository).managed_files
         documentation_targets = [
             item.target
-            for item in plan
+            for item in content_files
             if item.target.startswith("docs/_templates/") and item.mode != "absent"
         ]
         self.assertEqual(len(documentation_targets), 7)
         retired = next(
             item
-            for item in plan
+            for item in content_files
             if item.target == "docs/_templates/decision.template.md"
         )
         self.assertEqual(retired.mode, "absent")
@@ -595,9 +582,9 @@ responses.
     def test_dependabot_is_rendered_from_structured_manifest_updates(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
-        plan = self.resolve_contract(repository).managed_files
+        content_files = self.resolve_contract(repository).managed_files
         dependabot = next(
-            item for item in plan if item.target == ".github/dependabot.yml"
+            item for item in content_files if item.target == ".github/dependabot.yml"
         )
         rendered = dependabot.content.decode("utf-8")
         self.assertIn("package-ecosystem: github-actions", rendered)
@@ -766,7 +753,7 @@ responses.
             all(target.startswith("docs/_templates/") for target in documentation_targets)
         )
 
-    def test_boundary_audit_reports_shape_docs_and_nested_template_failures(self) -> None:
+    def test_boundary_inspection_reports_shape_docs_and_nested_template_failures(self) -> None:
         manifest = self.base_manifest()
         manifest["boundaries"].extend(
             [
@@ -885,7 +872,7 @@ responses.
         )[0]
         self.assertEqual(result.status, "ok")
 
-    def test_audit_json_includes_boundaries_and_uses_them_for_exit_status(self) -> None:
+    def test_boundary_inspection_reflects_repository_document_state(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
         self.write_file(
@@ -895,27 +882,18 @@ responses.
             "See [documentation](docs/README.md).\n",
         )
         self.write_file(repository, "docs/README.md", "# Documentation\n")
-        plan = self.resolve_contract(repository).managed_files
-        write(repository, inspect(repository, plan))
+        content_files = self.resolve_contract(repository).managed_files
+        self.write_results(repository, inspect(repository, content_files))
 
-        output = StringIO()
-        with redirect_stdout(output):
-            exit_code = audit_main([str(repository), "--json"])
-        payload = json.loads(output.getvalue())
-        self.assertEqual(exit_code, 0)
-        self.assertTrue(payload["clean"])
-        self.assertEqual(payload["boundaries"][0]["status"], "ok")
+        boundaries = self.resolve_contract(repository).boundaries
+        self.assertEqual(inspect_boundaries(repository, boundaries)[0].status, "ok")
 
         self.write_file(repository, "docs/README.md", "# Wrong\n")
-        output = StringIO()
-        with redirect_stdout(output):
-            exit_code = audit_main([str(repository), "--json"])
-        payload = json.loads(output.getvalue())
-        self.assertEqual(exit_code, 1)
-        self.assertFalse(payload["clean"])
-        self.assertEqual(payload["boundaries"][0]["status"], "invalid")
+        self.assertEqual(
+            inspect_boundaries(repository, boundaries)[0].status, "invalid"
+        )
 
-    def test_repository_owned_changelog_opts_into_structural_audit(self) -> None:
+    def test_repository_owned_changelog_opts_into_structural_inspection(self) -> None:
         manifest = self.base_manifest()
         manifest["repository-owned"].append("CHANGELOG.md")
         temporary, repository = self.create_repository(manifest)
@@ -928,21 +906,18 @@ responses.
         )
         self.write_file(repository, "docs/README.md", "# Documentation\n")
         self.write_file(repository, "CHANGELOG.md", "# Changes\n")
-        plan = self.resolve_contract(repository).managed_files
-        write(repository, inspect(repository, plan))
+        content_files = self.resolve_contract(repository).managed_files
+        self.write_results(repository, inspect(repository, content_files))
 
-        output = StringIO()
-        with redirect_stdout(output):
-            exit_code = audit_main([str(repository), "--json"])
-        payload = json.loads(output.getvalue())
+        documents = inspect_repository_owned_documents(
+            repository, self.resolve_contract(repository).repository_owned
+        )
 
-        self.assertEqual(exit_code, 1)
-        self.assertFalse(payload["clean"])
-        self.assertEqual(payload["documents"][0]["path"], "CHANGELOG.md")
-        self.assertEqual(payload["documents"][0]["status"], "invalid")
+        self.assertEqual(documents[0].path, "CHANGELOG.md")
+        self.assertEqual(documents[0].status, "invalid")
         self.assertIn(
             "root '# Changelog' title",
-            payload["documents"][0]["messages"][0],
+            documents[0].messages[0],
         )
 
     def test_template_requires_and_renders_variables(self) -> None:

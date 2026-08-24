@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import json
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -11,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from lib.live_reconciliation import GitHubAdapter, GitHubSnapshot
+from lib.github_reconciliation import GitHubAdapter, GitHubSnapshot
 from lib.repository_assessment_cli import standards_main
-from lib.standards import StandardsError
+from lib.repository_content import StandardsError
 
 
 class ConformanceGitHub(GitHubAdapter):
@@ -86,6 +88,42 @@ class StandardsCommandTests(unittest.TestCase):
         self.assertIn("Conclusion: not-standards-complete", incomplete[1])
         self.assertEqual(unverified[0], 2, unverified)
         self.assertIn("Conclusion: unverified", unverified[1])
+
+    def test_create_keeps_contract_construction_behind_the_selected_executable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "creation.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "standards-release": (ROOT / "VERSION")
+                        .read_text(encoding="utf-8")
+                        .strip(),
+                        "repository": "owner/example",
+                        "title": "Example",
+                        "facts": {
+                            "ecosystem": "none",
+                            "package-manager": "none",
+                            "project-kind": "repository",
+                            "framework": "none",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            status, stdout, stderr = self.run_command(
+                "create",
+                "--contract-input",
+                str(input_path),
+                adapter=ConformanceGitHub(),
+            )
+
+        self.assertEqual(status, 0, stderr)
+        contract = json.loads(stdout)
+        self.assertEqual(contract["github"]["repository"], "owner/example")
+        self.assertEqual(contract["profiles"], ["common", "documentation"])
 
     def test_check_is_read_only_and_restricted_check_is_unverified(self) -> None:
         adapter = ConformanceGitHub(drift=True)

@@ -1,4 +1,4 @@
-"""Plan and perform first publication from a prepared creation baseline."""
+"""Propose and perform publication from a prepared creation baseline."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .live_reconciliation import (
+from .github_reconciliation import (
     GitHubAdapter,
     GitHubSnapshot,
-    LiveDesiredStateDelta,
-    LiveDifference,
-    LiveLifecycle,
-    LiveOperation,
-    reconcile_live_github,
+    GitHubReconciliation,
+    GitHubDifference,
+    GitHubLifecycle,
+    GitHubCorrection,
+    reconcile_github,
 )
 from .repository_contract import ContractError, RepositoryContract, resolve_repository_contract
 from .repository_assessment import (
@@ -29,7 +29,7 @@ from .repository_assessment import (
     RepositoryLifecycle,
     assess_repository,
 )
-from .standards import (
+from .repository_content import (
     StandardsError,
     inspect,
     inspect_boundaries,
@@ -45,7 +45,7 @@ GITHUB_REMOTE = re.compile(
 
 
 class PublicationError(Exception):
-    """Raised when first publication cannot be planned safely."""
+    """Raised when repository publication cannot be proposed safely."""
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,8 @@ class InitialCommitPreview:
 
 
 @dataclass(frozen=True)
-class PublicationPlan:
-    plan_id: str
+class PublicationProposal:
+    proposal_id: str
     repository: Path
     git_directory: Path
     repository_name: str
@@ -81,7 +81,7 @@ class PublicationPlan:
     commit: InitialCommitPreview
     observed_github_state: dict[str, Any]
     remote_fingerprint: str
-    live_delta: LiveDesiredStateDelta
+    github_reconciliation: GitHubReconciliation
     steps: tuple[str, ...]
     confirmation: str
 
@@ -115,7 +115,7 @@ class _ObservedGitHubAdapter:
         self,
         contract: RepositoryContract,
         *,
-        lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED,
+        lifecycle: GitHubLifecycle = GitHubLifecycle.PUBLISHED,
     ) -> GitHubSnapshot:
         return self.snapshot
 
@@ -204,7 +204,7 @@ def _initial_tree(
     git_directory: Path,
     contract: RepositoryContract,
 ) -> tuple[str, tuple[InitialCommitFile, ...]]:
-    with tempfile.TemporaryDirectory(prefix="first-publication-plan-") as directory:
+    with tempfile.TemporaryDirectory(prefix="repository-publication-proposal-") as directory:
         temporary = Path(directory)
         object_directory = temporary / "objects"
         object_directory.mkdir()
@@ -289,7 +289,7 @@ def _validate_committed_baseline(
     object_environment: dict[str, str] | None = None,
 ) -> None:
     with tempfile.TemporaryDirectory(
-        prefix="first-publication-committed-baseline-"
+        prefix="repository-publication-committed-baseline-"
     ) as directory:
         committed_repository = Path(directory) / "repository"
         committed_repository.mkdir()
@@ -411,7 +411,7 @@ def _validate_no_external_git_filters(repository: Path) -> None:
             if (driver, command_type) in configured_commands:
                 raise PublicationError(
                     f"prepared path {path!r} selects external Git {command_type} "
-                    f"filter {driver!r}; Plan cannot run clean or process filters"
+                    f"filter {driver!r}; proposal cannot run clean or process filters"
                 )
 
 
@@ -466,14 +466,14 @@ def _remote_fingerprint(value: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _plan_identifier(value: dict[str, Any]) -> str:
+def _proposal_identifier(value: dict[str, Any]) -> str:
     encoded = json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _plan_identity_payload(
+def _proposal_identity_payload(
     *,
     repository: Path,
     git_directory: Path,
@@ -487,7 +487,7 @@ def _plan_identity_payload(
     commit: InitialCommitPreview,
     observed_github_state: dict[str, Any],
     remote_fingerprint: str,
-    live_delta: LiveDesiredStateDelta,
+    github_reconciliation: GitHubReconciliation,
 ) -> dict[str, Any]:
     return {
         "repository": str(repository),
@@ -510,26 +510,26 @@ def _plan_identity_payload(
         },
         "observed-github-state": observed_github_state,
         "remote": remote_fingerprint,
-        "live-operations": [
+        "github-corrections": [
             {
                 "description": operation.description,
                 "method": operation.method,
                 "endpoint": operation.endpoint,
                 "payload": operation.payload,
             }
-            for operation in live_delta.operations
+            for operation in github_reconciliation.operations
         ],
     }
 
 
-def _publication_steps(delta: LiveDesiredStateDelta) -> tuple[str, ...]:
+def _publication_steps(reconciliation: GitHubReconciliation) -> tuple[str, ...]:
     return (
         "CREATE   initial commit",
         "INSTALL  initial Git index",
         "PUBLISH  main to origin",
-        *(operation.description for operation in delta.operations),
+        *(operation.description for operation in reconciliation.operations),
         "VERIFY   committed content",
-        "VERIFY   live GitHub state",
+        "VERIFY   declared GitHub state",
     )
 
 
@@ -555,14 +555,14 @@ def _remote_refs(push_url: str) -> tuple[tuple[str, str], ...]:
     return tuple(refs)
 
 
-def plan_first_publication(
+def prepare_publication_proposal(
     repository: Path,
     adapter: GitHubAdapter,
     *,
     standards_root: Path,
     now: datetime | None = None,
     _allow_local_push_for_testing: bool = False,
-) -> PublicationPlan:
+) -> PublicationProposal:
     """Validate and preview first publication without mutating either repository."""
 
     repository = repository.expanduser().resolve()
@@ -695,7 +695,7 @@ def plan_first_publication(
     tree_oid, files = _initial_tree(repository, git_directory, contract)
     instant = now or datetime.now(timezone.utc)
     if instant.tzinfo is None or instant.utcoffset() is None:
-        raise PublicationError("publication plan time must include a timezone")
+        raise PublicationError("publication proposal time must include a timezone")
     instant = instant.astimezone(timezone.utc).replace(microsecond=0)
     commit = InitialCommitPreview(
         tree_oid=tree_oid,
@@ -708,7 +708,7 @@ def plan_first_publication(
     )
 
     try:
-        snapshot = adapter.observe(contract, lifecycle=LiveLifecycle.PUBLISHED)
+        snapshot = adapter.observe(contract, lifecycle=GitHubLifecycle.PUBLISHED)
     except StandardsError as exc:
         raise PublicationError(str(exc)) from exc
     repository_name = contract.github.repository
@@ -741,7 +741,7 @@ def plan_first_publication(
         branches=snapshot.branches,
         label_names=snapshot.label_names,
         rulesets=snapshot.rulesets,
-        lifecycle=LiveLifecycle.PREPARED,
+        lifecycle=GitHubLifecycle.PREPARED,
     )
     prepared_assessment = assess_repository(
         contract, _ObservedGitHubAdapter(prepared_snapshot)
@@ -766,10 +766,10 @@ def plan_first_publication(
             "prepared GitHub state has applicable drift"
             + (":\n- " + "\n- ".join(findings) if findings else "")
         )
-    prepared_delta = reconcile_live_github(contract, prepared_snapshot)
+    prepared_reconciliation = reconcile_github(contract, prepared_snapshot)
     applicable_findings = tuple(
         finding
-        for difference in prepared_delta.differences
+        for difference in prepared_reconciliation.differences
         if not difference.pending
         for finding in difference.findings
     )
@@ -778,14 +778,14 @@ def plan_first_publication(
             "prepared GitHub state has applicable drift:\n- "
             + "\n- ".join(applicable_findings)
         )
-    live_delta = reconcile_live_github(contract, snapshot)
-    steps = _publication_steps(live_delta)
+    github_reconciliation = reconcile_github(contract, snapshot)
+    steps = _publication_steps(github_reconciliation)
     observed_github_state = _observed_github_state(
         snapshot, branches, pulls, git_refs
     )
     remote_fingerprint = _remote_fingerprint(observed_github_state)
-    plan_id = _plan_identifier(
-        _plan_identity_payload(
+    proposal_id = _proposal_identifier(
+        _proposal_identity_payload(
             repository=repository,
             git_directory=git_directory,
             repository_name=repository_name,
@@ -798,12 +798,12 @@ def plan_first_publication(
             commit=commit,
             observed_github_state=observed_github_state,
             remote_fingerprint=remote_fingerprint,
-            live_delta=live_delta,
+            github_reconciliation=github_reconciliation,
         )
     )
-    confirmation = f"Publish {repository_name} from proposal {plan_id}"
-    return PublicationPlan(
-        plan_id=plan_id,
+    confirmation = f"Publish {repository_name} from proposal {proposal_id}"
+    return PublicationProposal(
+        proposal_id=proposal_id,
         repository=repository,
         git_directory=git_directory,
         repository_name=repository_name,
@@ -816,47 +816,47 @@ def plan_first_publication(
         commit=commit,
         observed_github_state=observed_github_state,
         remote_fingerprint=remote_fingerprint,
-        live_delta=live_delta,
+        github_reconciliation=github_reconciliation,
         steps=steps,
         confirmation=confirmation,
     )
 
 
-def publication_plan_mapping(plan: PublicationPlan) -> dict[str, Any]:
-    """Return the complete portable record required to revalidate one Plan."""
+def publication_proposal_mapping(proposal: PublicationProposal) -> dict[str, Any]:
+    """Return the complete portable record required to revalidate one proposal."""
 
     return {
-        "version": 1,
-        "plan-id": plan.plan_id,
-        "repository": str(plan.repository),
-        "git-directory": str(plan.git_directory),
-        "repository-name": plan.repository_name,
-        "standards-release": plan.standards_release,
-        "standards-protocol": plan.standards_protocol,
-        "branch": plan.branch,
-        "remote-url": plan.remote_url,
-        "push-url": plan.push_url,
-        "local-push-for-testing": plan.local_push_for_testing,
+        "version": 2,
+        "proposal-id": proposal.proposal_id,
+        "repository": str(proposal.repository),
+        "git-directory": str(proposal.git_directory),
+        "repository-name": proposal.repository_name,
+        "standards-release": proposal.standards_release,
+        "standards-protocol": proposal.standards_protocol,
+        "branch": proposal.branch,
+        "remote-url": proposal.remote_url,
+        "push-url": proposal.push_url,
+        "local-push-for-testing": proposal.local_push_for_testing,
         "commit": {
-            "tree-oid": plan.commit.tree_oid,
-            "message": plan.commit.message,
-            "author-name": plan.commit.author_name,
-            "author-email": plan.commit.author_email,
-            "timestamp": plan.commit.timestamp,
-            "timezone": plan.commit.timezone,
+            "tree-oid": proposal.commit.tree_oid,
+            "message": proposal.commit.message,
+            "author-name": proposal.commit.author_name,
+            "author-email": proposal.commit.author_email,
+            "timestamp": proposal.commit.timestamp,
+            "timezone": proposal.commit.timezone,
             "files": [
                 {
                     "path": item.path,
                     "mode": item.mode,
                     "object-id": item.object_id,
                 }
-                for item in plan.commit.files
+                for item in proposal.commit.files
             ],
         },
-        "observed-github-state": plan.observed_github_state,
-        "remote-fingerprint": plan.remote_fingerprint,
-        "live-delta": {
-            "repository": plan.live_delta.repository,
+        "observed-github-state": proposal.observed_github_state,
+        "remote-fingerprint": proposal.remote_fingerprint,
+        "github-reconciliation": {
+            "repository": proposal.github_reconciliation.repository,
             "differences": [
                 {
                     "findings": list(difference.findings),
@@ -872,38 +872,38 @@ def publication_plan_mapping(plan: PublicationPlan) -> dict[str, Any]:
                         for operation in difference.operations
                     ],
                 }
-                for difference in plan.live_delta.differences
+                for difference in proposal.github_reconciliation.differences
             ],
         },
-        "steps": list(plan.steps),
-        "confirmation": plan.confirmation,
+        "steps": list(proposal.steps),
+        "confirmation": proposal.confirmation,
     }
 
 
 def _mapping(value: object, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise PublicationError(f"publication Plan field {field} must be an object")
+        raise PublicationError(f"publication proposal field {field} must be an object")
     return value
 
 
 def _string(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
-        raise PublicationError(f"publication Plan field {field} must be a string")
+        raise PublicationError(f"publication proposal field {field} must be a string")
     return value
 
 
-def publication_plan_from_mapping(
+def publication_proposal_from_mapping(
     value: object, *, _allow_local_push_for_testing: bool = False
-) -> PublicationPlan:
-    """Load and authenticate one portable Plan record."""
+) -> PublicationProposal:
+    """Load and authenticate one portable proposal record."""
 
     root = _mapping(value, "root")
-    if root.get("version") != 1:
-        raise PublicationError("unsupported publication Plan version")
+    if root.get("version") != 2:
+        raise PublicationError("unsupported publication proposal version")
     commit_value = _mapping(root.get("commit"), "commit")
     raw_files = commit_value.get("files")
     if not isinstance(raw_files, list):
-        raise PublicationError("publication Plan field commit.files must be a list")
+        raise PublicationError("publication proposal field commit.files must be a list")
     files = tuple(
         InitialCommitFile(
             _string(_mapping(item, "commit.files[]").get("path"), "commit.files[].path"),
@@ -918,9 +918,9 @@ def publication_plan_from_mapping(
     timestamp = commit_value.get("timestamp")
     protocol = root.get("standards-protocol")
     if not isinstance(timestamp, int) or isinstance(timestamp, bool):
-        raise PublicationError("publication Plan field commit.timestamp must be an integer")
+        raise PublicationError("publication proposal field commit.timestamp must be an integer")
     if not isinstance(protocol, int) or isinstance(protocol, bool):
-        raise PublicationError("publication Plan field standards-protocol must be an integer")
+        raise PublicationError("publication proposal field standards-protocol must be an integer")
     commit = InitialCommitPreview(
         tree_oid=_string(commit_value.get("tree-oid"), "commit.tree-oid"),
         message=_string(commit_value.get("message"), "commit.message"),
@@ -930,57 +930,62 @@ def publication_plan_from_mapping(
         timezone=_string(commit_value.get("timezone"), "commit.timezone"),
         files=files,
     )
-    delta_value = _mapping(root.get("live-delta"), "live-delta")
-    raw_differences = delta_value.get("differences")
+    reconciliation_value = _mapping(
+        root.get("github-reconciliation"), "github-reconciliation"
+    )
+    raw_differences = reconciliation_value.get("differences")
     if not isinstance(raw_differences, list):
-        raise PublicationError("publication Plan field live-delta.differences must be a list")
-    differences: list[LiveDifference] = []
+        raise PublicationError("publication proposal field github-reconciliation.differences must be a list")
+    differences: list[GitHubDifference] = []
     for raw_difference in raw_differences:
-        difference = _mapping(raw_difference, "live-delta.differences[]")
+        difference = _mapping(raw_difference, "github-reconciliation.differences[]")
         raw_findings = difference.get("findings")
         raw_operations = difference.get("operations")
         pending = difference.get("pending")
-        raw_blockers = difference.get("blockers", [])
+        raw_blockers = difference.get("blockers")
         if not isinstance(raw_findings, list) or not all(
             isinstance(item, str) for item in raw_findings
         ):
-            raise PublicationError("publication Plan findings must be strings")
+            raise PublicationError("publication proposal findings must be strings")
         if (
             not isinstance(raw_operations, list)
             or not isinstance(pending, bool)
             or not isinstance(raw_blockers, list)
             or not all(isinstance(item, str) for item in raw_blockers)
         ):
-            raise PublicationError("publication Plan live difference is invalid")
-        operations: list[LiveOperation] = []
+            raise PublicationError("publication proposal GitHub difference is invalid")
+        operations: list[GitHubCorrection] = []
         for raw_operation in raw_operations:
-            operation = _mapping(raw_operation, "live operation")
-            payload = _mapping(operation.get("payload"), "live operation payload")
+            operation = _mapping(raw_operation, "GitHub correction")
+            payload = _mapping(operation.get("payload"), "GitHub correction payload")
             operations.append(
-                LiveOperation(
-                    _string(operation.get("description"), "live operation description"),
-                    _string(operation.get("method"), "live operation method"),
-                    _string(operation.get("endpoint"), "live operation endpoint"),
+                GitHubCorrection(
+                    _string(operation.get("description"), "GitHub correction description"),
+                    _string(operation.get("method"), "GitHub correction method"),
+                    _string(operation.get("endpoint"), "GitHub correction endpoint"),
                     payload,
                 )
             )
         differences.append(
-            LiveDifference(
+            GitHubDifference(
                 tuple(raw_findings),
                 tuple(operations),
                 pending,
                 tuple(raw_blockers),
             )
         )
-    live_delta = LiveDesiredStateDelta(
-        _string(delta_value.get("repository"), "live-delta.repository"),
+    github_reconciliation = GitHubReconciliation(
+        _string(
+            reconciliation_value.get("repository"),
+            "github-reconciliation.repository",
+        ),
         tuple(differences),
     )
     raw_steps = root.get("steps")
     if not isinstance(raw_steps, list) or not all(
         isinstance(item, str) and item for item in raw_steps
     ):
-        raise PublicationError("publication Plan steps must be non-empty strings")
+        raise PublicationError("publication proposal steps must be non-empty strings")
     repository = Path(_string(root.get("repository"), "repository"))
     git_directory = Path(_string(root.get("git-directory"), "git-directory"))
     repository_name = _string(root.get("repository-name"), "repository-name")
@@ -991,11 +996,11 @@ def publication_plan_from_mapping(
     local_push_for_testing = root.get("local-push-for-testing")
     if not isinstance(local_push_for_testing, bool):
         raise PublicationError(
-            "publication Plan field local-push-for-testing must be a boolean"
+            "publication proposal field local-push-for-testing must be a boolean"
         )
     if local_push_for_testing and not _allow_local_push_for_testing:
         raise PublicationError(
-            "portable publication Plans cannot enable the test-only local push transport"
+            "portable lifecycle proposals cannot enable the test-only local push transport"
         )
     observed_github_state = _mapping(
         root.get("observed-github-state"), "observed-github-state"
@@ -1005,11 +1010,11 @@ def publication_plan_from_mapping(
     )
     if _remote_fingerprint(observed_github_state) != remote_fingerprint:
         raise PublicationError(
-            "publication Plan observed GitHub state does not match its fingerprint"
+            "publication proposal observed GitHub state does not match its fingerprint"
         )
-    plan_id = _string(root.get("plan-id"), "plan-id")
-    expected_id = _plan_identifier(
-        _plan_identity_payload(
+    proposal_id = _string(root.get("proposal-id"), "proposal-id")
+    expected_id = _proposal_identifier(
+        _proposal_identity_payload(
             repository=repository,
             git_directory=git_directory,
             repository_name=repository_name,
@@ -1022,21 +1027,21 @@ def publication_plan_from_mapping(
             commit=commit,
             observed_github_state=observed_github_state,
             remote_fingerprint=remote_fingerprint,
-            live_delta=live_delta,
+            github_reconciliation=github_reconciliation,
         )
     )
-    if plan_id != expected_id:
-        raise PublicationError("publication Plan identity does not match its recorded inputs")
+    if proposal_id != expected_id:
+        raise PublicationError("publication proposal identity does not match its recorded inputs")
     confirmation = _string(root.get("confirmation"), "confirmation")
-    if confirmation != f"Publish {repository_name} from proposal {plan_id}":
+    if confirmation != f"Publish {repository_name} from proposal {proposal_id}":
         raise PublicationError("lifecycle proposal confirmation is invalid")
-    expected_steps = _publication_steps(live_delta)
+    expected_steps = _publication_steps(github_reconciliation)
     if tuple(raw_steps) != expected_steps:
         raise PublicationError(
-            "publication Plan steps do not match its live desired-state delta"
+            "publication proposal steps do not match its GitHub reconciliation"
         )
-    return PublicationPlan(
-        plan_id=plan_id,
+    return PublicationProposal(
+        proposal_id=proposal_id,
         repository=repository,
         git_directory=git_directory,
         repository_name=repository_name,
@@ -1049,29 +1054,29 @@ def publication_plan_from_mapping(
         commit=commit,
         observed_github_state=observed_github_state,
         remote_fingerprint=remote_fingerprint,
-        live_delta=live_delta,
+        github_reconciliation=github_reconciliation,
         steps=tuple(raw_steps),
         confirmation=confirmation,
     )
 
 
-def write_publication_plan(plan: PublicationPlan, path: Path) -> None:
-    """Persist a Plan outside the target repository without changing the target."""
+def write_publication_proposal(proposal: PublicationProposal, path: Path) -> None:
+    """Persist a proposal outside the target repository without changing the target."""
 
     expanded_path = path.expanduser()
     if not expanded_path.is_absolute():
         expanded_path = Path.cwd() / expanded_path
     path = expanded_path.parent.resolve() / expanded_path.name
-    for protected in (plan.repository, plan.git_directory):
+    for protected in (proposal.repository, proposal.git_directory):
         try:
             path.relative_to(protected)
         except ValueError:
             continue
         raise PublicationError(
-            "publication Plan file must be outside the target repository and Git directory"
+            "publication proposal file must be outside the target repository and Git directory"
         )
     if not path.parent.is_dir():
-        raise PublicationError(f"publication Plan directory does not exist: {path.parent}")
+        raise PublicationError(f"publication proposal directory does not exist: {path.parent}")
     descriptor: int | None = None
     temporary: Path | None = None
     try:
@@ -1084,11 +1089,11 @@ def write_publication_plan(plan: PublicationPlan, path: Path) -> None:
         stream = os.fdopen(descriptor, "w", encoding="utf-8")
         descriptor = None
         with stream:
-            stream.write(json.dumps(publication_plan_mapping(plan), indent=2) + "\n")
+            stream.write(json.dumps(publication_proposal_mapping(proposal), indent=2) + "\n")
         os.replace(temporary, path)
         temporary = None
     except OSError as exc:
-        raise PublicationError(f"cannot write publication Plan: {exc}") from exc
+        raise PublicationError(f"cannot write publication proposal: {exc}") from exc
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -1099,14 +1104,14 @@ def write_publication_plan(plan: PublicationPlan, path: Path) -> None:
                 pass
 
 
-def load_publication_plan(
+def load_publication_proposal(
     path: Path, *, _allow_local_push_for_testing: bool = False
-) -> PublicationPlan:
+) -> PublicationProposal:
     try:
         value = json.loads(path.expanduser().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise PublicationError(f"cannot read publication Plan: {exc}") from exc
-    return publication_plan_from_mapping(
+        raise PublicationError(f"cannot read publication proposal: {exc}") from exc
+    return publication_proposal_from_mapping(
         value, _allow_local_push_for_testing=_allow_local_push_for_testing
     )
 
@@ -1145,9 +1150,9 @@ def _uncertain_report(
     )
 
 
-def _remote_main_observation(plan: PublicationPlan) -> tuple[str | None, str | None]:
+def _remote_main_observation(proposal: PublicationProposal) -> tuple[str | None, str | None]:
     observed = subprocess.run(
-        ["git", "ls-remote", plan.push_url, f"refs/heads/{plan.branch}"],
+        ["git", "ls-remote", proposal.push_url, f"refs/heads/{proposal.branch}"],
         check=False,
         capture_output=True,
         text=True,
@@ -1158,10 +1163,10 @@ def _remote_main_observation(plan: PublicationPlan) -> tuple[str | None, str | N
     return (line.split("\t", 1)[0] if line else None), None
 
 
-def _commit_metadata_error(plan: PublicationPlan, commit_oid: str) -> str | None:
-    message = _git(plan.repository, "show", "-s", "--format=%B", commit_oid)
+def _commit_metadata_error(proposal: PublicationProposal, commit_oid: str) -> str | None:
+    message = _git(proposal.repository, "show", "-s", "--format=%B", commit_oid)
     metadata = _git(
-        plan.repository,
+        proposal.repository,
         "show",
         "-s",
         "--format=%an%x00%ae%x00%at%x00%ai%x00%cn%x00%ce%x00%ct%x00%ci%x00%P",
@@ -1183,59 +1188,59 @@ def _commit_metadata_error(plan: PublicationPlan, commit_oid: str) -> str | None
         committer_date,
         parents,
     ) = values
-    expected_timestamp = str(plan.commit.timestamp)
-    if message.stdout.rstrip("\n") != plan.commit.message:
-        return "created commit message does not match the confirmed Plan"
+    expected_timestamp = str(proposal.commit.timestamp)
+    if message.stdout.rstrip("\n") != proposal.commit.message:
+        return "created commit message does not match the confirmed proposal"
     if (author_name, committer_name) != (
-        plan.commit.author_name,
-        plan.commit.author_name,
+        proposal.commit.author_name,
+        proposal.commit.author_name,
     ):
-        return "created commit author or committer name does not match the confirmed Plan"
+        return "created commit author or committer name does not match the confirmed proposal"
     if (author_email, committer_email) != (
-        plan.commit.author_email,
-        plan.commit.author_email,
+        proposal.commit.author_email,
+        proposal.commit.author_email,
     ):
-        return "created commit author or committer email does not match the confirmed Plan"
+        return "created commit author or committer email does not match the confirmed proposal"
     if (author_timestamp, committer_timestamp) != (
         expected_timestamp,
         expected_timestamp,
     ):
-        return "created commit timestamp does not match the confirmed Plan"
-    if not author_date.endswith(f" {plan.commit.timezone}") or not committer_date.endswith(
-        f" {plan.commit.timezone}"
+        return "created commit timestamp does not match the confirmed proposal"
+    if not author_date.endswith(f" {proposal.commit.timezone}") or not committer_date.endswith(
+        f" {proposal.commit.timezone}"
     ):
-        return "created commit timezone does not match the confirmed Plan"
+        return "created commit timezone does not match the confirmed proposal"
     if parents:
         return "created initial commit unexpectedly has a parent"
     return None
 
 
 def _verify_committed_content(
-    plan: PublicationPlan, contract: RepositoryContract, commit_oid: str
+    proposal: PublicationProposal, contract: RepositoryContract, commit_oid: str
 ) -> str | None:
-    head = _git(plan.repository, "rev-parse", "HEAD")
+    head = _git(proposal.repository, "rev-parse", "HEAD")
     if head.returncode != 0 or head.stdout.strip() != commit_oid:
         return "local HEAD no longer identifies the published initial commit"
-    tree = _git(plan.repository, "rev-parse", "HEAD^{tree}")
-    if tree.returncode != 0 or tree.stdout.strip() != plan.commit.tree_oid:
-        return "committed tree does not match the planned initial content"
+    tree = _git(proposal.repository, "rev-parse", "HEAD^{tree}")
+    if tree.returncode != 0 or tree.stdout.strip() != proposal.commit.tree_oid:
+        return "committed tree does not match the proposed initial content"
     try:
-        _validate_committed_baseline(contract, plan.commit.files)
+        _validate_committed_baseline(contract, proposal.commit.files)
     except PublicationError as exc:
         return str(exc)
     status = _git(
-        plan.repository,
+        proposal.repository,
         "status",
         "--porcelain=v1",
         "--untracked-files=all",
     )
     if status.returncode != 0 or status.stdout:
         return "working tree changed while first publication was running"
-    remote_oid, observation_error = _remote_main_observation(plan)
+    remote_oid, observation_error = _remote_main_observation(proposal)
     if observation_error:
         return f"cannot verify published main: {observation_error}"
     if remote_oid != commit_oid:
-        return "published main does not identify the planned initial commit"
+        return "published main does not identify the proposed initial commit"
     try:
         _validate_offline_baseline(contract)
     except (PublicationError, StandardsError, OSError) as exc:
@@ -1243,22 +1248,22 @@ def _verify_committed_content(
     return None
 
 
-def _verify_live_state(
-    plan: PublicationPlan,
+def _verify_github_state(
+    proposal: PublicationProposal,
     contract: RepositoryContract,
     adapter: GitHubAdapter,
 ) -> str | None:
     try:
-        snapshot = adapter.observe(contract, lifecycle=LiveLifecycle.PUBLISHED)
+        snapshot = adapter.observe(contract, lifecycle=GitHubLifecycle.PUBLISHED)
         assessment = assess_repository(
             contract, _ObservedGitHubAdapter(snapshot)
         )
         pulls = _collect_pages(
-            adapter, f"repos/{plan.repository_name}/pulls?state=all"
+            adapter, f"repos/{proposal.repository_name}/pulls?state=all"
         )
     except (PublicationError, StandardsError, OSError) as exc:
         return str(exc)
-    if snapshot.repository.get("full_name") != plan.repository_name:
+    if snapshot.repository.get("full_name") != proposal.repository_name:
         return "re-observed GitHub repository identity changed"
     if assessment.conclusion is not AssessmentConclusion.STANDARDS_COMPLETE:
         findings = (
@@ -1271,91 +1276,91 @@ def _verify_live_state(
             f"{assessment.conclusion.value}"
             + (":\n- " + "\n- ".join(findings) if findings else "")
         )
-    if not any(branch.get("name") == plan.branch for branch in snapshot.branches):
-        return f"GitHub did not re-observe published branch {plan.branch!r}"
+    if not any(branch.get("name") == proposal.branch for branch in snapshot.branches):
+        return f"GitHub did not re-observe published branch {proposal.branch!r}"
     if pulls:
         return "first publication unexpectedly left a pull request"
     return None
 
 
-def _live_operation_state(
+def _github_correction_state(
     contract: RepositoryContract,
     adapter: GitHubAdapter,
-    operation: LiveOperation,
-    expected_remaining: tuple[LiveOperation, ...],
+    operation: GitHubCorrection,
+    expected_remaining: tuple[GitHubCorrection, ...],
 ) -> tuple[str, str | None]:
     try:
-        snapshot = adapter.observe(contract, lifecycle=LiveLifecycle.PUBLISHED)
-        delta = reconcile_live_github(contract, snapshot)
+        snapshot = adapter.observe(contract, lifecycle=GitHubLifecycle.PUBLISHED)
+        reconciliation = reconcile_github(contract, snapshot)
     except (StandardsError, OSError) as exc:
         return "unknown", str(exc)
-    if delta.operations == expected_remaining:
+    if reconciliation.operations == expected_remaining:
         return "completed", None
-    if delta.operations == (operation, *expected_remaining):
+    if reconciliation.operations == (operation, *expected_remaining):
         return "failed", None
     return (
         "unknown",
-        "re-observed live desired-state delta differs from both the pre-write "
+        "re-observed GitHub reconciliation differs from both the pre-write "
         "and successful-write states",
     )
 
 
-def publish_first_publication(
-    plan: PublicationPlan,
+def execute_publication(
+    proposal: PublicationProposal,
     adapter: GitHubAdapter,
     *,
     standards_root: Path,
     confirmation: str,
 ) -> PublicationReport:
-    """Publish one current plan after its exact human confirmation."""
+    """Publish one current proposal after its exact human confirmation."""
 
-    if confirmation != plan.confirmation:
+    if confirmation != proposal.confirmation:
         raise PublicationError(
-            "Publish requires the exact confirmation from the current Plan; "
-            "a repository or plan reference alone is not authorization"
+            "Publish requires the exact confirmation from the current proposal; "
+            "a repository or proposal reference alone is not authorization"
         )
-    plan_time = datetime.fromtimestamp(plan.commit.timestamp, timezone.utc)
+    proposal_time = datetime.fromtimestamp(proposal.commit.timestamp, timezone.utc)
     try:
-        fresh = plan_first_publication(
-            plan.repository,
+        fresh = prepare_publication_proposal(
+            proposal.repository,
             adapter,
             standards_root=standards_root,
-            now=plan_time,
-            _allow_local_push_for_testing=plan.local_push_for_testing,
+            now=proposal_time,
+            _allow_local_push_for_testing=proposal.local_push_for_testing,
         )
     except PublicationError as exc:
         raise PublicationError(
-            f"publication Plan {plan.plan_id} is stale: {exc}"
+            f"publication proposal {proposal.proposal_id} is stale: {exc}"
         ) from exc
-    if fresh.plan_id != plan.plan_id:
+    if fresh.proposal_id != proposal.proposal_id:
         raise PublicationError(
-            f"publication Plan {plan.plan_id} is stale; review a new Plan before Publish"
+            f"publication proposal {proposal.proposal_id} is stale; review a new proposal before Publish"
         )
 
     try:
         contract = resolve_repository_contract(
-            plan.repository, standards_root=standards_root
+            proposal.repository, standards_root=standards_root
         )
     except (ContractError, StandardsError) as exc:
         raise PublicationError(str(exc)) from exc
 
-    steps = plan.steps
+    steps = proposal.steps
     commit_environment = os.environ.copy()
-    git_date = f"{plan.commit.timestamp} {plan.commit.timezone}"
+    git_date = f"{proposal.commit.timestamp} {proposal.commit.timezone}"
     commit_environment.update(
         {
-            "GIT_AUTHOR_NAME": plan.commit.author_name,
-            "GIT_AUTHOR_EMAIL": plan.commit.author_email,
+            "GIT_AUTHOR_NAME": proposal.commit.author_name,
+            "GIT_AUTHOR_EMAIL": proposal.commit.author_email,
             "GIT_AUTHOR_DATE": git_date,
-            "GIT_COMMITTER_NAME": plan.commit.author_name,
-            "GIT_COMMITTER_EMAIL": plan.commit.author_email,
+            "GIT_COMMITTER_NAME": proposal.commit.author_name,
+            "GIT_COMMITTER_EMAIL": proposal.commit.author_email,
             "GIT_COMMITTER_DATE": git_date,
         }
     )
-    with tempfile.TemporaryDirectory(prefix="first-publication-publish-") as directory:
+    with tempfile.TemporaryDirectory(prefix="repository-publication-execution-") as directory:
         temporary_index = Path(directory) / "index"
         commit_environment["GIT_INDEX_FILE"] = str(temporary_index)
-        existing_index = plan.git_directory / "index"
+        existing_index = proposal.git_directory / "index"
         if existing_index.is_file():
             try:
                 shutil.copyfile(existing_index, temporary_index)
@@ -1367,7 +1372,7 @@ def publish_first_publication(
                     commit_oid=None,
                 )
         staged = _git(
-            plan.repository,
+            proposal.repository,
             "add",
             "--all",
             environment=commit_environment,
@@ -1379,22 +1384,22 @@ def publish_first_publication(
                 staged.stderr.strip() or staged.stdout.strip(),
                 commit_oid=None,
             )
-        tree = _git(plan.repository, "write-tree", environment=commit_environment)
-        if tree.returncode != 0 or tree.stdout.strip() != plan.commit.tree_oid:
+        tree = _git(proposal.repository, "write-tree", environment=commit_environment)
+        if tree.returncode != 0 or tree.stdout.strip() != proposal.commit.tree_oid:
             return _failed_report(
                 steps,
                 0,
                 tree.stderr.strip()
                 or tree.stdout.strip()
-                or "prepared content no longer matches the confirmed Plan",
+                or "prepared content no longer matches the confirmed proposal",
                 commit_oid=None,
             )
         committed = _git(
-            plan.repository,
+            proposal.repository,
             "commit-tree",
-            plan.commit.tree_oid,
+            proposal.commit.tree_oid,
             environment=commit_environment,
-            input_text=f"{plan.commit.message}\n",
+            input_text=f"{proposal.commit.message}\n",
         )
         if committed.returncode != 0:
             return _failed_report(
@@ -1404,7 +1409,7 @@ def publish_first_publication(
                 commit_oid=None,
             )
         commit_oid = committed.stdout.strip()
-        metadata_error = _commit_metadata_error(plan, commit_oid)
+        metadata_error = _commit_metadata_error(proposal, commit_oid)
         if metadata_error:
             return _failed_report(
                 steps,
@@ -1412,7 +1417,7 @@ def publish_first_publication(
                 metadata_error,
                 commit_oid=commit_oid,
             )
-        index_lock = plan.git_directory / "index.lock"
+        index_lock = proposal.git_directory / "index.lock"
         lock_created = False
         try:
             descriptor = os.open(
@@ -1438,16 +1443,16 @@ def publish_first_publication(
                 commit_oid=commit_oid,
             )
         updated = _git(
-            plan.repository,
+            proposal.repository,
             "update-ref",
-            f"refs/heads/{plan.branch}",
+            f"refs/heads/{proposal.branch}",
             commit_oid,
             "",
         )
         if updated.returncode != 0:
-            reference = f"refs/heads/{plan.branch}"
+            reference = f"refs/heads/{proposal.branch}"
             current = _git(
-                plan.repository,
+                proposal.repository,
                 "for-each-ref",
                 "--format=%(refname)%00%(objectname)",
                 reference,
@@ -1514,14 +1519,14 @@ def publish_first_publication(
             )
 
     pushed = _git(
-        plan.repository,
+        proposal.repository,
         "push",
         "--set-upstream",
         "origin",
-        plan.branch,
+        proposal.branch,
     )
     if pushed.returncode != 0:
-        remote_oid, observation_error = _remote_main_observation(plan)
+        remote_oid, observation_error = _remote_main_observation(proposal)
         if remote_oid != commit_oid:
             push_error = pushed.stderr.strip() or pushed.stdout.strip()
             if observation_error:
@@ -1539,17 +1544,17 @@ def publish_first_publication(
                 commit_oid=commit_oid,
             )
 
-    operations = plan.live_delta.operations
-    for live_index, operation in enumerate(operations):
-        operation_index = live_index + 3
+    operations = proposal.github_reconciliation.operations
+    for github_index, operation in enumerate(operations):
+        operation_index = github_index + 3
         try:
             adapter.apply(operation)
         except (StandardsError, OSError) as exc:
-            state, observation_error = _live_operation_state(
+            state, observation_error = _github_correction_state(
                 contract,
                 adapter,
                 operation,
-                operations[live_index + 1 :],
+                operations[github_index + 1 :],
             )
             if state == "completed":
                 continue
@@ -1568,7 +1573,7 @@ def publish_first_publication(
             )
 
     content_index = len(steps) - 2
-    content_error = _verify_committed_content(plan, contract, commit_oid)
+    content_error = _verify_committed_content(proposal, contract, commit_oid)
     if content_error:
         return _failed_report(
             steps,
@@ -1576,12 +1581,12 @@ def publish_first_publication(
             content_error,
             commit_oid=commit_oid,
         )
-    live_error = _verify_live_state(plan, contract, adapter)
-    if live_error:
+    github_error = _verify_github_state(proposal, contract, adapter)
+    if github_error:
         return _failed_report(
             steps,
             content_index + 1,
-            live_error,
+            github_error,
             commit_oid=commit_oid,
         )
     return PublicationReport(

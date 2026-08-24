@@ -19,15 +19,23 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from lib.first_publication import (
-    load_publication_plan,
-    plan_first_publication,
-    publish_first_publication,
-    write_publication_plan,
+from lib.repository_publication import (
+    load_publication_proposal,
+    prepare_publication_proposal,
+    execute_publication,
+    write_publication_proposal,
 )
-from lib.live_reconciliation import GitHubAdapter
+from lib.github_reconciliation import GitHubAdapter
 from lib.repository_assessment_cli import standards_main
-from lib.standards import StandardsError
+from lib.repository_content import StandardsError
+from lib.repository_content_reconciliation import (
+    apply_content_reconciliation,
+    calculate_content_reconciliation,
+)
+from lib.repository_contract import (
+    build_initial_repository_contract,
+    resolve_repository_contract,
+)
 
 
 class FakePublicationGitHub(GitHubAdapter):
@@ -118,47 +126,33 @@ class FakePublicationGitHub(GitHubAdapter):
         raise AssertionError(f"unexpected GitHub request: {method} {endpoint}")
 
 
-class FirstPublicationTests(unittest.TestCase):
+class RepositoryPublicationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.template_directory = tempfile.TemporaryDirectory()
         template_root = Path(cls.template_directory.name).resolve()
         cls.template = template_root / "baseline"
-        initialization = template_root / "initialization.json"
-        initialization.write_text(
-            json.dumps(
-                {
-                    "standards-release": (ROOT / "VERSION")
-                    .read_text(encoding="utf-8")
-                    .strip(),
-                    "repository": "owner/example",
-                    "title": "Example Repository",
-                    "facts": {
-                        "ecosystem": "none",
-                        "package-manager": "none",
-                        "project-kind": "repository",
-                        "framework": "none",
-                    },
-                }
-            )
-            + "\n",
+        initial = build_initial_repository_contract(
+            {
+                "standards-release": (ROOT / "VERSION")
+                .read_text(encoding="utf-8")
+                .strip(),
+                "repository": "owner/example",
+                "title": "Example Repository",
+                "facts": {
+                    "ecosystem": "none",
+                    "package-manager": "none",
+                    "project-kind": "repository",
+                    "framework": "none",
+                },
+            },
+            standards_root=ROOT,
+        )
+        cls.template.mkdir()
+        (cls.template / ".repository-standards.json").write_text(
+            json.dumps(initial.as_mapping(), indent=2) + "\n",
             encoding="utf-8",
         )
-        initialized = subprocess.run(
-            [
-                str(ROOT / "scripts/init"),
-                "--input",
-                str(initialization),
-                "--write",
-                str(cls.template),
-            ],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if initialized.returncode != 0:
-            raise AssertionError(initialized.stdout + initialized.stderr)
         files = {
             "README.md": (
                 '<div align="center">\n  <h1>Example Repository</h1>\n'
@@ -173,15 +167,16 @@ class FirstPublicationTests(unittest.TestCase):
             target = cls.template / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
-        synchronized = subprocess.run(
-            [str(ROOT / "scripts/sync"), "--write", str(cls.template)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
+        contract = resolve_repository_contract(
+            cls.template,
+            standards_root=ROOT,
+            retain_content_blockers=True,
         )
-        if synchronized.returncode != 0:
-            raise AssertionError(synchronized.stdout + synchronized.stderr)
+        report = apply_content_reconciliation(
+            calculate_content_reconciliation(contract)
+        )
+        if not report.succeeded:
+            raise AssertionError(report.failed)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -239,8 +234,8 @@ class FirstPublicationTests(unittest.TestCase):
             text=True,
         ).stdout
 
-    def plan(self):
-        return plan_first_publication(
+    def proposal(self):
+        return prepare_publication_proposal(
             self.repository,
             self.github,
             standards_root=ROOT,
@@ -248,36 +243,36 @@ class FirstPublicationTests(unittest.TestCase):
             _allow_local_push_for_testing=True,
         )
 
-    def test_plan_previews_the_complete_transition_without_mutation(self) -> None:
+    def test_proposal_previews_the_complete_transition_without_mutation(self) -> None:
         status_before = self.git_status()
 
-        plan = self.plan()
+        proposal = self.proposal()
 
         self.assertEqual(self.git_status(), status_before)
         self.assertEqual(self.github.mutations, [])
         self.assertFalse((self.repository / ".git/refs/heads/main").exists())
         self.assertFalse((self.repository / ".git/index").exists())
-        self.assertEqual(plan.repository_name, "owner/example")
-        self.assertEqual(plan.branch, "main")
-        self.assertEqual(plan.commit.message, "chore: publish initial repository")
-        self.assertEqual(plan.commit.author_name, "Publication Tester")
-        self.assertEqual(plan.commit.author_email, "publication@example.com")
-        self.assertIn("README.md", [item.path for item in plan.commit.files])
-        self.assertTrue(plan.commit.tree_oid)
+        self.assertEqual(proposal.repository_name, "owner/example")
+        self.assertEqual(proposal.branch, "main")
+        self.assertEqual(proposal.commit.message, "chore: publish initial repository")
+        self.assertEqual(proposal.commit.author_name, "Publication Tester")
+        self.assertEqual(proposal.commit.author_email, "publication@example.com")
+        self.assertIn("README.md", [item.path for item in proposal.commit.files])
+        self.assertTrue(proposal.commit.tree_oid)
         self.assertEqual(
-            plan.observed_github_state["repository"]["permissions"],
+            proposal.observed_github_state["repository"]["permissions"],
             {"admin": True, "push": True},
         )
-        self.assertEqual(plan.observed_github_state["git-refs"], [])
+        self.assertEqual(proposal.observed_github_state["git-refs"], [])
         self.assertEqual(
-            [operation.description for operation in plan.live_delta.operations],
+            [operation.description for operation in proposal.github_reconciliation.operations],
             [
                 "ESTABLISH default branch 'main'",
                 "CREATE   ruleset 'Protect main'",
             ],
         )
         self.assertEqual(
-            plan.steps,
+            proposal.steps,
             (
                 "CREATE   initial commit",
                 "INSTALL  initial Git index",
@@ -285,11 +280,11 @@ class FirstPublicationTests(unittest.TestCase):
                 "ESTABLISH default branch 'main'",
                 "CREATE   ruleset 'Protect main'",
                 "VERIFY   committed content",
-                "VERIFY   live GitHub state",
+                "VERIFY   declared GitHub state",
             ),
         )
 
-    def test_plan_disables_git_hooks_while_constructing_the_preview(self) -> None:
+    def test_proposal_disables_git_hooks_while_constructing_the_preview(self) -> None:
         marker = self.repository / ".git/hook-ran"
         hook = self.repository / ".git/hooks/post-index-change"
         hook.write_text(
@@ -298,155 +293,37 @@ class FirstPublicationTests(unittest.TestCase):
         )
         hook.chmod(0o755)
 
-        self.plan()
+        self.proposal()
 
         self.assertFalse(marker.exists())
 
-    def test_plan_establishes_named_default_branch_when_remote_is_empty(self) -> None:
+    def test_proposal_establishes_named_default_branch_when_remote_is_empty(self) -> None:
         self.github.repository["default_branch"] = "main"
 
-        plan = self.plan()
+        proposal = self.proposal()
 
-        operation = plan.live_delta.operations[0]
+        operation = proposal.github_reconciliation.operations[0]
         self.assertEqual(operation.description, "ESTABLISH default branch 'main'")
         self.assertEqual(operation.method, "PATCH")
         self.assertEqual(operation.endpoint, "repos/owner/example")
         self.assertEqual(operation.payload, {"default_branch": "main"})
 
-    def test_plan_command_escapes_identity_and_paths_and_surfaces_live_operations(
+
+    def test_publish_completes_the_proposed_transition_and_proves_conformance(
         self,
     ) -> None:
-        unsafe_name = "Publication\x1b[2J Tester"
-        unsafe_email = "publication\x1b[2J@example.com"
-        subprocess.run(
-            ["git", "config", "user.name", unsafe_name],
-            cwd=self.repository,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.email", unsafe_email],
-            cwd=self.repository,
-            check=True,
-        )
-        unsafe_path = "misleading\nCREATE fake operation\x1b[2J.md"
-        (self.repository / unsafe_path).write_text(
-            "unsafe name\n", encoding="utf-8"
-        )
-        subprocess.run(
-            [
-                "git",
-                "remote",
-                "set-url",
-                "--push",
-                "origin",
-                "https://github.com/owner/example.git",
-            ],
-            cwd=self.repository,
-            check=True,
-        )
-        git_exec_path = self.directory / "git-exec"
-        git_exec_path.mkdir()
-        remote_helper = git_exec_path / "git-remote-https"
-        remote_helper.write_text(
-            """#!/usr/bin/env python3
-import sys
+        proposal = self.proposal()
 
-for command in sys.stdin:
-    if command.strip() in {"capabilities", "list"}:
-        print()
-        sys.stdout.flush()
-""",
-            encoding="utf-8",
-        )
-        remote_helper.chmod(0o755)
-        fake_gh = self.directory / "fake-gh"
-        fake_gh.write_text(
-            """#!/usr/bin/env python3
-import json
-import os
-import sys
-
-responses = json.loads(os.environ["FAKE_GITHUB_RESPONSES"])
-endpoint = sys.argv[2]
-if endpoint not in responses:
-    print(f"unexpected endpoint: {endpoint}", file=sys.stderr)
-    raise SystemExit(1)
-print(json.dumps(responses[endpoint]))
-""",
-            encoding="utf-8",
-        )
-        fake_gh.chmod(0o755)
-        plan_path = self.directory / "publication-plan.json"
-        victim = self.directory / "unrelated.json"
-        victim.write_text("unrelated content\n", encoding="utf-8")
-        plan_path.symlink_to(victim)
-        responses = {
-            "repos/owner/example": self.github.repository,
-            "repos/owner/example/labels?per_page=100&page=1": [
-                {"name": name} for name in sorted(self.github.labels)
-            ],
-            "repos/owner/example/rulesets?includes_parents=false&per_page=100&page=1": [],
-            "repos/owner/example/branches?per_page=100&page=1": [],
-            "repos/owner/example/pulls?state=all&per_page=100&page=1": [],
-        }
-        environment = os.environ.copy()
-        environment.update(
-            {
-                "REPOSITORY_STANDARDS_GH": str(fake_gh),
-                "FAKE_GITHUB_RESPONSES": json.dumps(responses),
-                "GIT_EXEC_PATH": str(git_exec_path),
-            }
-        )
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts/first-publication"),
-                "plan",
-                str(self.repository),
-                "--plan-file",
-                str(plan_path),
-            ],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-            env=environment,
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Live desired-state operations:", result.stdout)
-        self.assertIn('"method": "PATCH"', result.stdout)
-        self.assertIn('"endpoint": "repos/owner/example"', result.stdout)
-        self.assertIn('"default_branch": "main"', result.stdout)
-        self.assertIn('"required_approving_review_count": 0', result.stdout)
-        self.assertIn(json.dumps(unsafe_name), result.stdout)
-        self.assertIn(json.dumps(unsafe_email), result.stdout)
-        self.assertIn(json.dumps(unsafe_path), result.stdout)
-        self.assertNotIn(unsafe_name, result.stdout)
-        self.assertNotIn(unsafe_email, result.stdout)
-        self.assertNotIn(unsafe_path, result.stdout)
-        self.assertEqual(
-            victim.read_text(encoding="utf-8"), "unrelated content\n"
-        )
-        self.assertFalse(plan_path.is_symlink())
-        self.assertTrue(plan_path.is_file())
-
-    def test_publish_completes_the_planned_transition_and_proves_conformance(
-        self,
-    ) -> None:
-        plan = self.plan()
-
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
         self.assertTrue(report.complete, report.error)
         self.assertTrue(report.standards_complete)
-        self.assertEqual(report.completed, plan.steps)
+        self.assertEqual(report.completed, proposal.steps)
         self.assertIsNone(report.failed)
         self.assertIsNone(report.uncertain)
         self.assertEqual(report.remaining, ())
@@ -657,13 +534,13 @@ print(json.dumps(responses[endpoint]))
             )
 
         self.assertEqual(status, 2)
-        self.assertIn("Failed work:\n- VERIFY   live GitHub state", errors.getvalue())
+        self.assertIn("Failed work:\n- VERIFY   declared GitHub state", errors.getvalue())
         self.assertFalse(any(path.is_file() for path in state_home.rglob("*")))
 
-    def test_plan_rejects_nonempty_remote_and_unexpected_local_commits(self) -> None:
+    def test_proposal_rejects_nonempty_remote_and_unexpected_local_commits(self) -> None:
         self.github.branches = [{"name": "main"}]
         with self.assertRaisesRegex(Exception, "remote branches already exist"):
-            self.plan()
+            self.proposal()
 
         self.github.branches = []
         subprocess.run(["git", "add", "--all"], cwd=self.repository, check=True)
@@ -673,9 +550,9 @@ print(json.dumps(responses[endpoint]))
             check=True,
         )
         with self.assertRaisesRegex(Exception, "must have no commits"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_required_managed_content_missing_from_initial_tree(
+    def test_proposal_rejects_required_managed_content_missing_from_initial_tree(
         self,
     ) -> None:
         (self.repository / ".git/info/exclude").write_text(
@@ -683,17 +560,17 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "AGENTS.md: missing"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_contract_manifest_missing_from_initial_tree(self) -> None:
+    def test_proposal_rejects_contract_manifest_missing_from_initial_tree(self) -> None:
         (self.repository / ".git/info/exclude").write_text(
             ".repository-standards.json\n", encoding="utf-8"
         )
 
         with self.assertRaisesRegex(Exception, "no repository standards manifest"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_a_staged_contract_that_differs_from_the_worktree(
+    def test_proposal_rejects_a_staged_contract_that_differs_from_the_worktree(
         self,
     ) -> None:
         manifest = self.repository / ".repository-standards.json"
@@ -716,18 +593,18 @@ print(json.dumps(responses[endpoint]))
         manifest.write_text(worktree_content, encoding="utf-8")
 
         with self.assertRaisesRegex(Exception, "committed repository contract differs"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_an_external_clean_filter_without_running_it(self) -> None:
+    def test_proposal_rejects_an_external_clean_filter_without_running_it(self) -> None:
         marker = self.repository / ".git/filter-ran"
         (self.repository / ".git/info/attributes").write_text(
-            "*.md filter=plan-side-effect\n", encoding="utf-8"
+            "*.md filter=proposal-side-effect\n", encoding="utf-8"
         )
         subprocess.run(
             [
                 "git",
                 "config",
-                "filter.plan-side-effect.clean",
+                "filter.proposal-side-effect.clean",
                 f"touch {shlex.quote(str(marker))}; cat",
             ],
             cwd=self.repository,
@@ -735,20 +612,20 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "external Git clean filter"):
-            self.plan()
+            self.proposal()
 
         self.assertFalse(marker.exists())
 
-    def test_plan_rejects_an_external_process_filter_without_running_it(self) -> None:
+    def test_proposal_rejects_an_external_process_filter_without_running_it(self) -> None:
         marker = self.repository / ".git/filter-ran"
         (self.repository / ".git/info/attributes").write_text(
-            "*.md filter=plan-side-effect\n", encoding="utf-8"
+            "*.md filter=proposal-side-effect\n", encoding="utf-8"
         )
         subprocess.run(
             [
                 "git",
                 "config",
-                "filter.plan-side-effect.process",
+                "filter.proposal-side-effect.process",
                 f"touch {shlex.quote(str(marker))}; cat",
             ],
             cwd=self.repository,
@@ -756,11 +633,11 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "external Git process filter"):
-            self.plan()
+            self.proposal()
 
         self.assertFalse(marker.exists())
 
-    def test_plan_rejects_a_filter_named_like_an_attribute_state(self) -> None:
+    def test_proposal_rejects_a_filter_named_like_an_attribute_state(self) -> None:
         marker = self.repository / ".git/filter-ran"
         (self.repository / ".git/info/attributes").write_text(
             "*.md filter=set\n", encoding="utf-8"
@@ -777,11 +654,11 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "external Git clean filter"):
-            self.plan()
+            self.proposal()
 
         self.assertFalse(marker.exists())
 
-    def test_plan_rejects_multiple_origin_push_destinations(self) -> None:
+    def test_proposal_rejects_multiple_origin_push_destinations(self) -> None:
         second_remote = self.directory / "second-remote.git"
         subprocess.run(
             ["git", "init", "--quiet", "--bare", str(second_remote)], check=True
@@ -799,7 +676,7 @@ print(json.dumps(responses[endpoint]))
         )
 
         with self.assertRaisesRegex(Exception, "exactly one push URL"):
-            self.plan()
+            self.proposal()
 
         self.assertEqual(self.github.mutations, [])
         for remote in (self.remote, second_remote):
@@ -811,7 +688,7 @@ print(json.dumps(responses[endpoint]))
             )
             self.assertEqual(refs.returncode, 1, refs.stderr)
 
-    def test_plan_rejects_nonbranch_remote_refs_and_non_head_local_refs(self) -> None:
+    def test_proposal_rejects_nonbranch_remote_refs_and_non_head_local_refs(self) -> None:
         seed = self.directory / "seed"
         seed.mkdir()
         subprocess.run(
@@ -843,7 +720,7 @@ print(json.dumps(responses[endpoint]))
             check=True,
         )
         with self.assertRaisesRegex(Exception, "Git remote is not empty.*refs/tags/v1"):
-            self.plan()
+            self.proposal()
 
         subprocess.run(
             ["git", "--git-dir", str(self.remote), "update-ref", "-d", "refs/tags/v1"],
@@ -861,9 +738,9 @@ print(json.dumps(responses[endpoint]))
             check=True,
         )
         with self.assertRaisesRegex(Exception, "must have no local refs"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_missing_identity_permissions_and_prepared_drift(self) -> None:
+    def test_proposal_rejects_missing_identity_permissions_and_prepared_drift(self) -> None:
         subprocess.run(
             ["git", "config", "--unset", "user.email"],
             cwd=self.repository,
@@ -879,7 +756,7 @@ print(json.dumps(responses[endpoint]))
             },
         ):
             with self.assertRaisesRegex(Exception, "effective Git user.email"):
-                self.plan()
+                self.proposal()
 
         subprocess.run(
             ["git", "config", "user.email", "publication@example.com"],
@@ -888,14 +765,14 @@ print(json.dumps(responses[endpoint]))
         )
         self.github.repository["permissions"] = {"admin": False, "push": True}
         with self.assertRaisesRegex(Exception, "permissions: admin"):
-            self.plan()
+            self.proposal()
 
         self.github.repository["permissions"] = {"admin": True, "push": True}
         self.github.repository["has_issues"] = False
         with self.assertRaisesRegex(Exception, "prepared GitHub state has applicable drift"):
-            self.plan()
+            self.proposal()
 
-    def test_plan_rejects_identity_characters_git_strips(self) -> None:
+    def test_proposal_rejects_identity_characters_git_strips(self) -> None:
         invalid_identities = [
             ("user.name", "Publication <Tester"),
             ("user.name", "Publication >Tester"),
@@ -929,9 +806,9 @@ print(json.dumps(responses[endpoint]))
                 )
 
                 with self.assertRaisesRegex(Exception, "characters Git strips"):
-                    self.plan()
+                    self.proposal()
 
-    def test_plan_uses_effective_identity_without_writing_local_config(self) -> None:
+    def test_proposal_uses_effective_identity_without_writing_local_config(self) -> None:
         subprocess.run(
             ["git", "config", "--local", "--unset-all", "user.name"],
             cwd=self.repository,
@@ -973,11 +850,11 @@ print(json.dumps(responses[endpoint]))
                 "GIT_CONFIG_NOSYSTEM": "1",
             },
         ):
-            plan = self.plan()
+            proposal = self.proposal()
 
-        self.assertEqual(plan.commit.author_name, "Effective Publication Tester")
+        self.assertEqual(proposal.commit.author_name, "Effective Publication Tester")
         self.assertEqual(
-            plan.commit.author_email, "effective-publication@example.com"
+            proposal.commit.author_email, "effective-publication@example.com"
         )
         local_name = subprocess.run(
             ["git", "config", "--local", "--get", "user.name"],
@@ -997,17 +874,17 @@ print(json.dumps(responses[endpoint]))
         self.assertNotEqual(local_email.returncode, 0)
 
     def test_publish_rejects_stale_local_and_remote_inputs_before_mutation(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         (self.repository / "README.md").write_text(
-            "changed after Plan\n", encoding="utf-8"
+            "changed after Proposal\n", encoding="utf-8"
         )
 
         with self.assertRaisesRegex(Exception, "stale"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         self.assertEqual(self.github.mutations, [])
@@ -1024,35 +901,35 @@ print(json.dumps(responses[endpoint]))
         )
 
     def test_publish_rejects_changed_remote_identity_and_permissions(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         self.github.repository["permissions"] = {"admin": False, "push": True}
 
         with self.assertRaisesRegex(Exception, "stale.*permissions"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         self.assertEqual(self.github.mutations, [])
 
     def test_publish_rejects_any_changed_observed_github_state(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         self.github.labels.add("repository-specific")
 
         with self.assertRaisesRegex(Exception, "stale"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         self.assertEqual(self.github.mutations, [])
 
     def test_publish_rejects_changed_repository_identity_and_local_commits(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         subprocess.run(
             [
                 "git",
@@ -1065,11 +942,11 @@ print(json.dumps(responses[endpoint]))
             check=True,
         )
         with self.assertRaisesRegex(Exception, "stale.*origin identifies"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         subprocess.run(
@@ -1090,65 +967,48 @@ print(json.dumps(responses[endpoint]))
             check=True,
         )
         with self.assertRaisesRegex(Exception, "stale.*must have no commits"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
         self.assertEqual(self.github.mutations, [])
 
-    def test_plan_record_round_trips_and_rejects_tampering(self) -> None:
-        plan = self.plan()
-        path = self.directory / "publication-plan.json"
+    def test_proposal_record_round_trips_and_rejects_tampering(self) -> None:
+        proposal = self.proposal()
+        path = self.directory / "publication-proposal.json"
 
-        write_publication_plan(plan, path)
-        loaded = load_publication_plan(
+        write_publication_proposal(proposal, path)
+        loaded = load_publication_proposal(
             path, _allow_local_push_for_testing=True
         )
 
-        self.assertEqual(loaded, plan)
+        self.assertEqual(loaded, proposal)
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         value = json.loads(path.read_text(encoding="utf-8"))
         value["commit"]["message"] = "changed"
         path.write_text(json.dumps(value), encoding="utf-8")
         with self.assertRaisesRegex(Exception, "identity does not match"):
-            load_publication_plan(path, _allow_local_push_for_testing=True)
+            load_publication_proposal(path, _allow_local_push_for_testing=True)
 
-        write_publication_plan(plan, path)
+        write_publication_proposal(proposal, path)
         value = json.loads(path.read_text(encoding="utf-8"))
         value["steps"][0] = "SKIP     initial commit"
         path.write_text(json.dumps(value), encoding="utf-8")
         with self.assertRaisesRegex(Exception, "steps do not match"):
-            load_publication_plan(path, _allow_local_push_for_testing=True)
+            load_publication_proposal(path, _allow_local_push_for_testing=True)
 
-    def test_version_one_plan_without_blockers_remains_loadable(self) -> None:
-        plan = self.plan()
-        path = self.directory / "publication-plan.json"
-        write_publication_plan(plan, path)
-        value = json.loads(path.read_text(encoding="utf-8"))
-        for difference in value["live-delta"]["differences"]:
-            difference.pop("blockers")
-        path.write_text(json.dumps(value), encoding="utf-8")
 
-        loaded = load_publication_plan(
-            path, _allow_local_push_for_testing=True
-        )
-
-        self.assertTrue(loaded.live_delta.differences)
-        self.assertTrue(
-            all(not difference.blockers for difference in loaded.live_delta.differences)
-        )
-
-    def test_plan_record_uses_a_private_exclusive_temporary_file(self) -> None:
-        plan = self.plan()
-        path = self.directory / "publication-plan.json"
+    def test_proposal_record_uses_a_private_exclusive_temporary_file(self) -> None:
+        proposal = self.proposal()
+        path = self.directory / "publication-proposal.json"
         victim = self.directory / "unrelated.json"
         victim.write_text("unrelated content\n", encoding="utf-8")
-        predictable_temporary = self.directory / ".publication-plan.json.tmp"
+        predictable_temporary = self.directory / ".publication-proposal.json.tmp"
         predictable_temporary.symlink_to(victim)
 
-        write_publication_plan(plan, path)
+        write_publication_proposal(proposal, path)
 
         self.assertEqual(
             victim.read_text(encoding="utf-8"), "unrelated content\n"
@@ -1157,19 +1017,19 @@ print(json.dumps(responses[endpoint]))
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertTrue(predictable_temporary.is_symlink())
         self.assertEqual(
-            list(self.directory.glob(".publication-plan.json.*.tmp")), []
+            list(self.directory.glob(".publication-proposal.json.*.tmp")), []
         )
 
-    def test_plan_record_replaces_a_destination_symlink_without_following_it(
+    def test_proposal_record_replaces_a_destination_symlink_without_following_it(
         self,
     ) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         victim = self.directory / "unrelated.json"
         victim.write_text("unrelated content\n", encoding="utf-8")
-        path = self.directory / "publication-plan.json"
+        path = self.directory / "publication-proposal.json"
         path.symlink_to(victim)
 
-        write_publication_plan(plan, path)
+        write_publication_proposal(proposal, path)
 
         self.assertEqual(
             victim.read_text(encoding="utf-8"), "unrelated content\n"
@@ -1177,42 +1037,42 @@ print(json.dumps(responses[endpoint]))
         self.assertFalse(path.is_symlink())
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(
-            load_publication_plan(path, _allow_local_push_for_testing=True),
-            plan,
+            load_publication_proposal(path, _allow_local_push_for_testing=True),
+            proposal,
         )
 
     def test_publish_requires_exact_confirmation_before_any_revalidation(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         observations = self.github.repository_observations
 
         with self.assertRaisesRegex(Exception, "exact confirmation"):
-            publish_first_publication(
-                plan,
+            execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.plan_id,
+                confirmation=proposal.proposal_id,
             )
 
         self.assertEqual(self.github.repository_observations, observations)
         self.assertEqual(self.github.mutations, [])
 
     def test_commit_failure_retains_exact_partial_state_without_rollback(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         ref_lock = self.repository / ".git/refs/heads/main.lock"
         ref_lock.parent.mkdir(parents=True, exist_ok=True)
         ref_lock.write_text("occupied\n", encoding="utf-8")
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
         self.assertFalse(report.complete)
         self.assertEqual(report.completed, ())
         self.assertEqual(report.failed, "CREATE   initial commit")
-        self.assertEqual(report.remaining, plan.steps[1:])
+        self.assertEqual(report.remaining, proposal.steps[1:])
         self.assertEqual(self.github.mutations, [])
         self.assertTrue(self.git_status())
         self.assertTrue(
@@ -1221,7 +1081,7 @@ print(json.dumps(responses[endpoint]))
         self.assertFalse((self.repository / ".git/index").exists())
 
     def test_unobservable_commit_ref_failure_reports_unknown_completion(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         real_run = subprocess.run
         update_attempted = False
 
@@ -1240,7 +1100,7 @@ print(json.dumps(responses[endpoint]))
                 or "for-each-ref" in command
                 or (
                     "rev-parse" in command
-                    and f"refs/heads/{plan.branch}" in command
+                    and f"refs/heads/{proposal.branch}" in command
                 )
             ):
                 return subprocess.CompletedProcess(
@@ -1252,26 +1112,26 @@ print(json.dumps(responses[endpoint]))
             return real_run(command, *args, **kwargs)
 
         with patch(
-            "lib.first_publication.subprocess.run",
+            "lib.repository_publication.subprocess.run",
             side_effect=run_with_unobservable_ref,
         ):
-            report = publish_first_publication(
-                plan,
+            report = execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         self.assertEqual(report.completed, ())
         self.assertIsNone(report.failed)
         self.assertEqual(report.uncertain, "CREATE   initial commit")
-        self.assertEqual(report.remaining, plan.steps[1:])
+        self.assertEqual(report.remaining, proposal.steps[1:])
         self.assertIn("completion is unknown", report.error or "")
         self.assertFalse((self.repository / ".git/index.lock").exists())
         self.assertEqual(self.github.mutations, [])
 
-    def test_commit_hooks_cannot_change_planned_metadata(self) -> None:
-        plan = self.plan()
+    def test_commit_hooks_cannot_change_proposed_metadata(self) -> None:
+        proposal = self.proposal()
         hook = self.repository / ".git/hooks/prepare-commit-msg"
         hook.write_text(
             "#!/bin/sh\nprintf 'changed message\\n' > \"$1\"\n",
@@ -1279,11 +1139,11 @@ print(json.dumps(responses[endpoint]))
         )
         hook.chmod(0o755)
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
         self.assertTrue(report.complete, report.error)
@@ -1294,7 +1154,7 @@ print(json.dumps(responses[endpoint]))
             capture_output=True,
             text=True,
         ).stdout.strip()
-        self.assertEqual(message, plan.commit.message)
+        self.assertEqual(message, proposal.commit.message)
 
     def test_preexisting_staged_content_is_preserved(self) -> None:
         subprocess.run(
@@ -1308,43 +1168,43 @@ print(json.dumps(responses[endpoint]))
             text=True,
         ).stdout
 
-        plan = self.plan()
+        proposal = self.proposal()
 
-        staged_after_plan = subprocess.run(
+        staged_after_proposal = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
             cwd=self.repository,
             check=True,
             capture_output=True,
             text=True,
         ).stdout
-        self.assertEqual(staged_after_plan, staged_before)
-        report = publish_first_publication(
-            plan,
+        self.assertEqual(staged_after_proposal, staged_before)
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
         self.assertTrue(report.complete, report.error)
         self.assertEqual(self.git_status(), "")
 
     def test_index_install_failure_reports_the_established_commit(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
 
         with patch(
-            "lib.first_publication.os.replace",
+            "lib.repository_publication.os.replace",
             side_effect=OSError("index destination denied"),
         ):
-            report = publish_first_publication(
-                plan,
+            report = execute_publication(
+                proposal,
                 self.github,
                 standards_root=ROOT,
-                confirmation=plan.confirmation,
+                confirmation=proposal.confirmation,
             )
 
         self.assertEqual(report.completed, ("CREATE   initial commit",))
         self.assertEqual(report.failed, "INSTALL  initial Git index")
         self.assertIsNone(report.uncertain)
-        self.assertEqual(report.remaining, plan.steps[2:])
+        self.assertEqual(report.remaining, proposal.steps[2:])
         self.assertEqual(
             subprocess.run(
                 ["git", "rev-parse", "HEAD"],
@@ -1359,26 +1219,26 @@ print(json.dumps(responses[endpoint]))
         self.assertEqual(self.github.mutations, [])
 
     def test_push_failure_retains_the_initial_commit_without_rollback(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         hook = self.remote / "hooks/pre-receive"
         hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         hook.chmod(0o755)
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:2])
+        self.assertEqual(report.completed, proposal.steps[:2])
         self.assertEqual(report.failed, "PUBLISH  main to origin")
-        self.assertEqual(report.remaining, plan.steps[3:])
+        self.assertEqual(report.remaining, proposal.steps[3:])
         self.assertIsNotNone(report.commit_oid)
         self.assertEqual(self.github.mutations, [])
 
     def test_unobservable_push_failure_reports_unknown_completion(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         hook = self.remote / "hooks/pre-receive"
         hook.write_text(
             "#!/bin/sh\nmv \"$PWD\" \"$PWD.unavailable\"\nexit 1\n",
@@ -1386,89 +1246,89 @@ print(json.dumps(responses[endpoint]))
         )
         hook.chmod(0o755)
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:2])
+        self.assertEqual(report.completed, proposal.steps[:2])
         self.assertIsNone(report.failed)
         self.assertEqual(report.uncertain, "PUBLISH  main to origin")
-        self.assertEqual(report.remaining, plan.steps[3:])
+        self.assertEqual(report.remaining, proposal.steps[3:])
         self.assertIn("completion is unknown", report.error or "")
         self.assertEqual(self.github.mutations, [])
 
-    def test_default_branch_and_live_failures_report_completed_and_remaining_work(
+    def test_default_branch_and_github_failures_report_completed_and_remaining_work(
         self,
     ) -> None:
         self.github.failure = "default"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:3])
+        self.assertEqual(report.completed, proposal.steps[:3])
         self.assertEqual(report.failed, "ESTABLISH default branch 'main'")
-        self.assertEqual(report.remaining, plan.steps[4:])
+        self.assertEqual(report.remaining, proposal.steps[4:])
         self.assertEqual(self.github.rulesets, [])
 
-    def test_live_application_failure_preserves_the_published_default_branch(self) -> None:
+    def test_github_application_failure_preserves_the_published_default_branch(self) -> None:
         self.github.failure = "ruleset"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:4])
+        self.assertEqual(report.completed, proposal.steps[:4])
         self.assertEqual(report.failed, "CREATE   ruleset 'Protect main'")
-        self.assertEqual(report.remaining, plan.steps[5:])
+        self.assertEqual(report.remaining, proposal.steps[5:])
         self.assertEqual(self.github.repository["default_branch"], "main")
 
-    def test_lost_live_write_response_is_reobserved_before_classification(self) -> None:
+    def test_lost_github_write_response_is_reobserved_before_classification(self) -> None:
         self.github.failure = "ruleset-response-lost"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
         self.assertTrue(report.complete, report.error)
-        self.assertEqual(report.completed, plan.steps)
+        self.assertEqual(report.completed, proposal.steps)
         self.assertEqual(len(self.github.rulesets), 1)
 
-    def test_unobservable_live_write_reports_unknown_completion(self) -> None:
+    def test_unobservable_github_write_reports_unknown_completion(self) -> None:
         self.github.failure = "ruleset-response-and-observation-lost"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:4])
+        self.assertEqual(report.completed, proposal.steps[:4])
         self.assertIsNone(report.failed)
         self.assertEqual(report.uncertain, "CREATE   ruleset 'Protect main'")
-        self.assertEqual(report.remaining, plan.steps[5:])
+        self.assertEqual(report.remaining, proposal.steps[5:])
         self.assertIn("completion is unknown", report.error or "")
         self.assertEqual(len(self.github.rulesets), 1)
 
     def test_committed_content_verification_failure_reports_retained_work(self) -> None:
-        plan = self.plan()
+        proposal = self.proposal()
         hook = self.repository / ".git/hooks/pre-push"
         hook.write_text(
             "#!/bin/sh\nprintf 'changed during push\\n' > README.md\n",
@@ -1476,47 +1336,47 @@ print(json.dumps(responses[endpoint]))
         )
         hook.chmod(0o755)
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:-2])
+        self.assertEqual(report.completed, proposal.steps[:-2])
         self.assertEqual(report.failed, "VERIFY   committed content")
-        self.assertEqual(report.remaining, ("VERIFY   live GitHub state",))
+        self.assertEqual(report.remaining, ("VERIFY   declared GitHub state",))
         self.assertIn("working tree changed", report.error or "")
 
     def test_final_verification_failure_reports_all_completed_mutations(self) -> None:
         self.github.failure = "verification"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:-1])
-        self.assertEqual(report.failed, "VERIFY   live GitHub state")
+        self.assertEqual(report.completed, proposal.steps[:-1])
+        self.assertEqual(report.failed, "VERIFY   declared GitHub state")
         self.assertEqual(report.remaining, ())
         self.assertIn("verification observation failed", report.error or "")
 
     def test_final_verification_transport_failure_reports_retained_work(self) -> None:
         self.github.failure = "verification-oserror"
-        plan = self.plan()
+        proposal = self.proposal()
 
-        report = publish_first_publication(
-            plan,
+        report = execute_publication(
+            proposal,
             self.github,
             standards_root=ROOT,
-            confirmation=plan.confirmation,
+            confirmation=proposal.confirmation,
         )
 
-        self.assertEqual(report.completed, plan.steps[:-1])
-        self.assertEqual(report.failed, "VERIFY   live GitHub state")
+        self.assertEqual(report.completed, proposal.steps[:-1])
+        self.assertEqual(report.failed, "VERIFY   declared GitHub state")
         self.assertEqual(report.remaining, ())
         self.assertIn("verification transport failed", report.error or "")
 

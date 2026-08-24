@@ -73,7 +73,7 @@ actual content and do not contain placeholder entries for future documents.
 
 Indexes and document lists remain repository-owned because their contents are
 specific to the boundary. The standards repository provides examples and
-wording conventions, but synchronization does not overwrite them.
+wording conventions, but standards repair does not overwrite them.
 
 ## Templates
 

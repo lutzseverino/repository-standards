@@ -9,16 +9,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .first_publication import (
+from .repository_publication import (
     PublicationError,
-    PublicationPlan,
+    PublicationProposal,
     PublicationReport,
-    load_publication_plan,
-    plan_first_publication,
-    publish_first_publication,
-    write_publication_plan,
+    load_publication_proposal,
+    prepare_publication_proposal,
+    execute_publication,
+    write_publication_proposal,
 )
-from .live_reconciliation import GitHubAdapter
+from .github_reconciliation import GitHubAdapter
 
 
 def _private_state_root(override: Path | None) -> Path:
@@ -52,11 +52,11 @@ def _proposal_path(repository: Path, state_home: Path | None) -> Path:
     return root / f"{identity}.json"
 
 
-def _render_proposal(proposal: PublicationPlan) -> None:
+def _render_proposal(proposal: PublicationProposal) -> None:
     timestamp = datetime.fromtimestamp(
         proposal.commit.timestamp, timezone.utc
     ).isoformat()
-    print(f"Lifecycle proposal {proposal.plan_id}")
+    print(f"Lifecycle proposal {proposal.proposal_id}")
     print(f"- repository: {proposal.repository_name} ({proposal.repository})")
     print(
         f"- selected release: {proposal.standards_release} "
@@ -90,7 +90,7 @@ def _render_proposal(proposal: PublicationPlan) -> None:
                     "endpoint": operation.endpoint,
                     "payload": operation.payload,
                 }
-                for operation in proposal.live_delta.operations
+                for operation in proposal.github_reconciliation.operations
             ],
             indent=2,
             sort_keys=True,
@@ -131,18 +131,18 @@ def run_publish_goal(
     try:
         path = _proposal_path(repository, state_home)
         if confirmation is None:
-            proposal = plan_first_publication(
+            proposal = prepare_publication_proposal(
                 repository,
                 adapter,
                 standards_root=standards_root,
                 _allow_local_push_for_testing=allow_local_push_for_testing,
             )
-            write_publication_plan(proposal, path)
+            write_publication_proposal(proposal, path)
             os.chmod(path, 0o600)
             _render_proposal(proposal)
             return 0
 
-        proposal = load_publication_plan(
+        proposal = load_publication_proposal(
             path,
             _allow_local_push_for_testing=allow_local_push_for_testing,
         )
@@ -156,15 +156,14 @@ def run_publish_goal(
             raise PublicationError(
                 f"cannot invalidate confirmed lifecycle proposal before execution: {exc}"
             ) from exc
-        report = publish_first_publication(
+        report = execute_publication(
             proposal,
             adapter,
             standards_root=standards_root,
             confirmation=confirmation,
         )
     except PublicationError as exc:
-        message = str(exc).replace("publication Plan", "lifecycle proposal")
-        print(f"error: {message}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
     if not report.complete:

@@ -1,6 +1,6 @@
 # Documentation
 
-Documentation for the repository standards source, synchronization tooling,
+Documentation for the repository standards source, lifecycle tooling,
 and repository-family conventions.
 
 ## Standards
@@ -10,10 +10,10 @@ and repository-family conventions.
   boundaries.
 - [Documentation conventions](../standards/documentation-conventions.md):
   documentation placement, ownership, and Diataxis organization.
-- [Managed files](../standards/managed-files.md): synchronization modes and
+- [Managed files](../standards/managed-files.md): managed-content modes and
   repository ownership guards.
-- [Repository workflow](../standards/repository-workflow.md): incoming-request,
-  planning, implementation, GitHub-delivery, and reconciliation conventions.
+- [Repository lifecycle](../standards/repository-lifecycle.md): repository
+  conformance, creation, publication, adoption, and GitHub delivery policy.
 - [Versioning and releases](../standards/versioning-and-releases.md): release
   and changelog policy.
 - [Maintenance and rollout](../standards/maintenance-and-rollout.md): standards
@@ -41,14 +41,19 @@ standards documentation.
   define the canonical workflow as actor-neutral repository policy independent
   of the tools that execute it.
 - [Add family-owned GitHub delivery](adr/0005-add-family-owned-github-delivery.md):
-  accept Prepare and Finalize around explicit human confirmation while keeping
-  ordinary delivery separate from implementation.
+  require exact lifecycle-proposal confirmation while keeping ordinary
+  delivery separate from implementation.
 - [Assign repository lifecycle transitions explicitly](adr/0006-assign-repository-lifecycle-transitions.md):
   separate prepared creation, first publication, and ordinary delivery, and
   make adoption own future manifest-protocol transitions.
-- [Resolve one repository contract and live delta](adr/0007-resolve-one-repository-contract-and-live-delta.md):
-  normalize repository-contract knowledge once and derive live audit, writes,
-  and lifecycle evidence from one desired-state delta.
+- [Resolve one repository contract and GitHub reconciliation](adr/0007-resolve-one-repository-contract-and-live-delta.md):
+  normalize repository-contract knowledge once for assessment, correction,
+  and lifecycle evidence.
+- [Replace the repository standards interface without deprecation](adr/0008-replace-conformance-commands-without-deprecation.md):
+  make the repository-level task grammar an intentional incompatible cutover.
+- [Assign one living owner to each policy](adr/0009-assign-one-living-owner-to-each-policy.md):
+  separate ordinary workflow, repository lifecycle, maintenance, orientation,
+  and adapter mechanics by living owner.
 
 ## Agent configuration
 

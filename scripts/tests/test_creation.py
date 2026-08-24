@@ -84,61 +84,67 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             "Apache License 2.0\n", encoding="utf-8"
         )
         (release / "VERSION").write_text("4.0.0\n", encoding="utf-8")
-        tools = {
-            "init": """\
-                #!/usr/bin/env python3
+        library = scripts / "lib"
+        library.mkdir()
+        (library / "__init__.py").write_text("", encoding="utf-8")
+        (library / "repository_contract.py").write_text(
+            textwrap.dedent(
+                """\
                 import json
                 import os
-                import pathlib
-                import sys
 
-                arguments = sys.argv[1:]
-                destination = pathlib.Path(arguments[-1])
-                mode = "write" if "--write" in arguments else "preview"
-                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"init {mode}\\n")
-                input_path = pathlib.Path(arguments[arguments.index("--input") + 1])
-                facts = json.loads(input_path.read_text(encoding="utf-8"))
-                if facts.get("facts", {}).get("ambiguous") == "true":
-                    print("error: multiple selectable ecosystem profiles match", file=sys.stderr)
-                    raise SystemExit(2)
-                default_ruleset = {
-                    "name": "Protect main",
-                    "required-status-checks": ["CI / Required"],
-                    "require-current-branch": True,
-                    "required-approvals": 0,
-                    "allowed-merge-methods": ["squash"],
-                    "prevent-deletion": True,
-                    "prevent-force-push": True,
-                    "allow-bypass-actors": False,
-                }
-                ruleset = facts.get("github", {}).get("ruleset", default_ruleset)
-                manifest = {
-                    "standards-version": 5,
-                    "standards-release": facts["standards-release"],
-                    "profiles": ["common", "documentation"],
-                    "repository-owned": ["README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"],
-                    "github": {"repository": facts["repository"], "default-branch": "main", "ruleset": ruleset},
-                    "variables": facts.get("variables", {}),
-                }
-                if mode == "preview":
-                    print(json.dumps(manifest))
-                    raise SystemExit(1)
-                destination.mkdir(parents=True)
-                (destination / ".repository-standards.json").write_text(
-                    json.dumps(manifest) + "\\n", encoding="utf-8"
-                )
-                if os.environ.get("FAKE_REPOSITORY_CONTENT_FAILURE"):
-                    if os.environ.get("FAKE_CONCURRENT_REMOTE"):
-                        state_path = os.environ["FAKE_GITHUB_STATE"]
-                        with open(state_path, encoding="utf-8") as handle:
-                            state = json.load(handle)
-                        state["created"] = True
-                        with open(state_path, "w", encoding="utf-8") as handle:
-                            json.dump(state, handle)
-                    (destination / "LICENSE").mkdir()
-                print("initialized")
-            """,
+
+                class InitialContract:
+                    def __init__(self, mapping):
+                        self.mapping = mapping
+
+                    def as_mapping(self):
+                        return self.mapping
+
+
+                def build_initial_repository_contract(facts, *, standards_root):
+                    with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
+                        handle.write("contract build\\n")
+                    if facts.get("facts", {}).get("ambiguous") == "true":
+                        raise ValueError("multiple selectable ecosystem profiles match")
+                    default_ruleset = {
+                        "name": "Protect main",
+                        "required-status-checks": ["CI / Required"],
+                        "require-current-branch": True,
+                        "required-approvals": 0,
+                        "allowed-merge-methods": ["squash"],
+                        "prevent-deletion": True,
+                        "prevent-force-push": True,
+                        "allow-bypass-actors": False,
+                    }
+                    ruleset = facts.get("github", {}).get("ruleset", default_ruleset)
+                    return InitialContract({
+                        "standards-version": 5,
+                        "standards-release": facts["standards-release"],
+                        "profiles": ["common", "documentation"],
+                        "boundaries": [{"path": ".", "type": "repository", "title": facts["title"]}],
+                        "dependency-updates": [{"ecosystem": "github-actions", "directory": "/", "schedule": "weekly"}],
+                        "repository-owned": ["README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"],
+                        "github": {
+                            "repository": facts["repository"],
+                            "default-branch": "main",
+                            "settings": {
+                                "delete-branch-on-merge": True,
+                                "allow-squash-merge": True,
+                                "allow-merge-commit": False,
+                                "allow-rebase-merge": False,
+                            },
+                            "features": {"issues": True, "projects": False, "wiki": False},
+                            "ruleset": ruleset,
+                        },
+                        "variables": facts.get("variables", {}),
+                        "local-fragments": {},
+                    })
+                """
+            ),
+            encoding="utf-8",
+        )
+        tools = {
             "standards": """\
                 #!/usr/bin/env python3
                 import json
@@ -147,6 +153,17 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 import sys
 
                 goal = sys.argv[1]
+                if goal == "create" and "--contract-input" in sys.argv:
+                    from lib.repository_contract import build_initial_repository_contract
+
+                    input_path = Path(sys.argv[sys.argv.index("--contract-input") + 1])
+                    initialization = json.loads(input_path.read_text(encoding="utf-8"))
+                    contract = build_initial_repository_contract(
+                        initialization,
+                        standards_root=Path(__file__).resolve().parents[1],
+                    )
+                    print(json.dumps(contract.as_mapping(), indent=2))
+                    raise SystemExit(0)
                 repository = Path(sys.argv[-1])
                 scope = "content" if "--scope" in sys.argv and "content" in sys.argv else "repository"
                 with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
@@ -159,6 +176,15 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 ]
                 content_clean = all((repository / path).is_file() for path in required)
                 if goal == "repair" and scope == "content":
+                    if os.environ.get("FAKE_REPOSITORY_CONTENT_FAILURE"):
+                        if os.environ.get("FAKE_CONCURRENT_REMOTE"):
+                            state["created"] = True
+                            state_path.write_text(json.dumps(state), encoding="utf-8")
+                        license_path = repository / "LICENSE"
+                        license_path.unlink()
+                        license_path.mkdir()
+                        print("injected repository content failure", file=sys.stderr)
+                        raise SystemExit(2)
                     if not (repository / "LICENSE").is_file():
                         print("repository content is invalid", file=sys.stderr)
                         raise SystemExit(2)
@@ -166,13 +192,13 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     print("Assessment after repair:\\nConclusion: unverified")
                     raise SystemExit(2)
                 if goal == "repair":
-                    if os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
-                        if os.environ.get("FAKE_DELETE_DURING_LIVE_FAILURE"):
+                    if os.environ.get("FAKE_GITHUB_WRITE_FAILURE"):
+                        if os.environ.get("FAKE_DELETE_DURING_GITHUB_FAILURE"):
                             state["created"] = False
                             state_path.write_text(json.dumps(state), encoding="utf-8")
                         print("injected GitHub repair failure", file=sys.stderr)
                         raise SystemExit(2)
-                    state["live_applied"] = True
+                    state["github_applied"] = True
                     state_path.write_text(json.dumps(state), encoding="utf-8")
                     print("Assessment after repair:\\nConclusion: not-standards-complete")
                     raise SystemExit(1)
@@ -184,7 +210,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 if not content_clean:
                     differences.append({"subject": "repository-content", "description": "content differs"})
                     corrections.append({"subject": "repository-content", "action": "WRITE managed content"})
-                if scope == "repository" and state.get("created") and not state.get("live_applied"):
+                if scope == "repository" and state.get("created") and not state.get("github_applied"):
                     differences.append({"subject": "github", "description": "required labels differ"})
                     corrections.append({"subject": "github", "action": "CREATE required labels"})
                 lifecycle = "prepared" if scope == "repository" and state.get("created") else None
@@ -205,81 +231,6 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 else:
                     print("Conclusion: " + payload["conclusion"])
                 raise SystemExit(1 if lifecycle else 2)
-            """,
-            "sync": """\
-                #!/usr/bin/env python3
-                import os
-                import pathlib
-                import sys
-
-                mode = "write" if "--write" in sys.argv else "preview"
-                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"sync {mode}\\n")
-                if mode == "preview":
-                    print("CREATE managed.txt")
-                    raise SystemExit(1)
-                repository = pathlib.Path(sys.argv[-1])
-                (repository / "managed.txt").write_text("managed\\n", encoding="utf-8")
-            """,
-            "audit": """\
-                #!/usr/bin/env python3
-                import os
-                import pathlib
-                import sys
-
-                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write("audit offline\\n")
-                repository = pathlib.Path(sys.argv[-1])
-                required = [".repository-standards.json", "managed.txt", "README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"]
-                raise SystemExit(0 if all((repository / path).is_file() for path in required) else 1)
-            """,
-            "sync-live": """\
-                #!/usr/bin/env python3
-                import json
-                import os
-                import sys
-
-                mode = "write" if "--write" in sys.argv else "preview"
-                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"sync-live {mode} {' '.join(sys.argv[1:])}\\n")
-                if mode == "write" and os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
-                    if os.environ.get("FAKE_DELETE_DURING_LIVE_FAILURE"):
-                        with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
-                            state = json.load(handle)
-                        state["created"] = False
-                        with open(os.environ["FAKE_GITHUB_STATE"], "w", encoding="utf-8") as handle:
-                            json.dump(state, handle)
-                    print("injected live write failure", file=sys.stderr)
-                    raise SystemExit(2)
-                if mode == "write":
-                    with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
-                        state = json.load(handle)
-                    state["live_applied"] = True
-                    with open(os.environ["FAKE_GITHUB_STATE"], "w", encoding="utf-8") as handle:
-                        json.dump(state, handle)
-                raise SystemExit(0 if mode == "write" else 1)
-            """,
-            "audit-live": """\
-                #!/usr/bin/env python3
-                import json
-                import os
-                import sys
-
-                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"audit-live {' '.join(sys.argv[1:])}\\n")
-                if "--json" in sys.argv:
-                    with open(os.environ["FAKE_GITHUB_STATE"], encoding="utf-8") as handle:
-                        state = json.load(handle)
-                    errors = [] if state.get("live_applied") else [
-                        "github label enhancement is missing"
-                    ]
-                    print(json.dumps({
-                        "applicable-clean": not errors,
-                        "errors": errors,
-                        "pending": ["github.ruleset awaits first publication"],
-                    }))
-                    raise SystemExit(1 if errors else 0)
-                print("Prepared live contract validated; first publication pending.")
             """,
         }
         for name, source in tools.items():
@@ -578,8 +529,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertEqual(
             self.log.read_text(encoding="utf-8").splitlines(),
             [
-                "init preview",
-                "init write",
+                "contract build",
                 "standards repair content",
                 "standards check content",
                 "canonical validation",
@@ -606,94 +556,11 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertEqual(
             self.log.read_text(encoding="utf-8").splitlines(),
             [
-                "init preview",
-                "init write",
+                "contract build",
                 "standards repair content",
                 "standards check content",
                 "canonical validation",
             ],
-        )
-
-    def test_standards_create_defaults_to_the_participating_repository_goal(self) -> None:
-        result = self.run_standards_create()
-
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Prepared creation baseline", result.stdout)
-        self.assertFalse(
-            subprocess.run(
-                ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
-                check=False,
-                capture_output=True,
-                text=True,
-            ).returncode
-            == 0
-        )
-
-    def test_live_failure_retains_both_repositories_and_reports_exact_state(self) -> None:
-        result = self.run_create(
-            extra_environment={"FAKE_LIVE_WRITE_FAILURE": "1"},
-            use_reusable_checkout=False,
-        )
-
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared repository repair failed", result.stderr)
-        self.assertIn("local destination: present", result.stderr)
-        self.assertIn(
-            "GitHub repository: creation confirmed; repository currently exists",
-            result.stderr,
-        )
-        self.assertIn("origin: configured", result.stderr)
-        self.assertIn(
-            "prepared live reconciliation: re-observed with applicable drift",
-            result.stderr,
-        )
-        self.assertIn(
-            "applicable drift: required labels differ",
-            result.stderr,
-        )
-        self.assertIn("no automatic deletion or rollback", result.stderr)
-        self.assertTrue((self.destination / "managed.txt").is_file())
-        self.assertTrue(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
-
-    def test_deleted_repository_is_reobserved_after_live_failure(self) -> None:
-        result = self.run_create(
-            extra_environment={
-                "FAKE_LIVE_WRITE_FAILURE": "1",
-                "FAKE_DELETE_DURING_LIVE_FAILURE": "1",
-            }
-        )
-
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared repository repair failed", result.stderr)
-        self.assertIn(
-            "GitHub repository: creation was confirmed; repository is now absent",
-            result.stderr,
-        )
-        self.assertIn(
-            "prepared live reconciliation: not retained; GitHub repository is "
-            "confirmed absent",
-            result.stderr,
-        )
-        self.assertFalse(
-            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
-        )
-
-    def test_revoked_access_is_not_reported_as_a_retained_repository(self) -> None:
-        result = self.run_create(
-            extra_environment={
-                "FAKE_LIVE_WRITE_FAILURE": "1",
-                "FAKE_REVOKE_AFTER_CREATE": "1",
-            }
-        )
-
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared repository repair failed", result.stderr)
-        self.assertIn("GitHub repository: state unknown", result.stderr)
-        self.assertNotIn("repository currently exists", result.stderr)
-        self.assertIn(
-            "prepared live reconciliation: state unknown; GitHub repository "
-            "could not be observed",
-            result.stderr,
         )
 
     def test_local_content_failure_reports_observed_retained_state(self) -> None:
@@ -731,6 +598,89 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             result.stderr,
         )
         self.assertNotIn("creation confirmed", result.stderr)
+
+    def test_standards_create_defaults_to_the_participating_repository_goal(self) -> None:
+        result = self.run_standards_create()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Prepared creation baseline", result.stdout)
+        self.assertFalse(
+            subprocess.run(
+                ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+            ).returncode
+            == 0
+        )
+
+    def test_github_failure_retains_both_repositories_and_reports_exact_state(self) -> None:
+        result = self.run_create(
+            extra_environment={"FAKE_GITHUB_WRITE_FAILURE": "1"},
+            use_reusable_checkout=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prepared repository repair failed", result.stderr)
+        self.assertIn("local destination: present", result.stderr)
+        self.assertIn(
+            "GitHub repository: creation confirmed; repository currently exists",
+            result.stderr,
+        )
+        self.assertIn("origin: configured", result.stderr)
+        self.assertIn(
+            "prepared GitHub reconciliation: re-observed with applicable drift",
+            result.stderr,
+        )
+        self.assertIn(
+            "applicable drift: required labels differ",
+            result.stderr,
+        )
+        self.assertIn("no automatic deletion or rollback", result.stderr)
+        self.assertTrue((self.destination / "managed.txt").is_file())
+        self.assertTrue(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
+
+    def test_deleted_repository_is_reobserved_after_github_failure(self) -> None:
+        result = self.run_create(
+            extra_environment={
+                "FAKE_GITHUB_WRITE_FAILURE": "1",
+                "FAKE_DELETE_DURING_GITHUB_FAILURE": "1",
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prepared repository repair failed", result.stderr)
+        self.assertIn(
+            "GitHub repository: creation was confirmed; repository is now absent",
+            result.stderr,
+        )
+        self.assertIn(
+            "prepared GitHub reconciliation: not retained; GitHub repository is "
+            "confirmed absent",
+            result.stderr,
+        )
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
+
+    def test_revoked_access_is_not_reported_as_a_retained_repository(self) -> None:
+        result = self.run_create(
+            extra_environment={
+                "FAKE_GITHUB_WRITE_FAILURE": "1",
+                "FAKE_REVOKE_AFTER_CREATE": "1",
+            }
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Prepared repository repair failed", result.stderr)
+        self.assertIn("GitHub repository: state unknown", result.stderr)
+        self.assertNotIn("repository currently exists", result.stderr)
+        self.assertIn(
+            "prepared GitHub reconciliation: state unknown; GitHub repository "
+            "could not be observed",
+            result.stderr,
+        )
+
 
     def test_local_and_remote_collisions_stop_before_creation_mutation(self) -> None:
         collision = self.destination / "existing.txt"
@@ -1070,7 +1020,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             result.stderr,
         )
         self.assertIn(
-            "prepared live reconciliation: not observed; repository attribution "
+            "prepared GitHub reconciliation: not observed; repository attribution "
             "is unknown",
             result.stderr,
         )
@@ -1119,7 +1069,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.assertFalse(self.destination.exists())
         self.assertFalse(json.loads(self.github_state.read_text(encoding="utf-8"))["created"])
         self.assertEqual(
-            self.log.read_text(encoding="utf-8").splitlines(), ["init preview"]
+            self.log.read_text(encoding="utf-8").splitlines(), ["contract build"]
         )
 
     def test_symlinked_destination_ancestor_is_rejected_before_preflight(self) -> None:

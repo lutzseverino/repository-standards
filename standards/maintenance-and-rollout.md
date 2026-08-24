@@ -1,64 +1,60 @@
 # Maintenance and rollout
 
+This document is the living owner of standards release and migration policy.
+Repository conformance and transitions are defined in
+[Repository lifecycle](repository-lifecycle.md).
+
 ## Operating model
 
-`repository-standards` is a public source of truth used at maintenance time.
-It is not a runtime service, build dependency, Git submodule, package
-dependency, or reusable-workflow dependency.
+`repository-standards` is a public maintenance-time source of truth, not a
+runtime service, package dependency, submodule, or reusable-workflow
+dependency. Managed files are copied into participating repositories and
+committed there so each repository remains self-contained.
 
-Managed files are copied into participating repositories and committed there.
-Each repository therefore remains self-contained: contributors can read its
-workflow, CI can run, and builds can complete without access to the standards
-source.
+## Release identity
 
-## Two versions with different jobs
+`standards-version` is the integer compatibility version of the repository
+manifest. Increment it only when a release cannot interpret the preceding
+manifest contract.
 
-`standards-version` is an integer compatibility version for the repository
-manifest and audit/sync protocol. Version `5` includes boundary declarations,
-structured dependency updates, required live GitHub contracts without bypass
-actors, profile-owned required labels, and managed absence. Increment it only
-for an incompatible manifest or tooling contract.
+`standards-release` is the exact semantic version of published standards
+content and tooling. It matches `VERSION`, an immutable annotated tag, and a
+GitHub Release. Changes accumulate under `Unreleased` while `VERSION` continues
+to identify the latest stable release.
 
-`standards-release` is the exact semantic version of published repository
-content, also stored in `VERSION` and represented by a Git tag such as
-`v1.0.0`. Changes accumulate under `Unreleased` while `VERSION` continues to
-identify the latest stable release. Release preparation increments it once for
-all accumulated managed-content and normative-guidance changes:
+- patch releases clarify or correct compatible standards;
+- minor releases add compatible standards, profiles, or managed artifacts;
+- major releases intentionally replace an incompatible family interface or
+  convention.
 
-- patch: clarification or backward-compatible managed-file correction;
-- minor: new backward-compatible standard, profile, or managed artifact;
-- major: intentionally incompatible family convention or migration.
+The release major and manifest compatibility integer have different jobs and
+need not advance together.
 
-The standards release major and the manifest compatibility integer need not
-move together. Repositories remain pinned to older tags until they deliberately
-adopt a compatible manifest and content release.
+## Publish a standards release
 
-## Publish a standards change
-
-Standards changes use the normal issue and pull-request workflow:
+Standards changes use the ordinary issue and pull-request workflow:
 
 1. Change the normative document, profile, managed file, schema, or tool.
 2. Update tests and examples.
-3. Record the user-visible change under `Unreleased` in `CHANGELOG.md`.
-4. Merge only after CI passes.
+3. Record user-visible changes under `Unreleased` in `CHANGELOG.md`.
+4. Merge only after canonical validation and CI pass.
 
-Prepare a release in a separate change after the intended changes accumulate:
+Prepare a release in a separate change:
 
-1. Choose the next semantic release and update `VERSION`.
-2. Move the `Unreleased` entries into the dated release section.
-3. Merge only after CI passes, then push an annotated stable tag for the merged
-   commit. The release workflow validates the tag, `VERSION`, and matching
-   changelog release before publishing its section as the GitHub Release body.
+1. Choose the semantic version and update `VERSION`.
+2. Move `Unreleased` entries into a dated release section.
+3. Merge after validation, then push an annotated stable tag for that exact
+   commit.
+4. Wait for release automation to publish the matching changelog section as a
+   non-draft, non-prerelease GitHub Release.
 
-Do not move or reuse a pushed stable tag. Publishing the repository must retain
-its existing history and author metadata.
+Never move or reuse a pushed stable tag.
 
-### Recover a tag whose release failed
+### Recover a failed release publication
 
-If a stable tag exists but GitHub Release creation failed, keep the tag fixed.
-For a transient GitHub or runner failure, rerun the failed workflow. If the
-release automation itself cannot be rerun, fetch the current remote state and
-route recovery through the same complete publication gate:
+Keep the existing tag fixed. Rerun a transient workflow failure. If the
+automation itself cannot be rerun, fetch current remote evidence and use the
+same publication gate:
 
 ```sh
 git fetch origin main --tags
@@ -67,100 +63,65 @@ GITHUB_REPOSITORY=OWNER/REPOSITORY \
   scripts/publish-release vMAJOR.MINOR.PATCH
 ```
 
-Replace `OWNER/REPOSITORY` with the repository's GitHub name. The publisher
-requires an annotated tag on `origin/main`, a successful `CI / Required` check,
-and coherent tag, `VERSION`, and changelog inputs before it creates the release.
-If any gate fails, do not work around it and do not retarget the tag. Correct the
-source on `main`, assign a new version, and publish a new stable tag.
+The publisher requires an annotated tag on `origin/main`, successful required
+CI, and coherent tag, `VERSION`, and changelog inputs. Correct a source defect
+on `main` and publish a new version; never retarget the existing tag.
 
-### Complete the first public rollout
+## Adopt a compatible release
 
-The release that introduces public discovery and the repository lifecycle
-skill has a one-time rollout order:
+Invoke `adopt-standards VERSION` in a participating repository for an exact
+stable release, or omit `VERSION` to select the latest stable GitHub Release.
+The adapter requires a clean Git tree, obtains an isolated checkout of the
+selected tag, invokes that release's `standards adopt` goal, and creates the
+validated adoption commit. GitHub delivery remains separate.
 
-1. Publish the standards source only after its license and public-facing
-   documentation are present on `main`.
-2. Publish an immutable GitHub Release for the existing `v3.1.0` tag using its
-   matching changelog section, then verify that the unauthenticated
-   latest-release redirect resolves `v3.1.0`.
-3. Prepare and merge the introducing release on `main`, run `scripts/validate`,
-   push its annotated stable tag, and wait for release automation to publish a
-   non-draft, non-prerelease GitHub Release from the matching changelog section.
-   Verify that the unauthenticated latest-release redirect now resolves the
-   introducing release. Then complete these checks without release-source or
-   latest-version overrides:
+Repository-owned conflicts and manifest migrations remain explicit. Failed
+validation or final assessment leaves applied changes uncommitted for
+diagnosis. Partial application preserves successful work and supports an
+idempotent retry.
 
-   - In a local participating-repository fixture whose manifest remains pinned
-     to `3.1.0` but contains the introducing discovery artifacts, run discovery
-     once and render its cached notice. Confirm that only one request occurs and
-     that the fixed notice reports `3.1.0` to the introducing release.
-   - In two clean, disposable GitHub-backed participating-repository fixtures
-     that use the current manifest protocol and remain pinned to `3.1.0`, invoke
-     the installed adoption runner once with the exact introducing version and
-     once with the version omitted. Both runs must acquire the public release,
-     prepare the repository changes, and pass the fixture's canonical
-     validation plus the release's `standards check`.
-4. Hand each participating repository to its maintainer for the manual
-   bootstrap described below. Older repositories do not contain the new skill,
-   so they must not be told to invoke it for this first adoption.
+## Bootstrap from v4 to the incompatible interface
 
-Downstream repository adoptions are separate delivery work. The standards
-release operation records those handoffs but does not modify participating
-repositories.
+The first release containing the six-goal task grammar requires a one-time
+bootstrap because a v4 repository does not contain its current adoption
+adapter. The bootstrap uses immutable release trees and leaves no compatibility
+code in the new release:
 
-## Adopt a standards release
+1. Start from a clean, published repository pinned to `4.0.0`. Obtain exact,
+   clean checkouts of tag `v4.0.0` and the new stable tag.
+2. Compare the lifecycle-profile trees at those two immutable commits. Remove
+   from the participating repository only adapter files that the newer tree
+   deleted, then commit that mechanical bootstrap. Do not infer deletions from
+   an untagged checkout.
+3. From the new release checkout, invoke its current goal directly:
 
-Invoke `adopt-standards VERSION` in the participating repository for
-an exact stable release, or omit `VERSION` to select the latest stable GitHub
-Release. The skill requires a clean Git tree, obtains an isolated checkout of
-the exact tag, and uses that release's own tooling. It previews offline writes
-and deletions plus live labels, settings, and the named ruleset before applying
-them. The adoption is prepared only after the target's canonical validation and
-the selected release's final `standards check` passes.
+   ```sh
+   /path/to/new-release/scripts/standards adopt NEW_VERSION \
+     --repository /path/to/participating-repository \
+     --validation-command 'THE REPOSITORY CANONICAL VALIDATION COMMAND'
+   ```
 
-The skill records successful adoption in a dedicated validated commit and
-leaves GitHub delivery as a separate operation. A failed validation or final
-standards check leaves applied changes uncommitted for diagnosis.
-Repository-owned conflicts and migrations stay explicit. Live application is
-idempotent; a partial failure reports completed and remaining operations and
-preserves the applied state for a safe rerun.
+4. Verify the resulting validated adoption commit with the new release's
+   `standards check`, then use normal GitHub delivery.
 
-The release that first introduces the lifecycle bundle requires one manual
-bootstrap. Check out that exact standards tag, update the target manifest,
-preview and apply the selected release's `standards repair`, then run the
-target's canonical validation and the selected release's `standards check`.
-Later releases use the installed adoption skill.
+This procedure is forward-tested from the v4 lifecycle-profile inventory. It
+uses v4 only as immutable migration evidence and introduces no alias, wrapper,
+or deprecated command into the new release.
 
-## Standards checks
+## Assess released repositories
 
-A repository assessment is meaningful only when the standards checkout matches
-the manifest's `standards-release`. `standards check` rejects a mismatch rather
-than silently comparing against newer or older content.
+Assessment is meaningful only when the standards checkout matches the
+manifest's `standards-release`; a mismatch is rejected. Ordinary target builds
+and validation remain self-contained.
 
-Teams may run `standards check` locally or in CI from an exact public standards
-release. Target repository CI remains self-contained for its ordinary build
-and test gate.
+Checking declared GitHub state requires authentication and repository-settings
+visibility. Ruleset assessment requires Administration write permission when
+GitHub withholds bypass-actor data. Repair additionally requires Issues and
+Administration write permissions.
 
-Checking declared GitHub state requires `gh` authentication and
-repository-settings visibility. Because GitHub hides ruleset bypass actors from
-callers without write access, assessing a declared ruleset also requires
-Administration write permission. Repairs additionally require Issues and
-Administration write permissions. Repository content and declared GitHub state
-are projections of one repository assessment and one shared live desired-state
-delta.
-
-The scheduled `Standards Audit` workflow covers participating repositories
-accessible with its repository token. Repositories owned elsewhere are
-excluded until a dedicated least-privilege GitHub App or fine-grained token is
-configured. Ruleset checks need Administration write permission solely because
-GitHub otherwise withholds bypass-actor data; personal maintainer tokens must
-not be reused as automation credentials.
-
-The scheduled workflow checks each repository against its adopted release. It
-does not announce that a newer standards release is available; release
-discovery and adoption remain separate maintenance work.
-
-The standards source is the one development-time exception: while changes are
-still under `Unreleased`, its scheduled job uses current `main` tooling against
-the current source checkout. Every participating target continues to use the
-exact stable tooling named by its manifest.
+The scheduled standards workflow lists only participating repositories already
+migrated to the six-goal interface and checks each against its selected release.
+Add a repository to that list only after its incompatible adoption lands. It
+does not announce newer releases. The standards source is the development-time
+exception: while changes are under `Unreleased`, its scheduled job uses current
+`main` against the current source checkout.

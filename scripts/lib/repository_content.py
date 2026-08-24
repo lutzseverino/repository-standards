@@ -1,27 +1,23 @@
-"""Resolve, audit, and synchronize repository-standard managed files."""
+"""Resolve and inspect repository-standard managed content."""
 
 from __future__ import annotations
 
-import argparse
 import difflib
 import fnmatch
 import html
 import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from .changelog import ChangelogError, SEMVER, validate_changelog
 from .repository_contract import (
-    ContractError,
     DEFAULT_GITHUB_FEATURES,
     DEFAULT_SQUASH_MERGE_COMMIT_MESSAGE,
     DEFAULT_SQUASH_MERGE_COMMIT_TITLE,
     RepositoryBoundary,
     RepositoryContract,
-    resolve_repository_contract,
 )
 
 
@@ -55,7 +51,7 @@ DEPENDENCY_INTERVALS = {"daily", "weekly", "monthly"}
 
 
 class StandardsError(Exception):
-    """Raised for an invalid manifest, profile, or managed plan."""
+    """Raised for an invalid manifest, profile, or managed content_files."""
 
 
 @dataclass(frozen=True)
@@ -69,7 +65,7 @@ class Source:
 
 
 @dataclass(frozen=True)
-class PlannedFile:
+class ContentFile:
     target: str
     mode: str
     content: bytes
@@ -77,7 +73,7 @@ class PlannedFile:
 
 
 @dataclass(frozen=True)
-class PlanBuildBlocker:
+class ContentBuildBlocker:
     target: str
     message: str
 
@@ -749,13 +745,13 @@ def _render_dependabot(updates: list[dict[str, str]]) -> bytes:
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def _build_plan_with_blockers(
+def _build_content_with_blockers(
     root: Path,
     repository: Path,
     manifest: dict[str, Any],
     *,
     resolved_profiles: list[tuple[str, dict[str, Any], Path]] | None = None,
-) -> tuple[list[PlannedFile], list[PlanBuildBlocker]]:
+) -> tuple[list[ContentFile], list[ContentBuildBlocker]]:
     root = root.resolve()
     repository = repository.resolve()
     version_path = root / "VERSION"
@@ -784,19 +780,19 @@ def _build_plan_with_blockers(
     }
     unknown_fragment_targets = sorted(set(local_fragments) - compose_targets)
     blockers = [
-        PlanBuildBlocker(
+        ContentBuildBlocker(
             target,
             "local fragments require a managed compose target",
         )
         for target in unknown_fragment_targets
     ]
 
-    planned: list[PlannedFile] = []
+    content_files: list[ContentFile] = []
     for target in sorted(sources_by_target):
         owned_pattern = _matches_owned(target, manifest["repository-owned"])
         if owned_pattern:
             blockers.append(
-                PlanBuildBlocker(
+                ContentBuildBlocker(
                     target,
                     f"managed target conflicts with repository-owned pattern "
                     f"{owned_pattern!r}",
@@ -841,14 +837,14 @@ def _build_plan_with_blockers(
                     origins.append(f"repository:{local_value}")
                 content = _join_fragments(parts, target)
         except (OSError, StandardsError) as exc:
-            blockers.append(PlanBuildBlocker(target, str(exc)))
-        planned.append(
-            PlannedFile(target, sources[0].mode, content, tuple(origins))
+            blockers.append(ContentBuildBlocker(target, str(exc)))
+        content_files.append(
+            ContentFile(target, sources[0].mode, content, tuple(origins))
         )
     dependabot_target = ".github/dependabot.yml"
     if dependabot_target in sources_by_target:
         blockers.append(
-            PlanBuildBlocker(
+            ContentBuildBlocker(
                 dependabot_target,
                 "profiles must not manage this generated dependency-update target",
             )
@@ -856,14 +852,14 @@ def _build_plan_with_blockers(
     owned_pattern = _matches_owned(dependabot_target, manifest["repository-owned"])
     if owned_pattern:
         blockers.append(
-            PlanBuildBlocker(
+            ContentBuildBlocker(
                 dependabot_target,
                 f"managed target conflicts with repository-owned pattern "
                 f"{owned_pattern!r}",
             )
         )
-    planned.append(
-        PlannedFile(
+    content_files.append(
+        ContentFile(
             dependabot_target,
             "generated",
             _render_dependabot(manifest["dependency-updates"]),
@@ -871,7 +867,7 @@ def _build_plan_with_blockers(
         )
     )
     return (
-        sorted(planned, key=lambda item: item.target),
+        sorted(content_files, key=lambda item: item.target),
         sorted(blockers, key=lambda item: (item.target, item.message)),
     )
 
@@ -895,10 +891,10 @@ def _validate_managed_target(repository: Path, target: Path, relative: str) -> N
         raise StandardsError(f"managed target must not be a symlink: {relative}")
 
 
-def inspect(repository: Path, plan: Iterable[PlannedFile]) -> list[Result]:
+def inspect(repository: Path, content_files: Iterable[ContentFile]) -> list[Result]:
     repository = repository.resolve()
     results: list[Result] = []
-    for item in plan:
+    for item in content_files:
         target = repository / item.target
         _validate_managed_target(repository, target, item.target)
         if item.mode == "absent":
@@ -1197,203 +1193,3 @@ def _preview_text(result: Result) -> str:
             tofile=f"b/{result.target}",
         )
     )
-
-
-def write(repository: Path, results: Iterable[Result]) -> int:
-    repository = repository.resolve()
-    changed = 0
-    for result in results:
-        if result.status == "ok":
-            continue
-        target = repository / result.target
-        _validate_managed_target(repository, target, result.target)
-        if target.exists() and not target.is_file():
-            raise StandardsError(f"managed target is not a file: {result.target}")
-        try:
-            if result.mode == "absent":
-                target.unlink()
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(result.expected)
-        except OSError as exc:
-            raise StandardsError(f"cannot write managed target {result.target}: {exc}") from exc
-        changed += 1
-    return changed
-
-
-def _resolve(
-    repository_value: str, manifest_value: str | None
-) -> tuple[RepositoryContract, list[Result]]:
-    repository = Path(repository_value).expanduser().resolve()
-    contract = resolve_repository_contract(
-        repository,
-        standards_root=standards_root(),
-        manifest=manifest_value,
-    )
-    return contract, inspect(repository, contract.managed_files)
-
-
-def audit_main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit managed repository standards")
-    parser.add_argument("repository", help="repository to audit")
-    parser.add_argument("--manifest", help="manifest path, relative to repository")
-    parser.add_argument("--json", action="store_true", dest="json_output")
-    args = parser.parse_args(argv)
-    try:
-        contract, results = _resolve(args.repository, args.manifest)
-    except (StandardsError, ContractError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    repository = contract.repository
-    drift = [result for result in results if result.status != "ok"]
-    boundary_results = inspect_boundaries(repository, contract.boundaries)
-    invalid_boundaries = [
-        result for result in boundary_results if result.status != "ok"
-    ]
-    document_results = inspect_repository_owned_documents(
-        repository, contract.repository_owned
-    )
-    invalid_documents = [
-        result for result in document_results if result.status != "ok"
-    ]
-    if args.json_output:
-        print(
-            json.dumps(
-                {
-                    "repository": str(repository),
-                    "standards-version": contract.protocol,
-                    "standards-release": contract.release,
-                    "profiles": list(contract.selected_profiles),
-                    "clean": not drift and not invalid_boundaries and not invalid_documents,
-                    "files": [
-                        {
-                            "path": result.target,
-                            "status": result.status,
-                            "mode": result.mode,
-                            "origins": list(result.origins),
-                        }
-                        for result in results
-                    ],
-                    "boundaries": [
-                        {
-                            "path": result.path,
-                            "type": result.boundary_type,
-                            "status": result.status,
-                            "messages": list(result.messages),
-                        }
-                        for result in boundary_results
-                    ],
-                    "documents": [
-                        {
-                            "path": result.path,
-                            "status": result.status,
-                            "messages": list(result.messages),
-                        }
-                        for result in document_results
-                    ],
-                },
-                indent=2,
-            )
-        )
-    else:
-        for result in results:
-            marker = "OK" if result.status == "ok" else result.status.upper()
-            print(f"{marker:8} {result.target}")
-        print(f"\n{len(results) - len(drift)} clean, {len(drift)} requiring synchronization")
-        print()
-        for result in boundary_results:
-            marker = "OK" if result.status == "ok" else result.status.upper()
-            print(f"{marker:8} boundary {result.path} ({result.boundary_type})")
-            for message in result.messages:
-                print(f"         - {message}")
-        print(
-            f"\n{len(boundary_results) - len(invalid_boundaries)} conforming, "
-            f"{len(invalid_boundaries)} invalid boundaries"
-        )
-        if document_results:
-            print()
-            for result in document_results:
-                marker = "OK" if result.status == "ok" else result.status.upper()
-                print(f"{marker:8} document {result.path}")
-                for message in result.messages:
-                    print(f"         - {message}")
-            print(
-                f"\n{len(document_results) - len(invalid_documents)} conforming, "
-                f"{len(invalid_documents)} invalid repository-owned documents"
-            )
-    return 1 if drift or invalid_boundaries or invalid_documents else 0
-
-
-def sync_main(argv: list[str] | None = None) -> int:
-    from .offline_sync import (
-        apply_synchronization_plan,
-        plan_synchronization,
-        render_synchronization_preview,
-    )
-
-    parser = argparse.ArgumentParser(description="Preview or write managed repository standards")
-    parser.add_argument("repository", help="repository to synchronize")
-    parser.add_argument("--manifest", help="manifest path, relative to repository")
-    parser.add_argument("--write", action="store_true", help="write managed targets")
-    args = parser.parse_args(argv)
-    try:
-        contract = resolve_repository_contract(
-            Path(args.repository),
-            standards_root=standards_root(),
-            manifest=args.manifest,
-            retain_plan_blockers=True,
-        )
-        repository = contract.repository
-        plan = plan_synchronization(contract)
-        preview = render_synchronization_preview(plan)
-        changes = plan.changes
-        if args.write:
-            if plan.blockers:
-                print(preview, end="")
-                print(
-                    f"\nPreflight blocked: {len(plan.blockers)} managed path(s) "
-                    "require attention. No target was mutated."
-                )
-                return 2
-            report = apply_synchronization_plan(plan)
-            if not report.succeeded:
-                assert report.failed is not None
-                print(
-                    f"error: application failed at {report.failed.target}: "
-                    f"{report.failed.message}",
-                    file=sys.stderr,
-                )
-                print(
-                    "Completed: " + (", ".join(report.completed) or "none"),
-                    file=sys.stderr,
-                )
-                print(f"Failed: {report.failed.target}", file=sys.stderr)
-                print(
-                    "Remaining: " + (", ".join(report.remaining) or "none"),
-                    file=sys.stderr,
-                )
-                return 2
-            print(f"Synchronized {len(report.completed)} managed file(s) in {repository}")
-            return 0
-        if not changes and not plan.blockers:
-            print(f"All managed files are current in {repository}")
-            return 0
-        print(preview, end="")
-        if plan.blockers:
-            if changes:
-                print(
-                    f"\nPreview: {len(changes)} managed file(s) would change; "
-                    f"{len(plan.blockers)} blocked path(s) require attention."
-                )
-            else:
-                print(
-                    f"\nPreview blocked: {len(plan.blockers)} managed path(s) "
-                    "require attention."
-                )
-            return 2
-        print(f"\nPreview: {len(changes)} managed file(s) would change. Re-run with --write.")
-        return 1
-    except (StandardsError, ContractError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2

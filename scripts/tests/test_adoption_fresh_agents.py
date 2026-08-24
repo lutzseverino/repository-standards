@@ -110,7 +110,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
 
     def test_standalone_invocation_performs_only_adoption(self) -> None:
         result = self.run_fresh_agent(
-            "Use $adopt-repository-standards 2.0.0. Follow the skill to completion."
+            "Adopt standards release 2.0.0. Follow repository guidance to completion."
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -136,7 +136,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
         self.original_head = self.git("rev-parse", "HEAD").stdout.strip()
 
         result = self.run_fresh_agent(
-            "Use $adopt-repository-standards 2.0.0. After it succeeds, run the "
+            "Adopt standards release 2.0.0. After it succeeds, run the "
             "independently supplied ./user-workflow command."
         )
 

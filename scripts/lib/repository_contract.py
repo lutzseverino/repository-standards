@@ -155,7 +155,7 @@ class RepositoryContract:
     dependency_updates: tuple[DependencyUpdate, ...]
     boundaries: tuple[RepositoryBoundary, ...]
     github: GitHubContract
-    plan_blockers: tuple[ContractBlocker, ...] = ()
+    content_blockers: tuple[ContractBlocker, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,7 +249,7 @@ def select_initial_profiles(
 ) -> InitialProfileSelection:
     """Select the mandatory baseline and at most one inferred ecosystem profile."""
 
-    from . import standards
+    from . import repository_content
 
     standards_root = standards_root.expanduser().resolve()
     selectable: dict[str, dict[str, str]] = {}
@@ -258,7 +258,7 @@ def select_initial_profiles(
         for path in profile_paths:
             name = path.parent.name
             ordered: list[tuple[str, dict[str, Any], Path]] = []
-            standards._load_profile(
+            repository_content._load_profile(
                 standards_root, name, ordered, set(), set()
             )
             data = next(
@@ -277,7 +277,7 @@ def select_initial_profiles(
                 and has_behavior
             ):
                 selectable[name] = dict(applicability)
-    except (OSError, StopIteration, standards.StandardsError) as exc:
+    except (OSError, StopIteration, repository_content.StandardsError) as exc:
         raise ContractError(str(exc)) from exc
 
     matches = tuple(
@@ -358,7 +358,7 @@ def build_initial_repository_contract(
 ) -> InitialRepositoryContract:
     """Build and validate one initial contract from explicit repository facts."""
 
-    from . import standards
+    from . import repository_content
 
     standards_root = standards_root.expanduser().resolve()
     allowed = {
@@ -441,7 +441,7 @@ def build_initial_repository_contract(
     github_contract["repository"] = repository
     github_contract["default-branch"] = "main"
     manifest = {
-        "standards-version": standards.SUPPORTED_STANDARDS_VERSION,
+        "standards-version": repository_content.SUPPORTED_STANDARDS_VERSION,
         "standards-release": release,
         "profiles": list(selection.profiles),
         "boundaries": initialization.get(
@@ -474,7 +474,7 @@ def build_initial_repository_contract(
             (preview / ".repository-standards.json").write_text(
                 json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
             )
-            _, normalized_manifest = standards._load_manifest(preview, None)
+            _, normalized_manifest = repository_content._load_manifest(preview, None)
             for sources in normalized_manifest["local-fragments"].values():
                 for source in sources:
                     if source == ".repository-standards.json":
@@ -488,7 +488,7 @@ def build_initial_repository_contract(
             resolved = resolve_repository_contract(
                 preview, standards_root=standards_root
             )
-    except (OSError, standards.StandardsError) as exc:
+    except (OSError, repository_content.StandardsError) as exc:
         raise ContractError(f"cannot validate initial repository contract: {exc}") from exc
 
     return InitialRepositoryContract(
@@ -512,13 +512,11 @@ def resolve_repository_contract(
     *,
     standards_root: Path,
     manifest: str | None = None,
-    retain_plan_blockers: bool = False,
+    retain_content_blockers: bool = False,
 ) -> RepositoryContract:
     """Validate and normalize all repository contract knowledge in one call."""
 
-    # Imported here so the legacy implementation can delegate to this interface
-    # while its internal parsing and rendering helpers are deepened incrementally.
-    from . import standards
+    from . import repository_content
 
     repository = repository.expanduser().resolve()
     standards_root = standards_root.expanduser().resolve()
@@ -526,25 +524,25 @@ def resolve_repository_contract(
         raise ContractError(f"repository directory not found: {repository}")
 
     try:
-        manifest_path, raw_manifest = standards._load_manifest(repository, manifest)
-        raw_profiles = standards._load_profiles(
+        manifest_path, raw_manifest = repository_content._load_manifest(repository, manifest)
+        raw_profiles = repository_content._load_profiles(
             standards_root, raw_manifest["profiles"]
         )
-        managed_files, plan_blockers = standards._build_plan_with_blockers(
+        managed_files, content_blockers = repository_content._build_content_with_blockers(
             standards_root,
             repository,
             raw_manifest,
             resolved_profiles=raw_profiles,
         )
-        if plan_blockers and not retain_plan_blockers:
+        if content_blockers and not retain_content_blockers:
             diagnostics = "\n".join(
                 f"- {blocker.target}: {blocker.message}"
-                for blocker in plan_blockers
+                for blocker in content_blockers
             )
-            raise standards.StandardsError(
-                f"invalid managed-content plan:\n{diagnostics}"
+            raise repository_content.StandardsError(
+                f"invalid managed content:\n{diagnostics}"
             )
-    except standards.StandardsError as exc:
+    except repository_content.StandardsError as exc:
         raise ContractError(str(exc)) from exc
 
     profiles = tuple(
@@ -590,7 +588,7 @@ def resolve_repository_contract(
             (target, tuple(raw_manifest["local-fragments"][target]))
             for target in sorted(raw_manifest["local-fragments"])
         ),
-        required_labels=standards._collect_required_labels(raw_profiles),
+        required_labels=repository_content._collect_required_labels(raw_profiles),
         dependency_updates=tuple(
             DependencyUpdate(
                 ecosystem=item["ecosystem"],
@@ -631,8 +629,8 @@ def resolve_repository_contract(
                 wiki=github_features["wiki"],
             ),
         ),
-        plan_blockers=tuple(
+        content_blockers=tuple(
             ContractBlocker(blocker.target, blocker.message)
-            for blocker in plan_blockers
+            for blocker in content_blockers
         ),
     )

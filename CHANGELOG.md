@@ -9,25 +9,16 @@ and standards releases use semantic versioning.
 
 ### Added
 
-- Record the accepted actor-neutral lifecycle architecture for ordinary GitHub
-  delivery, prepared creation, first publication, one normalized repository
-  contract, and one shared live desired-state delta.
-- Reconcile repository settings and features, required labels, and the named
-  branch-protection ruleset through one replaceable GitHub adapter and shared
-  delta, including publication-pending and partial-application evidence.
-- Add deterministic initial-contract preview/write tooling, explicit selectable
-  ecosystem-profile applicability, and the family-owned `create-repository`
-  skill for recoverable prepared creation baselines.
-- Add read-only first-publication planning, explicitly confirmed publication,
-  stale-input protection, exact partial-failure reports, final conformance
-  proof, and the family-owned `first-publication` execution skill.
 - Add one repository-assessment interface and actor-neutral `standards check`
   and `standards repair` goals across repository content and declared GitHub
   state, including evidence-aware conclusions and safe partial recovery.
-- Expose prepared creation, first publication, standards adoption, and GitHub
-  delivery as the public `standards create`, `publish`, `adopt`, and `deliver`
-  goals with identically distributed `create-repository`,
-  `publish-repository`, `adopt-standards`, and `deliver-change` skills.
+- Expose one `standards` task grammar for check, repair, create, publish, adopt,
+  and deliver, backed by goal-oriented lifecycle skills and replaceable GitHub
+  observation.
+- Document and forward-test a one-time bootstrap from the immutable v4
+  lifecycle profile into the current standards-adoption goal.
+- Prove the complete public surface, retired-interface absence, and concrete
+  fresh-agent maintainer goals in dedicated tests.
 
 ### Changed
 
@@ -35,18 +26,33 @@ and standards releases use semantic versioning.
   changes and reserve standards-conformance conclusions for `standards check`.
 - Record a successful standards adoption as its own validated commit while
   keeping GitHub delivery a separately confirmed lifecycle transition.
+- Build repository-creation contracts through the selected release's
+  `standards` executable while keeping contract construction private.
+- Assign ordinary workflow, repository lifecycle, release and migration,
+  orientation, and skill mechanics to distinct living documentation owners.
+
+### Removed
+
+- Remove the retired subject-specific command families, standalone manifest
+  initializer, user-managed proposal records, and phase-specific command
+  interfaces.
+- Remove old lifecycle skill sources, aliases, managed-absence compatibility,
+  public plan and delta types, legacy command implementations, and duplicate
+  command-level test suites.
 
 ### Fixed
 
 - Derive ignored managed-absence targets from structured
   repository-assessment correction evidence so adoption rejects a present
   ignored target before repair can delete it.
-- Make every distributed lifecycle skill invoke its bundled adapter, including
-  a publication adapter that delegates to the exact selected release.
-- Remove retired adoption and first-publication skill files during profile
-  synchronization instead of leaving conflicting entry points behind.
 - Run the new repository's canonical validation before creation performs its
   first remote mutation.
+
+### Migration
+
+- Repositories pinned to `4.0.0` use the documented immutable-tree bootstrap,
+  then invoke the new release's current `standards adopt` goal; the new release
+  contains no permanent compatibility adapter.
 
 ## [4.0.0] - 2026-08-16
 

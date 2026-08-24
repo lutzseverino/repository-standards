@@ -9,12 +9,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleaseWorkflowContractTests(unittest.TestCase):
+    def test_required_ci_fetches_the_immutable_migration_tag(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("fetch-depth: 0", workflow)
+
     def test_canonical_validation_checks_the_changelog_unconditionally(self) -> None:
         canonical_check = (ROOT / "scripts/validate").read_text(encoding="utf-8")
 
         self.assertIn("scripts/changelog validate", canonical_check)
         self.assertIn("scripts/standards check --scope content --json", canonical_check)
-        self.assertNotIn("scripts/audit", canonical_check)
 
     def test_stable_tag_publishes_matching_changelog_notes(self) -> None:
         workflow = (ROOT / ".github/workflows/release.yml").read_text(

@@ -18,11 +18,16 @@ conventions.
   define the canonical workflow as actor-neutral repository policy independent
   of the tools that execute it.
 - [Add family-owned GitHub delivery](0005-add-family-owned-github-delivery.md):
-  accept Prepare and Finalize around explicit human confirmation while keeping
-  ordinary delivery separate from implementation.
+  require exact lifecycle-proposal confirmation while keeping ordinary
+  delivery separate from implementation.
 - [Assign repository lifecycle transitions explicitly](0006-assign-repository-lifecycle-transitions.md):
   separate prepared creation, first publication, and ordinary delivery, and
   make adoption own future manifest-protocol transitions.
-- [Resolve one repository contract and live delta](0007-resolve-one-repository-contract-and-live-delta.md):
-  normalize repository-contract knowledge once and derive live audit, writes,
-  and lifecycle evidence from one desired-state delta.
+- [Resolve one repository contract and GitHub reconciliation](0007-resolve-one-repository-contract-and-live-delta.md):
+  normalize repository-contract knowledge once and derive GitHub findings,
+  corrections, and lifecycle evidence from one reconciliation.
+- [Replace the repository standards interface without deprecation](0008-replace-conformance-commands-without-deprecation.md):
+  make the repository-level task grammar an intentional incompatible cutover.
+- [Assign one living owner to each policy](0009-assign-one-living-owner-to-each-policy.md):
+  give ordinary workflow, repository lifecycle, maintenance, orientation, and
+  adapter mechanics distinct living owners.

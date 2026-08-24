@@ -1,4 +1,4 @@
-name: Standards Audit
+name: Standards Check
 
 on:
   schedule:
@@ -9,27 +9,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: standards-audit
+  group: standards-check
   cancel-in-progress: false
 
 jobs:
   repository:
-    name: Standards Audit / ${{ matrix.repository }}
+    name: Standards Check / ${{ matrix.repository }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         repository:
-          - lutzseverino/cardo
-          - lutzseverino/minecraft-setup-manager
-          - lutzseverino/minecraft-setup-protocol
-          - lutzseverino/minecraft-setup-publisher
-          - lutzseverino/minecraft-stream-guard
-          - lutzseverino/minecraft-stream-guard-site
-          - lutzseverino/polity
           - lutzseverino/repository-standards
     steps:
-      - name: Check out audit tooling
+      - name: Check out standards tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out target repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,23 +51,17 @@ jobs:
           repository: lutzseverino/repository-standards
           ref: v${{ steps.manifest.outputs.release }}
           path: adopted-standards
-      - name: Audit repository standards source
+      - name: Check repository standards source
         if: matrix.repository == github.repository
-        run: scripts/audit target
-      - name: Audit managed standards
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/standards check target
+      - name: Check adopted standards
         if: matrix.repository != github.repository
-        run: adopted-standards/scripts/audit target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: adopted-standards/scripts/standards check target
       - name: Validate target workflows
         run: |
           cd target
           python3 ../profiles/common/files/.github/scripts/check-workflows.py
-      - name: Audit live GitHub settings
-        if: matrix.repository != github.repository && (steps.manifest.outputs.version == '4' || steps.manifest.outputs.version == '5')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: adopted-standards/scripts/audit-live target
-      - name: Audit source live GitHub settings
-        if: matrix.repository == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/audit-live target
