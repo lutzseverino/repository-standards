@@ -107,6 +107,22 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_lifecycle_skills_point_to_the_living_policy_owner(self) -> None:
+        policy_pointer = (
+            "Read `standards/repository-lifecycle.md` from the selected release"
+        )
+
+        for name in (
+            "create-repository",
+            "publish-repository",
+            "adopt-standards",
+            "deliver-change",
+        ):
+            skill = (DISTRIBUTED_SKILLS / name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(policy_pointer, skill, name)
+
     def test_publication_adapter_invokes_the_selected_release_goal(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

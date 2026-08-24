@@ -8,6 +8,9 @@ disable-model-invocation: true
 
 Create one prepared creation baseline from settled repository facts.
 
+Read `standards/repository-lifecycle.md` from the selected release before
+operating this transition.
+
 1. Reuse facts already settled in the conversation or supplied specification.
    Collect only missing decisions before running anything. Repository name,
    one-line purpose, visibility, and license must be explicit. Establish enough

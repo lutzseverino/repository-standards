@@ -8,6 +8,9 @@ disable-model-invocation: true
 
 Carry one validated commit through review and into the default branch.
 
+Read `standards/repository-lifecycle.md` from the selected release before
+operating this transition.
+
 1. Perform delivery preparation through this adapter. Validate the exact
    candidate, preserve and restore unrelated local state, push the head, and
    reuse or create a ready pull request with an unambiguous non-closing
