@@ -9,13 +9,12 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
-from lib.live_reconciliation import (
+from lib.github_reconciliation import (
     GitHubAdapter,
     GitHubSnapshot,
-    LiveLifecycle,
-    apply_live_delta,
-    reconcile_live_github,
-    render_live_audit,
+    GitHubLifecycle,
+    apply_github_reconciliation,
+    reconcile_github,
 )
 from lib.repository_contract import (
     GitHubContract,
@@ -23,10 +22,10 @@ from lib.repository_contract import (
     GitHubSettings,
     RepositoryContract,
 )
-from lib.standards import StandardsError
+from lib.repository_content import StandardsError
 
 
-class LiveReconciliationTests(unittest.TestCase):
+class GitHubReconciliationTests(unittest.TestCase):
     def contract(self) -> RepositoryContract:
         return RepositoryContract(
             repository=Path("/repository"),
@@ -67,7 +66,7 @@ class LiveReconciliationTests(unittest.TestCase):
             ),
         )
 
-    def test_one_delta_projects_both_audit_findings_and_write_operations(self) -> None:
+    def test_one_reconciliation_projects_findings_and_corrections(self) -> None:
         snapshot = GitHubSnapshot(
             repository={
                 "default_branch": "trunk",
@@ -99,30 +98,37 @@ class LiveReconciliationTests(unittest.TestCase):
                     "rules": [],
                 },
             ),
-            lifecycle=LiveLifecycle.PUBLISHED,
+            lifecycle=GitHubLifecycle.PUBLISHED,
         )
 
-        delta = reconcile_live_github(self.contract(), snapshot)
+        reconciliation = reconcile_github(self.contract(), snapshot)
 
-        self.assertEqual(render_live_audit(delta), list(delta.findings))
-        self.assertTrue(
-            any("default-branch" in finding for finding in delta.findings),
-            delta.findings,
+        self.assertEqual(
+            list(reconciliation.findings),
+            [
+                finding
+                for difference in reconciliation.differences
+                for finding in difference.findings
+            ],
         )
         self.assertTrue(
-            any("features.issues" in finding for finding in delta.findings),
-            delta.findings,
+            any("default-branch" in finding for finding in reconciliation.findings),
+            reconciliation.findings,
         )
         self.assertTrue(
-            any("required labels" in finding for finding in delta.findings),
-            delta.findings,
+            any("features.issues" in finding for finding in reconciliation.findings),
+            reconciliation.findings,
         )
         self.assertTrue(
-            any("Protect main" in finding for finding in delta.findings),
-            delta.findings,
+            any("required labels" in finding for finding in reconciliation.findings),
+            reconciliation.findings,
+        )
+        self.assertTrue(
+            any("Protect main" in finding for finding in reconciliation.findings),
+            reconciliation.findings,
         )
         self.assertEqual(
-            [operation.description for operation in delta.operations],
+            [operation.description for operation in reconciliation.operations],
             [
                 "ESTABLISH default branch 'main'",
                 "UPDATE   repository settings",
@@ -130,9 +136,9 @@ class LiveReconciliationTests(unittest.TestCase):
                 "CREATE   ruleset 'Protect main'",
             ],
         )
-        self.assertNotIn("repository-specific", "\n".join(delta.findings))
+        self.assertNotIn("repository-specific", "\n".join(reconciliation.findings))
         self.assertFalse(
-            any("Repository local" in operation.description for operation in delta.operations)
+            any("Repository local" in operation.description for operation in reconciliation.operations)
         )
 
     def test_replaceable_adapter_observes_branches_labels_and_rulesets(self) -> None:
@@ -361,11 +367,11 @@ class LiveReconciliationTests(unittest.TestCase):
             rulesets=(drifted_ruleset,),
         )
 
-        delta = reconcile_live_github(self.contract(), snapshot)
+        reconciliation = reconcile_github(self.contract(), snapshot)
 
-        self.assertGreaterEqual(len(delta.findings), 8)
-        self.assertEqual(len(delta.operations), 1)
-        operation = delta.operations[0]
+        self.assertGreaterEqual(len(reconciliation.findings), 8)
+        self.assertEqual(len(reconciliation.operations), 1)
+        operation = reconciliation.operations[0]
         self.assertEqual(operation.description, "UPDATE   ruleset 'Protect main'")
         self.assertEqual(operation.payload["target"], "branch")
         self.assertEqual(operation.payload["enforcement"], "active")
@@ -378,7 +384,7 @@ class LiveReconciliationTests(unittest.TestCase):
         self.assertIn({"type": "non_fast_forward"}, operation.payload["rules"])
         self.assertIn({"type": "required_signatures"}, operation.payload["rules"])
 
-        reconciled = reconcile_live_github(
+        reconciled = reconcile_github(
             self.contract(),
             GitHubSnapshot(
                 repository=snapshot.repository,
@@ -446,16 +452,16 @@ class LiveReconciliationTests(unittest.TestCase):
             ),
         )
 
-        delta = reconcile_live_github(self.contract(), snapshot)
+        reconciliation = reconcile_github(self.contract(), snapshot)
 
         self.assertIn(
-            "github.ruleset must target only the default branch", delta.findings
+            "github.ruleset must target only the default branch", reconciliation.findings
         )
 
     def test_prepared_creation_baseline_reports_publication_requirements_pending(
         self,
     ) -> None:
-        delta = reconcile_live_github(
+        reconciliation = reconcile_github(
             self.contract(),
             GitHubSnapshot(
                 repository={
@@ -473,21 +479,21 @@ class LiveReconciliationTests(unittest.TestCase):
                 branches=(),
                 label_names=frozenset({"bug"}),
                 rulesets=(),
-                lifecycle=LiveLifecycle.PREPARED,
+                lifecycle=GitHubLifecycle.PREPARED,
             ),
         )
 
-        self.assertFalse(delta.clean)
-        self.assertEqual(delta.operations, ())
-        self.assertEqual(len(delta.pending_findings), 2)
+        self.assertFalse(reconciliation.clean)
+        self.assertEqual(reconciliation.operations, ())
+        self.assertEqual(len(reconciliation.pending_findings), 2)
         self.assertTrue(
-            all("pending first publication" in item for item in delta.pending_findings)
+            all("pending first publication" in item for item in reconciliation.pending_findings)
         )
 
     def test_empty_observed_branch_set_requires_default_branch_establishment(
         self,
     ) -> None:
-        delta = reconcile_live_github(
+        reconciliation = reconcile_github(
             self.contract(),
             GitHubSnapshot(
                 repository={
@@ -508,9 +514,9 @@ class LiveReconciliationTests(unittest.TestCase):
             ),
         )
 
-        operation = delta.operations[0]
+        operation = reconciliation.operations[0]
         self.assertEqual(
-            delta.blockers,
+            reconciliation.blockers,
             ("create or publish default branch 'main' before reconciliation",),
         )
         self.assertEqual(operation.description, "ESTABLISH default branch 'main'")
@@ -519,7 +525,7 @@ class LiveReconciliationTests(unittest.TestCase):
         self.assertEqual(operation.payload, {"default_branch": "main"})
 
     def test_required_label_case_collisions_are_renamed_in_place(self) -> None:
-        delta = reconcile_live_github(
+        reconciliation = reconcile_github(
             self.contract(),
             GitHubSnapshot(
                 repository={
@@ -542,7 +548,7 @@ class LiveReconciliationTests(unittest.TestCase):
 
         label_operations = [
             operation
-            for operation in delta.operations
+            for operation in reconciliation.operations
             if "label" in operation.description
         ]
         self.assertEqual(len(label_operations), 1)
@@ -574,7 +580,7 @@ class LiveReconciliationTests(unittest.TestCase):
                     raise StandardsError("permission denied")
                 return {}
 
-        delta = reconcile_live_github(
+        reconciliation = reconcile_github(
             self.contract(),
             GitHubSnapshot(
                 repository={
@@ -595,7 +601,7 @@ class LiveReconciliationTests(unittest.TestCase):
             ),
         )
 
-        report = apply_live_delta(delta, FailingAdapter())
+        report = apply_github_reconciliation(reconciliation, FailingAdapter())
 
         self.assertFalse(report.complete)
         self.assertEqual(
@@ -620,7 +626,7 @@ class LiveReconciliationTests(unittest.TestCase):
                 features=GitHubFeatures(issues=True, projects=True, wiki=False),
             ),
         )
-        delta = reconcile_live_github(
+        reconciliation = reconcile_github(
             contract,
             GitHubSnapshot(
                 repository={
@@ -677,10 +683,10 @@ class LiveReconciliationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            delta.operations[0].payload,
+            reconciliation.operations[0].payload,
             {"has_projects": True},
         )
-        self.assertNotIn("has_discussions", delta.operations[0].payload)
+        self.assertNotIn("has_discussions", reconciliation.operations[0].payload)
 
 
 if __name__ == "__main__":

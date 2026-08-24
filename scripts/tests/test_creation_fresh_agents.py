@@ -142,7 +142,7 @@ class CreationFreshAgentTests(unittest.TestCase):
     def test_rich_prior_context_is_reused_for_standalone_creation(self) -> None:
         destination = self.repository.parent / "widget"
         result, final = self.run_fresh_agent(
-            "Use $create-repository. We already decided every fact: create private "
+            "Create private "
             "owner/widget at "
             f"{destination}; purpose is 'Track widgets safely.'; license is MIT; "
             "ecosystem is unsupported Elixir and project kind is application."
@@ -161,7 +161,7 @@ class CreationFreshAgentTests(unittest.TestCase):
 
     def test_missing_explicit_decisions_are_requested_before_invocation(self) -> None:
         result, final = self.run_fresh_agent(
-            "Use $create-repository to create a new repository named widget."
+            "Create a new repository named widget."
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -173,7 +173,7 @@ class CreationFreshAgentTests(unittest.TestCase):
     def test_unknown_applicability_is_requested_before_invocation(self) -> None:
         destination = self.repository.parent / "widget"
         result, final = self.run_fresh_agent(
-            "Use $create-repository for private owner/widget at "
+            "Create private owner/widget at "
             f"{destination}. Purpose: 'Track widgets.' License: MIT."
         )
 
@@ -186,7 +186,7 @@ class CreationFreshAgentTests(unittest.TestCase):
     def test_ambiguous_profiles_are_returned_for_explicit_selection(self) -> None:
         destination = self.repository.parent / "web"
         result, final = self.run_fresh_agent(
-            "Use $create-repository for private owner/web at "
+            "Create private owner/web at "
             f"{destination}. Purpose: 'Serve the web.' License: MIT. It is a "
             "Vite React application using npm; pass ecosystem=node, "
             "package-manager=npm, and framework=vite-react as facts."
@@ -202,7 +202,7 @@ class CreationFreshAgentTests(unittest.TestCase):
     def test_unique_profile_facts_are_forwarded_without_extra_questions(self) -> None:
         destination = self.repository.parent / "protocol"
         result, final = self.run_fresh_agent(
-            "Use $create-repository for private owner/protocol at "
+            "Create private owner/protocol at "
             f"{destination}. Purpose: 'Define a wire protocol.' License: MIT. "
             "The settled facts are ecosystem=node, package-manager=npm, and "
             "project-kind=protocol."
@@ -222,7 +222,7 @@ class CreationFreshAgentTests(unittest.TestCase):
     def test_collision_is_surfaced_without_switching_workflows(self) -> None:
         destination = self.repository.parent / "existing"
         result, final = self.run_fresh_agent(
-            "Use $create-repository for private owner/existing at "
+            "Create private owner/existing at "
             f"{destination}. Purpose: 'Existing identity.' License: MIT. "
             "The unsupported ecosystem is Elixir and the project kind is application."
         )
@@ -243,7 +243,7 @@ class CreationFreshAgentTests(unittest.TestCase):
         marker = destination / "keep.txt"
         marker.write_text("keep\n", encoding="utf-8")
         result, final = self.run_fresh_agent(
-            "Use $create-repository for private owner/fresh at "
+            "Create private owner/fresh at "
             f"{destination}. Purpose: 'Preserve the destination.' License: MIT. "
             "The unsupported ecosystem is Elixir and the project kind is application."
         )

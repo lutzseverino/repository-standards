@@ -1,4 +1,4 @@
-"""Plan and apply offline repository synchronization from one contract."""
+"""Calculate and apply repository-content corrections from one contract."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .repository_contract import RepositoryContract
-from .standards import (
+from .repository_content import (
     StandardsError,
     _preview_text,
     _validate_managed_target,
@@ -16,14 +16,14 @@ from .standards import (
 
 
 @dataclass(frozen=True)
-class SynchronizationBlocker:
+class ContentCorrectionBlocker:
     target: str
     message: str
     intended_action: str
 
 
 @dataclass(frozen=True)
-class SynchronizationOperation:
+class ContentCorrection:
     target: str
     status: str
     mode: str
@@ -33,13 +33,13 @@ class SynchronizationOperation:
 
 
 @dataclass(frozen=True)
-class SynchronizationPlan:
+class ContentReconciliation:
     contract: RepositoryContract
-    operations: tuple[SynchronizationOperation, ...]
-    blockers: tuple[SynchronizationBlocker, ...]
+    operations: tuple[ContentCorrection, ...]
+    blockers: tuple[ContentCorrectionBlocker, ...]
 
     @property
-    def changes(self) -> tuple[SynchronizationOperation, ...]:
+    def changes(self) -> tuple[ContentCorrection, ...]:
         return tuple(
             operation for operation in self.operations if operation.status != "ok"
         )
@@ -62,27 +62,27 @@ class ApplicationReport:
         return self.failed is None
 
 
-def plan_synchronization(contract: RepositoryContract) -> SynchronizationPlan:
+def calculate_content_reconciliation(contract: RepositoryContract) -> ContentReconciliation:
     """Inspect every managed target and retain all deterministic blockers."""
 
-    operations: list[SynchronizationOperation] = []
-    blockers: list[SynchronizationBlocker] = []
+    operations: list[ContentCorrection] = []
+    blockers: list[ContentCorrectionBlocker] = []
     contract_blockers: dict[str, list[str]] = {}
-    for blocker in contract.plan_blockers:
+    for blocker in contract.content_blockers:
         contract_blockers.setdefault(blocker.target, []).append(blocker.message)
     for managed_file in contract.managed_files:
         try:
             result = inspect(contract.repository, (managed_file,))[0]
         except StandardsError as exc:
             blockers.append(
-                SynchronizationBlocker(managed_file.target, str(exc), "INVALID")
+                ContentCorrectionBlocker(managed_file.target, str(exc), "INVALID")
             )
             continue
 
         intended_action = _intended_action(result.status, result.mode)
         target_contract_blockers = contract_blockers.pop(result.target, [])
         blockers.extend(
-            SynchronizationBlocker(result.target, message, intended_action)
+            ContentCorrectionBlocker(result.target, message, intended_action)
             for message in target_contract_blockers
         )
         if result.status == "not-file":
@@ -91,13 +91,13 @@ def plan_synchronization(contract: RepositoryContract) -> SynchronizationPlan:
             else:
                 message = "managed target is not a regular file"
             blockers.append(
-                SynchronizationBlocker(result.target, message, intended_action)
+                ContentCorrectionBlocker(result.target, message, intended_action)
             )
             continue
         ignored_error = _ignored_managed_absence(contract.repository, result)
         if ignored_error:
             blockers.append(
-                SynchronizationBlocker(
+                ContentCorrectionBlocker(
                     result.target,
                     ignored_error,
                     intended_action,
@@ -107,7 +107,7 @@ def plan_synchronization(contract: RepositoryContract) -> SynchronizationPlan:
         if target_contract_blockers:
             continue
         operations.append(
-            SynchronizationOperation(
+            ContentCorrection(
                 target=result.target,
                 status=result.status,
                 mode=result.mode,
@@ -119,10 +119,10 @@ def plan_synchronization(contract: RepositoryContract) -> SynchronizationPlan:
 
     for target, messages in contract_blockers.items():
         blockers.extend(
-            SynchronizationBlocker(target, message, "INVALID")
+            ContentCorrectionBlocker(target, message, "INVALID")
             for message in messages
         )
-    return SynchronizationPlan(contract, tuple(operations), tuple(blockers))
+    return ContentReconciliation(contract, tuple(operations), tuple(blockers))
 
 
 def _intended_action(status: str, mode: str) -> str:
@@ -168,11 +168,11 @@ def _ignored_managed_absence(repository: Path, result) -> str | None:
     )
 
 
-def render_synchronization_preview(plan: SynchronizationPlan) -> str:
+def render_content_reconciliation(reconciliation: ContentReconciliation) -> str:
     """Render every preservation, intended change, and deterministic blocker."""
 
     parts: list[str] = []
-    for operation in plan.operations:
+    for operation in reconciliation.operations:
         if operation.status == "ok":
             suffix = " (absent)" if operation.mode == "absent" else ""
             parts.append(f"PRESERVE {operation.target}{suffix}\n")
@@ -184,14 +184,14 @@ def render_synchronization_preview(plan: SynchronizationPlan) -> str:
         else:
             parts.append(f"UPDATE   {operation.target}\n")
             parts.append(_preview_text(operation))
-    for blocker in plan.blockers:
+    for blocker in reconciliation.blockers:
         parts.append(f"{blocker.intended_action:<8} {blocker.target}\n")
         parts.append(f"BLOCKED  {blocker.target} ({blocker.message})\n")
     return "".join(parts)
 
 
 def _apply_operation(
-    repository: Path, operation: SynchronizationOperation
+    repository: Path, operation: ContentCorrection
 ) -> None:
     target = repository / operation.target
     _validate_managed_target(repository, target, operation.target)
@@ -204,16 +204,16 @@ def _apply_operation(
         target.write_bytes(operation.expected)
 
 
-def apply_synchronization_plan(plan: SynchronizationPlan) -> ApplicationReport:
-    """Apply the plan in order and report exact partial progress on failure."""
+def apply_content_reconciliation(reconciliation: ContentReconciliation) -> ApplicationReport:
+    """Apply the reconciliation in order and report exact partial progress on failure."""
 
-    changes = plan.changes
-    if plan.blockers:
+    changes = reconciliation.changes
+    if reconciliation.blockers:
         return ApplicationReport(
             (),
             FailedOperation(
                 "preflight",
-                f"{len(plan.blockers)} deterministic blocker(s) prevent application",
+                f"{len(reconciliation.blockers)} deterministic blocker(s) prevent application",
             ),
             tuple(operation.target for operation in changes),
         )
@@ -222,20 +222,20 @@ def apply_synchronization_plan(plan: SynchronizationPlan) -> ApplicationReport:
     for index, operation in enumerate(changes):
         try:
             current = inspect(
-                plan.contract.repository,
+                reconciliation.contract.repository,
                 (
                     next(
                         item
-                        for item in plan.contract.managed_files
+                        for item in reconciliation.contract.managed_files
                         if item.target == operation.target
                     ),
                 ),
             )[0]
             if current.status != operation.status or current.actual != operation.actual:
                 raise StandardsError(
-                    "target changed after planning; create a new synchronization plan"
+                    "target changed after calculation; create a new content reconciliation"
                 )
-            _apply_operation(plan.contract.repository, operation)
+            _apply_operation(reconciliation.contract.repository, operation)
         except (OSError, StandardsError) as exc:
             return ApplicationReport(
                 tuple(completed),

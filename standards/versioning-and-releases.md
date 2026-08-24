@@ -9,20 +9,15 @@ zero major version does not make breaking changes harmless.
 Non-published repositories, websites, and operational skill packages do not
 need artificial release numbers or a changelog. They still use Conventional
 Commits. A repository opts into the changelog contract by declaring the exact
-`CHANGELOG.md` path under `repository-owned`; canonical audit then validates
+`CHANGELOG.md` path under `repository-owned`; repository assessment then validates
 its structure.
 
 ## Release source
 
-- A release is built from a commit already merged to `main`.
-- The tag and build metadata agree on the version.
-- CI passes before release automation begins.
-- Release artifacts are produced by automation, not uploaded from an
-  unverified local build.
-- Repository-specific publishing destinations remain explicit.
-
-Use annotated tags in the form `vMAJOR.MINOR.PATCH` unless an ecosystem has an
-established incompatible convention. Do not move or reuse a published tag.
+Release and migration procedure is owned by
+[Maintenance and rollout](maintenance-and-rollout.md). Ecosystem profiles may
+add a publishing destination or an established tag convention, but do not
+replace that common policy.
 
 ## Changelog and notes
 

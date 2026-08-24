@@ -10,7 +10,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
-from lib.live_reconciliation import GitHubAdapter, GitHubSnapshot
+from lib.github_reconciliation import GitHubAdapter, GitHubSnapshot
 from lib.repository_assessment import (
     AssessmentConclusion,
     AssessmentScope,
@@ -24,7 +24,7 @@ from lib.repository_contract import (
     ManagedFile,
     RepositoryContract,
 )
-from lib.standards import StandardsError
+from lib.repository_content import StandardsError
 
 
 class SnapshotAdapter(GitHubAdapter):
@@ -369,7 +369,7 @@ class RepositoryAssessmentTests(unittest.TestCase):
         )
         self.assertTrue(repaired.application_report.succeeded)
 
-    def test_prepared_repository_is_inferred_and_requires_first_publication(self) -> None:
+    def test_prepared_repository_is_inferred_and_requires_repository_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repository = Path(directory)
             (repository / "managed.txt").write_text("current\n", encoding="utf-8")
@@ -414,7 +414,7 @@ class RepositoryAssessmentTests(unittest.TestCase):
         self.assertIsNone(assessment.lifecycle)
         self.assertIn("ambiguous", assessment.evidence_gaps[0].description)
 
-    def test_prepared_repair_reports_first_publication_as_remaining_work(self) -> None:
+    def test_prepared_repair_reports_repository_publication_as_remaining_work(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repository = Path(directory)
             (repository / "managed.txt").write_text("current\n", encoding="utf-8")
@@ -527,7 +527,7 @@ class RepositoryAssessmentTests(unittest.TestCase):
             managed.write_text("maintainer content\n", encoding="utf-8")
             contract = replace(
                 self.contract(repository),
-                plan_blockers=(
+                content_blockers=(
                     ContractBlocker(
                         "managed.txt",
                         "managed content conflicts with repository ownership",

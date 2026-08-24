@@ -8,6 +8,9 @@ disable-model-invocation: true
 
 Prepare and commit one standards adoption without delivering it.
 
+Read `standards/repository-lifecycle.md` from the selected release before
+operating this transition.
+
 1. Read repository guidance and identify its single canonical validation
    command. Stop and ask the user when no single command is documented.
 2. Run the bundled adapter, passing an exact

@@ -1,6 +1,6 @@
 # Managed files and ownership
 
-The synchronization tool supports five file modes:
+Repository-content correction supports five managed file modes:
 
 - `exact`: copy the source bytes exactly;
 - `template`: replace `{{ variable_name }}` placeholders from manifest
@@ -30,9 +30,9 @@ cannot safely express one shared `version` and `updates` document. Profiles may
 describe ecosystem expectations, but the manifest declares concrete install
 unit directories.
 
-`repository-owned` patterns are hard guards. A plan fails before reading or
-writing targets if a managed target matches one. Use forward-slash paths and
-shell-style patterns such as `docs/**`.
+`repository-owned` patterns are hard guards. Content calculation fails before
+reading or writing targets if a managed target matches one. Use forward-slash
+paths and shell-style patterns such as `docs/**`.
 
 Typical repository-owned content includes:
 
@@ -46,8 +46,8 @@ The common `.gitignore` is intentionally composed. A repository may keep
 earned local patterns in `.repository-standards/gitignore.local`; the target is
 then regenerated from standard fragments plus that repository-owned source.
 
-Synchronization writes only resolved managed targets. For an `absent` target,
-preview shows a deletion and `sync --write` deletes only that exact regular
-file. It does not delete directories, follow symlinks, remove parent
-directories, or delete paths that are merely absent from the resolved plan.
-Repository-owned guards apply to absent targets before inspection or writing.
+`standards repair` writes only resolved managed targets. For an `absent`
+target, the assessment shows a deletion and repair deletes only that exact
+regular file. It does not delete directories, follow symlinks, remove parent
+directories, or delete paths that are already absent from the resolved
+content. Repository-owned guards apply before inspection or writing.

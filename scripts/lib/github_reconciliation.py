@@ -1,4 +1,4 @@
-"""Reconcile one normalized repository contract with one GitHub snapshot."""
+"""Reconcile one normalized repository contract with observed GitHub state."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Protocol
 from urllib.parse import quote
 
-from .standards import StandardsError
+from .repository_content import StandardsError
 
 
 SETTINGS_MAPPING = {
@@ -33,7 +33,7 @@ class NormalizedGitHubContract(Protocol):
     def as_mapping(self) -> dict[str, Any]: ...
 
 
-class LiveRepositoryContract(Protocol):
+class GitHubRepositoryContract(Protocol):
     @property
     def github(self) -> NormalizedGitHubContract: ...
 
@@ -41,8 +41,8 @@ class LiveRepositoryContract(Protocol):
     def required_labels(self) -> tuple[str, ...]: ...
 
 
-class LiveLifecycle(Enum):
-    """Lifecycle state that determines which live requirements are applicable."""
+class GitHubLifecycle(Enum):
+    """Lifecycle state that determines which GitHub requirements are applicable."""
 
     PREPARED = "prepared"
     PUBLISHED = "published"
@@ -56,11 +56,11 @@ class GitHubSnapshot:
     branches: tuple[dict[str, Any], ...]
     label_names: frozenset[str]
     rulesets: tuple[dict[str, Any], ...]
-    lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED
+    lifecycle: GitHubLifecycle = GitHubLifecycle.PUBLISHED
 
 
 @dataclass(frozen=True)
-class LiveOperation:
+class GitHubCorrection:
     description: str
     method: str
     endpoint: str
@@ -68,19 +68,19 @@ class LiveOperation:
 
 
 @dataclass(frozen=True)
-class LiveDifference:
+class GitHubDifference:
     findings: tuple[str, ...]
-    operations: tuple[LiveOperation, ...] = ()
+    operations: tuple[GitHubCorrection, ...] = ()
     pending: bool = False
     blockers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
-class LiveDesiredStateDelta:
-    """One shared source for live audit findings and synchronization writes."""
+class GitHubReconciliation:
+    """One shared source for repository assessment findings and GitHub corrections."""
 
     repository: str
-    differences: tuple[LiveDifference, ...]
+    differences: tuple[GitHubDifference, ...]
 
     @property
     def findings(self) -> tuple[str, ...]:
@@ -91,7 +91,7 @@ class LiveDesiredStateDelta:
         )
 
     @property
-    def operations(self) -> tuple[LiveOperation, ...]:
+    def operations(self) -> tuple[GitHubCorrection, ...]:
         return tuple(
             operation
             for difference in self.differences
@@ -121,10 +121,10 @@ class LiveDesiredStateDelta:
 
 
 @dataclass(frozen=True)
-class LiveApplicationReport:
-    completed: tuple[LiveOperation, ...]
-    failed: LiveOperation | None
-    remaining: tuple[LiveOperation, ...]
+class GitHubApplicationReport:
+    completed: tuple[GitHubCorrection, ...]
+    failed: GitHubCorrection | None
+    remaining: tuple[GitHubCorrection, ...]
     error: str | None
 
     @property
@@ -133,7 +133,7 @@ class LiveApplicationReport:
 
 
 class GitHubAdapter:
-    """Replaceable boundary for observing and mutating GitHub live state."""
+    """Replaceable boundary for observing and mutating declared GitHub state."""
 
     def request(
         self,
@@ -161,11 +161,11 @@ class GitHubAdapter:
 
     def observe(
         self,
-        contract: LiveRepositoryContract,
+        contract: GitHubRepositoryContract,
         *,
-        lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED,
+        lifecycle: GitHubLifecycle = GitHubLifecycle.PUBLISHED,
     ) -> GitHubSnapshot:
-        """Read every live resource needed by one reconciliation pass."""
+        """Read every GitHub resource needed by one reconciliation pass."""
 
         github = contract.github.as_mapping()
         endpoint = f"repos/{github['repository']}"
@@ -236,7 +236,7 @@ class GitHubAdapter:
             lifecycle=lifecycle,
         )
 
-    def apply(self, operation: LiveOperation) -> Any:
+    def apply(self, operation: GitHubCorrection) -> Any:
         return self.request(
             operation.method, operation.endpoint, operation.payload
         )
@@ -255,7 +255,7 @@ class GitHubCliAdapter(GitHubAdapter):
         payload: dict[str, Any] | None = None,
     ) -> Any:
         if shutil.which(self.executable) is None:
-            raise StandardsError("live GitHub operations require the GitHub CLI: gh")
+            raise StandardsError("GitHub corrections require the GitHub CLI: gh")
         command = [self.executable, "api", endpoint]
         request_input: str | None = None
         if method != "GET":
@@ -473,21 +473,21 @@ def _ruleset_payload(
     }
 
 
-def reconcile_live_github(
-    contract: LiveRepositoryContract, snapshot: GitHubSnapshot
-) -> LiveDesiredStateDelta:
+def reconcile_github(
+    contract: GitHubRepositoryContract, snapshot: GitHubSnapshot
+) -> GitHubReconciliation:
     """Return every applicable difference without reading or writing GitHub."""
 
     github = contract.github.as_mapping()
     repository_name = github["repository"]
     endpoint = f"repos/{repository_name}"
-    differences: list[LiveDifference] = []
+    differences: list[GitHubDifference] = []
 
     repository_findings: list[str] = []
     repository_payload: dict[str, Any] = {}
-    if snapshot.lifecycle is LiveLifecycle.PREPARED:
+    if snapshot.lifecycle is GitHubLifecycle.PREPARED:
         differences.append(
-            LiveDifference(
+            GitHubDifference(
                 (
                     "github.default-branch is pending first publication; "
                     f"expected {github['default-branch']!r}",
@@ -517,10 +517,10 @@ def reconcile_live_github(
             branch.get("name") == default_branch for branch in snapshot.branches
         )
         differences.append(
-            LiveDifference(
+            GitHubDifference(
                 (default_branch_finding,),
                 (
-                    LiveOperation(
+                    GitHubCorrection(
                         f"ESTABLISH default branch {github['default-branch']!r}",
                         "PATCH",
                         endpoint,
@@ -559,10 +559,10 @@ def reconcile_live_github(
 
     if repository_findings:
         differences.append(
-            LiveDifference(
+            GitHubDifference(
                 tuple(repository_findings),
                 (
-                    LiveOperation(
+                    GitHubCorrection(
                         "UPDATE   repository settings",
                         "PATCH",
                         endpoint,
@@ -577,13 +577,13 @@ def reconcile_live_github(
     }
     missing_labels: list[str] = []
     incorrectly_cased_labels: list[tuple[str, str]] = []
-    label_operations: list[LiveOperation] = []
+    label_operations: list[GitHubCorrection] = []
     for label in sorted(contract.required_labels):
         actual_label = actual_labels_by_identity.get(label.casefold())
         if actual_label is None:
             missing_labels.append(label)
             label_operations.append(
-                LiveOperation(
+                GitHubCorrection(
                     f"CREATE   label {label!r}",
                     "POST",
                     f"{endpoint}/labels",
@@ -597,7 +597,7 @@ def reconcile_live_github(
         elif actual_label != label:
             incorrectly_cased_labels.append((actual_label, label))
             label_operations.append(
-                LiveOperation(
+                GitHubCorrection(
                     f"UPDATE   label {actual_label!r} to {label!r}",
                     "PATCH",
                     f"{endpoint}/labels/{quote(actual_label, safe='')}",
@@ -616,14 +616,14 @@ def reconcile_live_github(
         )
     if label_findings:
         differences.append(
-            LiveDifference(tuple(label_findings), tuple(label_operations))
+            GitHubDifference(tuple(label_findings), tuple(label_operations))
         )
 
     expected_ruleset = github["ruleset"]
     if expected_ruleset is not None:
-        if snapshot.lifecycle is LiveLifecycle.PREPARED:
+        if snapshot.lifecycle is GitHubLifecycle.PREPARED:
             differences.append(
-                LiveDifference(
+                GitHubDifference(
                     (
                         f"github.ruleset {expected_ruleset['name']!r} is pending "
                         "first publication",
@@ -642,10 +642,10 @@ def reconcile_live_github(
             )
             if actual_ruleset is None:
                 differences.append(
-                    LiveDifference(
+                    GitHubDifference(
                         (f"github.ruleset {expected_ruleset['name']!r} is missing",),
                         (
-                            LiveOperation(
+                            GitHubCorrection(
                                 f"CREATE   ruleset {expected_ruleset['name']!r}",
                                 "POST",
                                 f"{endpoint}/rulesets",
@@ -660,10 +660,10 @@ def reconcile_live_github(
                 )
                 if ruleset_findings:
                     differences.append(
-                        LiveDifference(
+                        GitHubDifference(
                             tuple(ruleset_findings),
                             (
-                                LiveOperation(
+                                GitHubCorrection(
                                     f"UPDATE   ruleset {expected_ruleset['name']!r}",
                                     "PUT",
                                     f"{endpoint}/rulesets/{actual_ruleset['id']}",
@@ -673,32 +673,25 @@ def reconcile_live_github(
                         )
                     )
 
-    return LiveDesiredStateDelta(repository_name, tuple(differences))
+    return GitHubReconciliation(repository_name, tuple(differences))
 
+def apply_github_reconciliation(
+    reconciliation: GitHubReconciliation, adapter: GitHubAdapter
+) -> GitHubApplicationReport:
+    """Apply the GitHub reconciliation in order without rolling back completed operations."""
 
-def render_live_audit(delta: LiveDesiredStateDelta) -> list[str]:
-    """Project human-readable audit findings from the shared delta."""
-
-    return list(delta.findings)
-
-
-def apply_live_delta(
-    delta: LiveDesiredStateDelta, adapter: GitHubAdapter
-) -> LiveApplicationReport:
-    """Apply the delta in order without rolling back completed operations."""
-
-    operations = delta.operations
+    operations = reconciliation.operations
     for index, operation in enumerate(operations):
         try:
             adapter.apply(operation)
         except StandardsError as exc:
-            return LiveApplicationReport(
+            return GitHubApplicationReport(
                 completed=operations[:index],
                 failed=operation,
                 remaining=operations[index + 1 :],
                 error=str(exc),
             )
-    return LiveApplicationReport(
+    return GitHubApplicationReport(
         completed=operations,
         failed=None,
         remaining=(),

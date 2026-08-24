@@ -1,36 +1,18 @@
 # Contributing
 
-Thank you for improving this repository.
+Thank you for improving this repository. This file is the living owner of the
+ordinary change workflow. Repository conformance and lifecycle transitions are
+defined separately by the selected standards release.
 
-## Workflow
-
-This repository uses the actor-neutral canonical repository workflow.
-Repository documentation defines how work moves between states and how
-validated changes reach GitHub.
-
-The official Matt Pocock skill bundle at
-[`84fdeffd`](https://github.com/mattpocock/skills/tree/84fdeffd12f2ee307994d1eb6feb48173b6e0502)
-supplies pinned execution contracts. Its skills are execution adapters; they
-do not define workflow policy.
+## Start work
 
 GitHub Issues track incoming requests, published specifications, and generated
-implementation tickets. They are not a required starting point for every
-change. The examples below name skills without an agent-specific invocation
-prefix; use the active agent's syntax, such as `$implement` in Codex.
+implementation tickets. Incoming bugs and enhancements begin unlabelled and
+use `triage` to receive exactly one canonical category and state. Self-authored
+work does not pass through triage.
 
-### Incoming requests
-
-Use `triage` for bugs and enhancement requests submitted outside the
-repository's own planning flow. Incoming issues begin unlabelled. Triage assigns
-exactly one category and one canonical state using the mapping in
-`docs/agents/triage-labels.md`.
-
-Do not run `triage` on self-authored work.
-
-### Self-authored work
-
-Start unresolved ideas with `grill-with-docs`, then choose the implementation
-rhythm by size:
+Start unresolved self-authored work with `grill-with-docs`, then choose a
+rhythm that matches its size:
 
 ```text
 small build:
@@ -42,17 +24,15 @@ multi-session build:
 ```
 
 Invoke `implement <reference>` directly when a specification or ticket is
-already ready. Use `wayfinder` before this flow when a large effort still has
-unresolved directional decisions.
+already ready. Use `wayfinder` first when a large effort still has unresolved
+directional decisions. Work generated tickets blockers-first.
 
-Work generated tickets blockers-first. `ready-for-agent` means the work is
-sufficiently specified for an agent to implement autonomously. Selecting and
-starting that work remains an external dispatch action; this repository does
-not provide an automatic pickup system.
+`ready-for-agent` means the work is specified well enough for autonomous
+implementation. Selecting and starting that work is a separate dispatch act.
 
-### Branch and implementation
+## Implement a change
 
-Before `implement`, branch from current `main`:
+Branch from current `main` before implementation:
 
 ```text
 <type>/<short-kebab-slug>
@@ -67,48 +47,28 @@ Use Conventional Commits:
 <type>(<optional-scope>)<optional-!>: <imperative lower-case summary>
 ```
 
-`implement` changes the current branch, runs validation and review, and creates
-a commit. It does not open or merge a pull request or close tracked work.
+Keep changes scoped to their agreed work. Update tests and user-visible
+documentation with the behavior. Record release-facing changes under
+`Unreleased` in `CHANGELOG.md`.
 
-Run the single canonical validation command documented by this repository
-before considering implementation complete.
+Run the single canonical validation command before considering implementation
+complete:
 
-### GitHub delivery
+```sh
+scripts/validate
+```
 
-Use the family-owned `deliver-change` skill to execute its accepted phases. The
-agent presents one exact lifecycle proposal and stops for explicit human
-confirmation between preparation and finalization.
+`implement` changes the current branch, validates and reviews the work, and
+creates a commit. It does not open or merge a pull request or reconcile tracked
+work.
 
-Prepare after implementation:
+## Deliver a validated change
 
-1. Validate the exact candidate, push the branch, and reuse and update its
-   existing pull request or open a ready pull request. For tracked work,
-   include an unambiguous non-closing link to the applicable incoming request,
-   implementation ticket, or specification.
-2. Use a Conventional Commit subject for the pull-request title.
-3. Pass CI, complete any required review, and present the prepared head and
-   current evidence for delivery.
+Use the repository's GitHub delivery operation after implementation. Follow
+the transition and confirmation policy owned by the selected standards
+release's Repository lifecycle guidance.
 
-Prepare stops for explicit human confirmation. A pull-request reference alone
-does not authorize Finalize.
-
-After confirmation, Finalize:
-
-4. Reverify the prepared head, canonical validation, required checks, review
-   evidence, mergeability, and repository merge policy. If that evidence is
-   failed or stale, return the work and diagnostic evidence to implementation;
-   delivery does not edit the implementation work.
-5. Squash merge the pull request.
-6. Reconcile the linked tracked work after the change reaches `main`, including
-   an incoming request, implementation ticket, or directly implemented
-   specification.
-7. Close a parent specification after all of its implementation tickets are
-   delivered.
-8. Delete the merged branch.
-
-Both phases preserve and restore unrelated local state.
-Where repository conformance is required as evidence, both phases consume the
-normalized repository contract and shared live desired-state delta.
-
-Closing references may supplement but do not replace a required tracked-work
-link.
+For tracked work, the pull request must contain an unambiguous non-closing link
+to the applicable request, ticket, or specification. Its title must be a
+Conventional Commit subject. Closing references may supplement but do not
+replace the tracked-work link.

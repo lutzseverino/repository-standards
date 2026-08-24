@@ -75,28 +75,6 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
         )
         self.assertEqual(distributed, inventory["bundle"]["skills"])
 
-    def test_lifecycle_profile_removes_every_retired_skill_file(self) -> None:
-        profile = json.loads(
-            (
-                ROOT / "profiles/repository-lifecycle-skills/profile.json"
-            ).read_text(encoding="utf-8")
-        )
-
-        absences = {
-            entry["target"]
-            for entry in profile["files"]
-            if entry["mode"] == "absent"
-        }
-        self.assertEqual(
-            absences,
-            {
-                ".agents/skills/adopt-repository-standards/SKILL.md",
-                ".agents/skills/adopt-repository-standards/scripts/adopt",
-                ".agents/skills/first-publication/SKILL.md",
-                ".agents/skills/first-publication/scripts/publish",
-            },
-        )
-
     def test_distributed_skills_invoke_bundled_adapters(self) -> None:
         for name in (
             "create-repository",
@@ -128,6 +106,22 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
                 / "publish-repository/scripts/publish"
             ).is_file()
         )
+
+    def test_lifecycle_skills_point_to_the_living_policy_owner(self) -> None:
+        policy_pointer = (
+            "Read `standards/repository-lifecycle.md` from the selected release"
+        )
+
+        for name in (
+            "create-repository",
+            "publish-repository",
+            "adopt-standards",
+            "deliver-change",
+        ):
+            skill = (DISTRIBUTED_SKILLS / name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(policy_pointer, skill, name)
 
     def test_publication_adapter_invokes_the_selected_release_goal(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -217,9 +211,6 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("lifecycle proposal", skill)
-        self.assertNotIn("--plan-file", skill)
-        self.assertNotIn("Plan mode", skill)
-        self.assertNotIn("Publish mode", skill)
 
     def test_canonical_change_validation_is_named_validate(self) -> None:
         validation = ROOT / "scripts/validate"

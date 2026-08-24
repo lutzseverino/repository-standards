@@ -90,7 +90,7 @@ def _latest_release() -> str:
     request = urllib.request.Request(
         "https://github.com/lutzseverino/repository-standards/releases/latest",
         method="HEAD",
-        headers={"User-Agent": "adopt-repository-standards"},
+        headers={"User-Agent": "adopt-standards"},
     )
     try:
         with urllib.request.urlopen(request, timeout=5) as response:

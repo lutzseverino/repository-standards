@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 
 
-SCRIPTS = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SCRIPTS))
-
-from lib.standards import standards_root, sync_main  # noqa: E402
+ROOT = Path(__file__).resolve().parents[2]
 
 
 INTRODUCING_RELEASE = "4.0.0"
@@ -26,7 +21,7 @@ class ReleaseDiscoveryTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.repository = Path(self.temporary.name) / "repository"
         self.repository.mkdir()
-        self.release = (standards_root() / "VERSION").read_text(
+        self.release = (ROOT / "VERSION").read_text(
             encoding="utf-8"
         ).strip()
         self.manifest = {
@@ -60,9 +55,12 @@ class ReleaseDiscoveryTests(unittest.TestCase):
         }
         self.write_manifest()
 
-        output = StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(sync_main(["--write", str(self.repository)]), 0)
+        discovery = self.repository / ".agents/scripts/discover-standards-release.sh"
+        discovery.parent.mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "profiles/common/files/.agents/scripts/discover-standards-release.sh",
+            discovery,
+        )
         self.manifest["standards-release"] = "3.1.0"
         self.write_manifest()
 
@@ -154,7 +152,7 @@ printf '%s' "$DISCOVERY_FINAL_URL"
             f"3.1.0 → {INTRODUCING_RELEASE}.\n"
             "\n"
             "Start a new session in this repository and enter:\n"
-            f"adopt-repository-standards {INTRODUCING_RELEASE}\n",
+            f"adopt-standards {INTRODUCING_RELEASE}\n",
         )
         self.assertEqual(notice.stderr, "")
         self.assertEqual(self.request_count(), 1)

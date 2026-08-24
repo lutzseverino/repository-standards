@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .live_reconciliation import GitHubAdapter, GitHubCliAdapter
+from .github_reconciliation import GitHubAdapter, GitHubCliAdapter
 from .publication_goal import run_publish_goal
 from .repository_assessment import (
     AssessmentConclusion,
@@ -18,7 +18,11 @@ from .repository_assessment import (
     assess_repository,
     repair_repository,
 )
-from .repository_contract import ContractError, resolve_repository_contract
+from .repository_contract import (
+    ContractError,
+    build_initial_repository_contract,
+    resolve_repository_contract,
+)
 
 
 EXIT_STATUS = {
@@ -176,6 +180,30 @@ def standards_main(
 ) -> int:
     """Run one repository-level standards goal."""
 
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    standards_root = Path(__file__).resolve().parents[2]
+    if (
+        len(arguments) == 3
+        and arguments[0] == "create"
+        and arguments[1] == "--contract-input"
+    ):
+        try:
+            initialization = json.loads(
+                Path(arguments[2]).read_text(encoding="utf-8")
+            )
+            contract = build_initial_repository_contract(
+                initialization,
+                standards_root=standards_root,
+            )
+        except (OSError, json.JSONDecodeError, ContractError) as exc:
+            print(
+                f"error: cannot build initial repository contract: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        print(json.dumps(contract.as_mapping(), indent=2))
+        return 0
+
     parser = argparse.ArgumentParser(
         prog="standards",
         description="Perform one repository standards goal",
@@ -221,9 +249,8 @@ def standards_main(
     )
     deliver.add_argument("repository", nargs="?", default=".")
     deliver.add_argument("--confirm")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
 
-    standards_root = Path(__file__).resolve().parents[2]
     if args.goal == "create":
         command = [
             sys.executable,
@@ -329,7 +356,7 @@ def standards_main(
             repository,
             standards_root=standards_root,
             manifest=args.manifest,
-            retain_plan_blockers=True,
+            retain_content_blockers=True,
         )
     except ContractError as exc:
         print(f"error: {exc}", file=sys.stderr)

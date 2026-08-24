@@ -8,6 +8,9 @@ disable-model-invocation: true
 
 Move one prepared creation baseline to a standards-complete repository.
 
+Read `standards/repository-lifecycle.md` from the selected release before
+operating this transition.
+
 1. Run the bundled adapter from the prepared repository. It obtains the exact
    selected release and invokes that release's publication goal:
 

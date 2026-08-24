@@ -6,22 +6,22 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Callable, Protocol
 
-from .live_reconciliation import (
+from .github_reconciliation import (
     GitHubAdapter,
     GitHubSnapshot,
-    LiveDesiredStateDelta,
-    LiveLifecycle,
-    apply_live_delta,
-    reconcile_live_github,
+    GitHubReconciliation,
+    GitHubLifecycle,
+    apply_github_reconciliation,
+    reconcile_github,
 )
-from .offline_sync import (
-    SynchronizationOperation,
-    SynchronizationPlan,
-    apply_synchronization_plan,
-    plan_synchronization,
+from .repository_content_reconciliation import (
+    ContentCorrection,
+    ContentReconciliation,
+    apply_content_reconciliation,
+    calculate_content_reconciliation,
 )
 from .repository_contract import RepositoryContract
-from .standards import (
+from .repository_content import (
     StandardsError,
     inspect_boundaries,
     inspect_repository_owned_documents,
@@ -67,7 +67,7 @@ class RepositoryObserver(Protocol):
         self,
         contract: RepositoryContract,
         *,
-        lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED,
+        lifecycle: GitHubLifecycle = GitHubLifecycle.PUBLISHED,
     ) -> GitHubSnapshot: ...
 
 
@@ -122,9 +122,9 @@ class RepositoryAssessment:
 @dataclass(frozen=True)
 class _AssessmentCalculation:
     assessment: RepositoryAssessment
-    content_plan: SynchronizationPlan | None
+    content_reconciliation: ContentReconciliation | None
     github_snapshot: GitHubSnapshot | None
-    github_delta: LiveDesiredStateDelta | None
+    github_reconciliation: GitHubReconciliation | None
     remote_blockers: tuple[AssessmentEntry, ...]
 
 
@@ -153,15 +153,15 @@ def _calculate_assessment(
     maintainer_work: list[MaintainerWork] = []
     preservation: list[AssessmentEntry] = []
     lifecycle: RepositoryLifecycle | None = None
-    content_plan: SynchronizationPlan | None = None
+    content_reconciliation: ContentReconciliation | None = None
     github_snapshot: GitHubSnapshot | None = None
-    github_delta: LiveDesiredStateDelta | None = None
+    github_reconciliation: GitHubReconciliation | None = None
     remote_blockers: list[AssessmentEntry] = []
 
     if scope in {AssessmentScope.REPOSITORY, AssessmentScope.CONTENT}:
-        plan = plan_synchronization(contract)
-        content_plan = plan
-        for operation in plan.operations:
+        reconciliation = calculate_content_reconciliation(contract)
+        content_reconciliation = reconciliation
+        for operation in reconciliation.operations:
             if operation.status == "ok":
                 satisfied.append(
                     AssessmentEntry(
@@ -184,7 +184,7 @@ def _calculate_assessment(
                     operation.target,
                 )
             )
-        for blocker in plan.blockers:
+        for blocker in reconciliation.blockers:
             differences.append(
                 AssessmentEntry("repository-content", blocker.message)
             )
@@ -244,7 +244,7 @@ def _calculate_assessment(
     if scope in {AssessmentScope.REPOSITORY, AssessmentScope.GITHUB}:
         try:
             snapshot = github_adapter.observe(
-                contract, lifecycle=LiveLifecycle.PUBLISHED
+                contract, lifecycle=GitHubLifecycle.PUBLISHED
             )
         except StandardsError as exc:
             evidence_gaps.append(
@@ -274,25 +274,25 @@ def _calculate_assessment(
                     )
                 else:
                     try:
-                        delta = reconcile_live_github(
+                        reconciliation = reconcile_github(
                             contract,
                             replace(
                                 snapshot,
-                                lifecycle=LiveLifecycle(lifecycle.value),
+                                lifecycle=GitHubLifecycle(lifecycle.value),
                             ),
                         )
                     except StandardsError as exc:
                         evidence_gaps.append(AssessmentEntry("github", str(exc)))
                     else:
-                        github_delta = delta
-                        if not delta.differences:
+                        github_reconciliation = reconciliation
+                        if not reconciliation.differences:
                             satisfied.append(
                                 AssessmentEntry(
                                     "github",
                                     "declared GitHub state satisfies its contract",
                                 )
                             )
-                        for difference in delta.differences:
+                        for difference in reconciliation.differences:
                             for finding in difference.findings:
                                 differences.append(AssessmentEntry("github", finding))
                             for blocker in difference.blockers:
@@ -385,9 +385,9 @@ def _calculate_assessment(
             preservation_evidence=tuple(preservation),
             application_report=application_report,
         ),
-        content_plan,
+        content_reconciliation,
         github_snapshot,
-        github_delta,
+        github_reconciliation,
         tuple(remote_blockers),
     )
 
@@ -407,11 +407,11 @@ def assess_repository(
     ).assessment
 
 
-def _operation_action(operation: SynchronizationOperation) -> str:
+def _operation_action(operation: ContentCorrection) -> str:
     return f"{_operation_kind(operation).value.upper()} {operation.target}"
 
 
-def _operation_kind(operation: SynchronizationOperation) -> CorrectionKind:
+def _operation_kind(operation: ContentCorrection) -> CorrectionKind:
     if operation.mode == "absent":
         return CorrectionKind.DELETE
     if operation.status == "missing":
@@ -435,9 +435,9 @@ def _same_observation(
     earlier: _AssessmentCalculation, later: _AssessmentCalculation
 ) -> bool:
     return (
-        earlier.content_plan == later.content_plan
+        earlier.content_reconciliation == later.content_reconciliation
         and earlier.github_snapshot == later.github_snapshot
-        and earlier.github_delta == later.github_delta
+        and earlier.github_reconciliation == later.github_reconciliation
         and earlier.assessment == later.assessment
     )
 
@@ -461,9 +461,9 @@ def _blocking_evidence_gaps(
 def _github_repair_permission_error(
     calculation: _AssessmentCalculation,
 ) -> str | None:
-    delta = calculation.github_delta
+    reconciliation = calculation.github_reconciliation
     snapshot = calculation.github_snapshot
-    if delta is None or snapshot is None or not delta.operations:
+    if reconciliation is None or snapshot is None or not reconciliation.operations:
         return None
     permissions = snapshot.repository.get("permissions")
     if not isinstance(permissions, dict):
@@ -507,7 +507,7 @@ def repair_repository(
 
     blocking_gaps = _blocking_evidence_gaps(initial.assessment)
     content_blockers = (
-        initial.content_plan.blockers if initial.content_plan is not None else ()
+        initial.content_reconciliation.blockers if initial.content_reconciliation is not None else ()
     )
     permission_error = _github_repair_permission_error(initial)
     if (
@@ -538,11 +538,11 @@ def repair_repository(
         return replace(current.assessment, application_report=report)
 
     completed: list[str] = []
-    if current.content_plan is not None:
-        local_report = apply_synchronization_plan(current.content_plan)
+    if current.content_reconciliation is not None:
+        local_report = apply_content_reconciliation(current.content_reconciliation)
         completed.extend(
             f"repository-content: {_operation_action(operation)}"
-            for operation in current.content_plan.changes
+            for operation in current.content_reconciliation.changes
             if operation.target in local_report.completed
         )
         if not local_report.succeeded:
@@ -554,14 +554,14 @@ def repair_repository(
                 remaining=(
                     *(
                         f"repository-content: {_operation_action(operation)}"
-                        for operation in current.content_plan.changes
+                        for operation in current.content_reconciliation.changes
                         if operation.target in local_report.remaining
                     ),
                     *(
                         f"github: {operation.description}"
                         for operation in (
-                            current.github_delta.operations
-                            if current.github_delta is not None
+                            current.github_reconciliation.operations
+                            if current.github_reconciliation is not None
                             else ()
                         )
                     ),
@@ -571,13 +571,13 @@ def repair_repository(
                 contract, github_adapter, scope, report
             )
 
-    if current.github_delta is not None and current.github_delta.operations:
-        live_current = _calculate_assessment(
+    if current.github_reconciliation is not None and current.github_reconciliation.operations:
+        github_current = _calculate_assessment(
             contract, github_adapter, scope=AssessmentScope.GITHUB
         )
         if (
-            live_current.github_snapshot != current.github_snapshot
-            or live_current.github_delta != current.github_delta
+            github_current.github_snapshot != current.github_snapshot
+            or github_current.github_reconciliation != current.github_reconciliation
         ):
             report = ApplicationReport(
                 completed=tuple(completed),
@@ -585,27 +585,27 @@ def repair_repository(
                 error="GitHub state changed after preview; run repair again",
                 remaining=tuple(
                     f"github: {operation.description}"
-                    for operation in current.github_delta.operations
+                    for operation in current.github_reconciliation.operations
                 ),
             )
             return _reassess_with_report(
                 contract, github_adapter, scope, report
             )
 
-        live_report = apply_live_delta(current.github_delta, github_adapter)
+        github_report = apply_github_reconciliation(current.github_reconciliation, github_adapter)
         completed.extend(
             f"github: {operation.description}"
-            for operation in live_report.completed
+            for operation in github_report.completed
         )
-        if not live_report.complete:
-            assert live_report.failed is not None
+        if not github_report.complete:
+            assert github_report.failed is not None
             report = ApplicationReport(
                 completed=tuple(completed),
-                failed=f"github: {live_report.failed.description}",
-                error=live_report.error,
+                failed=f"github: {github_report.failed.description}",
+                error=github_report.error,
                 remaining=tuple(
                     f"github: {operation.description}"
-                    for operation in live_report.remaining
+                    for operation in github_report.remaining
                 ),
             )
             return _reassess_with_report(

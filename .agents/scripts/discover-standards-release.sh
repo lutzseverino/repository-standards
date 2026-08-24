@@ -182,7 +182,7 @@ if [ "$#" -eq 2 ] && [ "$1" = "--notice" ]; then
     printf 'Repository standards update available: %s → %s.\n\n' \
         "$adopted" "$available"
     printf 'Start a new session in this repository and enter:\n'
-    printf 'adopt-repository-standards %s\n' "$available"
+    printf 'adopt-standards %s\n' "$available"
     exit 0
 fi
 

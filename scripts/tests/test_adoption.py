@@ -166,10 +166,16 @@ class AdoptionCommandTests(unittest.TestCase):
                     raise SystemExit(2)
                 managed = repository / "managed.txt"
                 obsolete = repository / "obsolete.txt"
+                current_adapter = repository / ".agents/skills/adopt-standards/SKILL.md"
                 expected = f"managed by {version}\\n"
-                drift = not managed.is_file() or managed.read_text() != expected or obsolete.exists()
+                drift = (
+                    not managed.is_file()
+                    or managed.read_text() != expected
+                    or obsolete.exists()
+                    or not current_adapter.is_file()
+                )
                 if goal == "check":
-                    if os.environ.get("FAKE_LIVE_AUDIT_FAILURE") and not drift:
+                    if os.environ.get("FAKE_GITHUB_CHECK_FAILURE") and not drift:
                         print("Conclusion: unverified")
                         raise SystemExit(2)
                     if "--json" in sys.argv:
@@ -200,121 +206,17 @@ class AdoptionCommandTests(unittest.TestCase):
                     print(f"unsupported goal: {goal}", file=sys.stderr)
                     raise SystemExit(2)
                 print("Assessment before repair:")
-                if os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
-                    print("live write failed", file=sys.stderr)
+                if os.environ.get("FAKE_GITHUB_WRITE_FAILURE"):
+                    print("GitHub write failed", file=sys.stderr)
                     raise SystemExit(2)
                 managed.write_text(expected, encoding="utf-8")
                 if obsolete.exists():
                     obsolete.unlink()
+                current_adapter.parent.mkdir(parents=True, exist_ok=True)
+                current_adapter.write_text(
+                    "---\\nname: adopt-standards\\n---\\n", encoding="utf-8"
+                )
                 print("Assessment after repair:\\nConclusion: standards-complete")
-            """,
-            "sync": """\
-                #!/usr/bin/env python3
-                import argparse
-                import json
-                from pathlib import Path
-                import sys
-
-                parser = argparse.ArgumentParser()
-                parser.add_argument("--write", action="store_true")
-                parser.add_argument("repository")
-                args = parser.parse_args()
-                repository = Path(args.repository)
-                manifest = json.loads(
-                    (repository / ".repository-standards.json").read_text(encoding="utf-8")
-                )
-                if manifest.get("standards-version") != 5:
-                    print("error: unsupported standards-version", file=sys.stderr)
-                    raise SystemExit(2)
-                if "managed.txt" in manifest.get("repository-owned", []):
-                    print(
-                        "error: managed target 'managed.txt' conflicts with repository-owned pattern",
-                        file=sys.stderr,
-                    )
-                    raise SystemExit(2)
-                expected = "managed by " + manifest["standards-release"] + "\\n"
-                managed = repository / "managed.txt"
-                obsolete = repository / "obsolete.txt"
-                changes = []
-                if not managed.is_file() or managed.read_text(encoding="utf-8") != expected:
-                    changes.append("WRITE    managed.txt")
-                if obsolete.exists():
-                    changes.append("DELETE   obsolete.txt")
-                if args.write:
-                    managed.write_text(expected, encoding="utf-8")
-                    if obsolete.exists():
-                        obsolete.unlink()
-                    print(f"Synchronized {len(changes)} managed file(s)")
-                    raise SystemExit(0)
-                for change in changes:
-                    print(change)
-                if changes:
-                    print(f"Preview: {len(changes)} managed file(s) would change.")
-                    raise SystemExit(1)
-                print("All managed files are current")
-            """,
-            "audit": """\
-                #!/usr/bin/env python3
-                import json
-                import os
-                from pathlib import Path
-                import sys
-
-                repository = Path(sys.argv[-1])
-                if "--json" in sys.argv:
-                    print(
-                        json.dumps(
-                            {
-                                "files": [
-                                    {"path": "obsolete.txt", "mode": "absent"}
-                                ]
-                            }
-                        )
-                    )
-                    raise SystemExit(1)
-                manifest = json.loads(
-                    (repository / ".repository-standards.json").read_text(encoding="utf-8")
-                )
-                version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
-                clean = (
-                    manifest["standards-release"] == version
-                    and (repository / "managed.txt").read_text() == f"managed by {version}\\n"
-                    and not (repository / "obsolete.txt").exists()
-                )
-                if os.environ.get("FAKE_OFFLINE_AUDIT_FAILURE"):
-                    clean = False
-                print("Offline audit clean" if clean else "Offline audit failed")
-                raise SystemExit(0 if clean else 1)
-            """,
-            "sync-live": """\
-                #!/usr/bin/env python3
-                import os
-                from pathlib import Path
-                import sys
-
-                version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
-                mode = "write" if "--write" in sys.argv else "preview"
-                with open(os.environ["FAKE_RELEASE_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"sync-live {mode} {version}\\n")
-                print(f"LIVE {mode.upper()} {version}")
-                if mode == "write" and os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
-                    print("live write failed", file=sys.stderr)
-                    raise SystemExit(2)
-                raise SystemExit(0 if mode == "write" else 1)
-            """,
-            "audit-live": """\
-                #!/usr/bin/env python3
-                import os
-                from pathlib import Path
-                import sys
-
-                version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
-                with open(os.environ["FAKE_RELEASE_LOG"], "a", encoding="utf-8") as handle:
-                    handle.write(f"audit-live {version}\\n")
-                if os.environ.get("FAKE_LIVE_AUDIT_FAILURE"):
-                    print("Live audit failed")
-                    raise SystemExit(1)
-                print("Live audit clean")
             """,
         }
         for name, content in tools.items():
@@ -493,6 +395,87 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
         self.assertIn("validated adoption commit", result.stdout)
 
+    def test_v4_bootstrap_reaches_the_current_adoption_goal_without_wrappers(
+        self,
+    ) -> None:
+        manifest_path = self.repository / ".repository-standards.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["standards-release"] = "4.0.0"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+
+        source_prefix = Path(
+            "profiles/repository-lifecycle-skills/files"
+        )
+        listed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "v4.0.0",
+                str(source_prefix),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        v4_sources = {
+            Path(line)
+            for line in listed.stdout.splitlines()
+            if "/.agents/skills/" in line
+        }
+        current_sources = {
+            path.relative_to(ROOT)
+            for path in (ROOT / source_prefix).rglob("*")
+            if path.is_file() and "/.agents/skills/" in str(path)
+        }
+        removed_sources = v4_sources - current_sources
+        self.assertTrue(removed_sources)
+
+        for source in v4_sources:
+            blob = subprocess.run(
+                ["git", "-C", str(ROOT), "show", f"v4.0.0:{source}"],
+                check=True,
+                capture_output=True,
+            ).stdout
+            target = self.repository / source.relative_to(source_prefix)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(blob)
+        self.run_git("add", ".")
+        self.run_git("commit", "-qm", "representative v4 lifecycle adapters")
+
+        removed_targets = tuple(
+            self.repository / source.relative_to(source_prefix)
+            for source in sorted(removed_sources)
+        )
+        for target in removed_targets:
+            target.unlink()
+        self.run_git("add", "-u")
+        self.run_git("commit", "-qm", "bootstrap current task grammar")
+
+        source = self.create_release_source("5.0.0")
+        self.prepare_target_for_adoption()
+        release_log = self.directory / "release-tools.log"
+        result = self.run_standards_adopt(
+            "5.0.0",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+            },
+            validation_command="./check.sh",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(
+            (self.repository / ".agents/skills/adopt-standards/SKILL.md").is_file()
+        )
+        self.assertTrue(all(not target.exists() for target in removed_targets))
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
     def test_omitted_version_adopts_the_latest_stable_release(self) -> None:
         source = self.create_release_source()
         self.prepare_target_for_adoption()
@@ -543,7 +526,7 @@ class AdoptionCommandTests(unittest.TestCase):
 
     def test_reused_exact_checkout_must_also_be_clean(self) -> None:
         source = self.create_release_source()
-        (source / "scripts/sync").write_text(
+        (source / "scripts/standards").write_text(
             "#!/bin/sh\necho modified tooling\n", encoding="utf-8"
         )
 
@@ -554,7 +537,7 @@ class AdoptionCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("exact release checkout must be clean", result.stderr)
-        self.assertIn("scripts/sync", result.stderr)
+        self.assertIn("scripts/standards", result.stderr)
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
     def test_incompatible_manifest_protocol_fails_before_writes(
@@ -703,7 +686,7 @@ class AdoptionCommandTests(unittest.TestCase):
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
-                "FAKE_LIVE_AUDIT_FAILURE": "1",
+                "FAKE_GITHUB_CHECK_FAILURE": "1",
             },
             validation_command="./check.sh",
         )

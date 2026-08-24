@@ -55,7 +55,7 @@ class RepositoryContentPath(Enum):
 
 
 @dataclass(frozen=True)
-class PreparedLiveState:
+class PreparedGitHubState:
     summary: str
     findings: tuple[str, ...] = ()
 
@@ -171,10 +171,41 @@ def _checked_out_release(version: str, temporary_root: Path) -> Path:
         raise CreationError(
             f"release tag v{version} declares incompatible VERSION {declared!r}"
         )
-    for tool in ("init", "standards"):
-        if not (checkout / "scripts" / tool).is_file():
-            raise CreationError(f"release v{version} is missing scripts/{tool}")
+    standards = checkout / "scripts/standards"
+    if not standards.is_file() or not os.access(standards, os.X_OK):
+        raise CreationError(
+            f"release v{version} is missing executable scripts/standards"
+        )
     return checkout
+
+
+def _build_initial_contract(checkout: Path, input_path: Path) -> dict[str, object]:
+    result = subprocess.run(
+        [
+            str(checkout / "scripts/standards"),
+            "create",
+            "--contract-input",
+            str(input_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode != 0:
+        raise CreationError(
+            "cannot build initial repository contract: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise CreationError(
+            f"selected release returned an invalid initial contract: {exc}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise CreationError("selected release returned a non-object initial contract")
+    return value
 
 
 def _destination(value: str) -> Path:
@@ -537,9 +568,9 @@ def _tool(checkout: Path, name: str) -> str:
     return str(checkout / "scripts" / name)
 
 
-def _observe_prepared_live_state(
+def _observe_prepared_github_state(
     checkout: Path, destination: Path
-) -> PreparedLiveState:
+) -> PreparedGitHubState:
     try:
         result = subprocess.run(
             [
@@ -554,13 +585,13 @@ def _observe_prepared_live_state(
             text=True,
         )
     except OSError as exc:
-        return PreparedLiveState(
+        return PreparedGitHubState(
             "state unknown; retained-state observation could not run",
             (str(exc),),
         )
     diagnostic = result.stderr.strip() or result.stdout.strip()
     if result.returncode not in (0, 1, 2):
-        return PreparedLiveState(
+        return PreparedGitHubState(
             "state unknown; retained-state observation failed",
             (diagnostic or f"standards check exited {result.returncode}",),
         )
@@ -572,13 +603,13 @@ def _observe_prepared_live_state(
         corrections = report["automatic-corrections"]
         maintainer_work = report["required-maintainer-work"]
     except (json.JSONDecodeError, KeyError, TypeError):
-        return PreparedLiveState(
+        return PreparedGitHubState(
             "state unknown; retained-state observation was invalid",
             (diagnostic or "standards check returned no diagnostic",),
         )
     categories = (differences, evidence_gaps, corrections, maintainer_work)
     if lifecycle != "prepared" or not all(isinstance(items, list) for items in categories):
-        return PreparedLiveState(
+        return PreparedGitHubState(
             "state unknown; retained-state observation was invalid",
             (diagnostic or "standards check returned an incoherent assessment",),
         )
@@ -592,15 +623,15 @@ def _observe_prepared_live_state(
         if isinstance(item, dict)
     )
     if differences or evidence_gaps or corrections:
-        return PreparedLiveState("re-observed with applicable drift", findings)
+        return PreparedGitHubState("re-observed with applicable drift", findings)
     if any(
         isinstance(item, dict) and "first publication" in str(item.get("action"))
         for item in maintainer_work
     ):
-        return PreparedLiveState(
+        return PreparedGitHubState(
             "re-observed; applicable prepared state validated", findings
         )
-    return PreparedLiveState("re-observed; prepared live state validated")
+    return PreparedGitHubState("re-observed; prepared GitHub state validated")
 
 
 def _validate_prepared_content(checkout: Path, destination: Path) -> None:
@@ -693,7 +724,7 @@ def _retained_state(
     remote_state: RemoteState,
     remote_creation: RemoteCreationOutcome,
     origin_configured: bool,
-    live_state: PreparedLiveState,
+    github_state: PreparedGitHubState,
 ) -> None:
     print("\nRetained state after failure:", file=sys.stderr)
     print(
@@ -770,10 +801,10 @@ def _retained_state(
         file=sys.stderr,
     )
     print(
-        f"- prepared live reconciliation: {live_state.summary}",
+        f"- prepared GitHub reconciliation: {github_state.summary}",
         file=sys.stderr,
     )
-    for finding in live_state.findings:
+    for finding in github_state.findings:
         print(f"  - {finding}", file=sys.stderr)
     print("- no automatic deletion or rollback was attempted", file=sys.stderr)
 
@@ -799,7 +830,7 @@ def main() -> int:
     remote_creation = RemoteCreationOutcome.NOT_ATTEMPTED
     origin_configured = False
     local_state = "not created"
-    live_state = PreparedLiveState("not started")
+    github_state = PreparedGitHubState("not started")
     destination = Path(args.destination).expanduser()
     repository_name: str | None = None
     checkout: Path | None = None
@@ -866,27 +897,16 @@ def main() -> int:
                 json.dumps(initialization, indent=2) + "\n", encoding="utf-8"
             )
 
-            _run_phase(
-                "Initial contract preview",
-                [
-                    _tool(checkout, "init"),
-                    "--input",
-                    str(initialization_path),
-                    str(destination),
-                ],
-                cwd=temporary_root,
-                allowed=(0, 1),
+            initial_contract = _build_initial_contract(
+                checkout, initialization_path
             )
-            _run_phase(
-                "Initial contract write",
-                [
-                    _tool(checkout, "init"),
-                    "--input",
-                    str(initialization_path),
-                    "--write",
-                    str(destination),
-                ],
-                cwd=temporary_root,
+            print("Initial repository contract:")
+            print(json.dumps(initial_contract, indent=2))
+            destination = _destination(args.destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / ".repository-standards.json").write_text(
+                json.dumps(initial_contract, indent=2) + "\n",
+                encoding="utf-8",
             )
             local_state = "validated initial contract written"
             initialized = _git(destination, "init", "--quiet", "--initial-branch=main")
@@ -965,9 +985,9 @@ def main() -> int:
                 cwd=destination,
                 allowed=(1,),
             )
-            live_state = PreparedLiveState("applicable changes applied")
-            live_state = _observe_prepared_live_state(checkout, destination)
-            if live_state.summary != "re-observed; applicable prepared state validated":
+            github_state = PreparedGitHubState("applicable changes applied")
+            github_state = _observe_prepared_github_state(checkout, destination)
+            if github_state.summary != "re-observed; applicable prepared state validated":
                 raise CreationError(
                     "prepared repository assessment did not prove the creation baseline"
                 )
@@ -995,20 +1015,20 @@ def main() -> int:
             remote_state = _reobserve_github_repository(args.owner, repository_name)
         if remote_creation is RemoteCreationOutcome.CONFIRMED:
             if remote_state is RemoteState.CREATED and checkout is not None:
-                live_state = _observe_prepared_live_state(checkout, destination)
+                github_state = _observe_prepared_github_state(checkout, destination)
             elif remote_state is RemoteState.ABSENT:
-                live_state = PreparedLiveState(
+                github_state = PreparedGitHubState(
                     "not retained; GitHub repository is confirmed absent"
                 )
             else:
-                live_state = PreparedLiveState(
+                github_state = PreparedGitHubState(
                     "state unknown; GitHub repository could not be observed"
                 )
         elif (
             remote_creation is RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
             and remote_state is RemoteState.CREATED
         ):
-            live_state = PreparedLiveState(
+            github_state = PreparedGitHubState(
                 "not observed; repository attribution is unknown"
             )
         if destination.is_dir():
@@ -1022,7 +1042,7 @@ def main() -> int:
             remote_state=remote_state,
             remote_creation=remote_creation,
             origin_configured=origin_configured,
-            live_state=live_state,
+            github_state=github_state,
         )
         return 2
     finally:

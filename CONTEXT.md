@@ -74,8 +74,8 @@ _Avoid_: Unmanaged path, optional file
 **Standards adoption**:
 The deliberate work that brings a participating repository into full
 conformance with a specific standards release, including repository content
-and its declared live GitHub contract.
-_Avoid_: File synchronization, standards update
+and its declared GitHub contract.
+_Avoid_: File copying, standards update
 
 **Prepared creation baseline**:
 The uncommitted local repository content and empty GitHub repository produced
@@ -88,7 +88,7 @@ standards-complete repository.
 _Avoid_: GitHub delivery, initial delivery, repository creation
 
 **Standards-complete repository**:
-A published repository whose committed content and observed live GitHub state
+A published repository whose committed content and observed GitHub state
 satisfy every applicable rule of its selected standards release.
 _Avoid_: Lifecycle-relative conformance, prepared creation baseline
 
@@ -96,24 +96,25 @@ _Avoid_: Lifecycle-relative conformance, prepared creation baseline
 One complete account of how repository content and declared GitHub state
 compare with the selected standards release, including known differences,
 missing evidence, safe corrections, and required maintainer work.
-_Avoid_: Local audit, live audit, synchronization plan
+_Avoid_: Separate content and GitHub conformance operations
 
 **Selectable ecosystem profile**:
 The prepared-creation lifecycle treats an ecosystem profile as selectable only
-when it has explicit applicability and observable managed or audited behavior.
+when it has explicit applicability and observable managed or assessed behavior.
 Unenforced ecosystem guidance is not selectable.
 _Avoid_: Applicability label, ecosystem advice
 
-**Live desired-state delta**:
-The complete difference between a repository's applicable desired live
-contract and its observed GitHub state, shared by audit, synchronization, and
-lifecycle operations.
-_Avoid_: Audit-only findings, write-only plan
+**Declared GitHub reconciliation**:
+The complete difference between a repository's declared GitHub contract and
+its observed GitHub state, consumed by repository assessment and lifecycle
+operations.
+_Avoid_: Separate conformance result models, write-only correction lists
 
 **Canonical validation**:
 The single complete command that determines whether a change is ready for
-GitHub delivery.
-_Avoid_: Test suite, partial check, stronger quality gate
+GitHub delivery. It is distinct from a standards check, which determines
+repository conformance.
+_Avoid_: Standards check, test suite, partial check, stronger quality gate
 
 **Tracker reconciliation**:
 The work that updates or closes tracked work after its change reaches the

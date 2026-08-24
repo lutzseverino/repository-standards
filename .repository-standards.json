@@ -60,6 +60,6 @@
     "scripts/**",
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
-    ".github/workflows/standards-audit.yml"
+    ".github/workflows/standards-check.yml"
   ]
 }
