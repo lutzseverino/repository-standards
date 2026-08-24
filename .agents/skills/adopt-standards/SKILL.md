@@ -10,11 +10,11 @@ Prepare and commit one standards adoption without delivering it.
 
 1. Read repository guidance and identify its single canonical validation
    command. Stop and ask the user when no single command is documented.
-2. Run the repository goal interface, passing an exact
+2. Run the bundled adapter, passing an exact
    release when supplied and otherwise selecting the latest stable release:
 
    ```sh
-   scripts/standards adopt \
+   python3 .agents/skills/adopt-standards/scripts/adopt \
      --validation-command '<canonical validation command>' [VERSION]
    ```
 

@@ -510,15 +510,17 @@ def _preflight_github(
 
 def _run_phase(
     label: str,
-    command: list[str],
+    command: list[str] | str,
     *,
     cwd: Path,
     allowed: tuple[int, ...] = (0,),
+    shell: bool = False,
 ) -> None:
     print(f"\n== {label} ==")
     result = subprocess.run(
         command,
         cwd=cwd,
+        shell=shell,
         check=False,
         capture_output=True,
         text=True,
@@ -786,6 +788,7 @@ def main() -> int:
     parser.add_argument("--license", required=True)
     parser.add_argument("--owner", required=True)
     parser.add_argument("--destination", required=True)
+    parser.add_argument("--validation-command", required=True)
     parser.add_argument("--version")
     parser.add_argument("--fact", action="append", default=[])
     parser.add_argument("--profile", action="append", default=[])
@@ -913,6 +916,13 @@ def main() -> int:
             )
             _validate_prepared_content(checkout, destination)
             local_state = "offline baseline validated"
+            _run_phase(
+                "Canonical validation",
+                args.validation_command,
+                cwd=destination,
+                shell=True,
+            )
+            local_state = "canonical validation passed"
 
             remote_creation = RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
             created = _gh(

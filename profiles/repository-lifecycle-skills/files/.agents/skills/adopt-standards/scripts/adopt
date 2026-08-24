@@ -256,12 +256,12 @@ def _managed_absences(checkout: Path, preview: Path) -> list[str]:
         report = json.loads(result.stdout)
         corrections = report["automatic-corrections"]
         return sorted(
-            item["action"].removeprefix("DELETE ")
+            item["target"]
             for item in corrections
             if isinstance(item, dict)
-            and isinstance(item.get("action"), str)
-            and item["action"].startswith("DELETE ")
-            and item["action"] != "DELETE "
+            and item.get("kind") == "delete"
+            and isinstance(item.get("target"), str)
+            and item["target"]
         )
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise AdoptionError(

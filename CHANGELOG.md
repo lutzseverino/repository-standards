@@ -38,9 +38,15 @@ and standards releases use semantic versioning.
 
 ### Fixed
 
-- Derive ignored managed-absence targets from repository-assessment correction
-  actions so adoption rejects a present ignored target before repair can delete
-  it.
+- Derive ignored managed-absence targets from structured
+  repository-assessment correction evidence so adoption rejects a present
+  ignored target before repair can delete it.
+- Make every distributed lifecycle skill invoke its bundled adapter, including
+  a publication adapter that delegates to the exact selected release.
+- Remove retired adoption and first-publication skill files during profile
+  synchronization instead of leaving conflicting entry points behind.
+- Run the new repository's canonical validation before creation performs its
+  first remote mutation.
 
 ## [4.0.0] - 2026-08-16
 

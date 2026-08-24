@@ -8,10 +8,12 @@ disable-model-invocation: true
 
 Move one prepared creation baseline to a standards-complete repository.
 
-1. Run the selected release's goal interface from the prepared repository:
+1. Run the bundled adapter from the prepared repository. It obtains the exact
+   selected release and invokes that release's publication goal:
 
    ```sh
-   scripts/standards publish /ABSOLUTE/PATH/TO/REPOSITORY
+   python3 .agents/skills/publish-repository/scripts/publish \
+     /ABSOLUTE/PATH/TO/REPOSITORY
    ```
 
 2. Surface the complete lifecycle proposal, including the initial commit,
@@ -22,7 +24,8 @@ Move one prepared creation baseline to a standards-complete repository.
 3. Only after exact confirmation, invoke the same goal with the phrase:
 
    ```sh
-   scripts/standards publish /ABSOLUTE/PATH/TO/REPOSITORY \
+   python3 .agents/skills/publish-repository/scripts/publish \
+     /ABSOLUTE/PATH/TO/REPOSITORY \
      --confirm 'EXACT PHRASE FROM THE LIFECYCLE PROPOSAL'
    ```
 

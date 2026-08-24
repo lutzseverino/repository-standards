@@ -175,9 +175,19 @@ class AdoptionCommandTests(unittest.TestCase):
                     if "--json" in sys.argv:
                         corrections = []
                         if not managed.is_file() or managed.read_text() != expected:
-                            corrections.append({"subject": "repository-content", "action": "WRITE managed.txt"})
+                            corrections.append({
+                                "subject": "repository-content",
+                                "action": "WRITE managed.txt",
+                                "kind": "update",
+                                "target": "managed.txt",
+                            })
                         if obsolete.exists():
-                            corrections.append({"subject": "repository-content", "action": "DELETE obsolete.txt"})
+                            corrections.append({
+                                "subject": "repository-content",
+                                "action": "DELETE obsolete.txt",
+                                "kind": "delete",
+                                "target": "obsolete.txt",
+                            })
                         print(json.dumps({
                             "conclusion": "not-standards-complete" if drift else "standards-complete",
                             "lifecycle": "published",

@@ -12,18 +12,13 @@ import tempfile
 from pathlib import Path
 
 
-STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+STABLE_VERSION = re.compile(
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
+)
 
 
 class PublicationAdapterError(Exception):
     pass
-
-
-def _lexical_absolute_path(value: str) -> Path:
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    return path.parent.resolve() / path.name
 
 
 def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -33,17 +28,6 @@ def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
-
-
-def _repository_from_plan(path: Path) -> Path:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        repository = value["repository"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise PublicationAdapterError(f"cannot identify Plan repository: {exc}") from exc
-    if not isinstance(repository, str) or not repository:
-        raise PublicationAdapterError("Plan repository identity must be a string")
-    return Path(repository).expanduser().resolve()
 
 
 def _selected_release(repository: Path) -> str:
@@ -56,21 +40,21 @@ def _selected_release(repository: Path) -> str:
         )
         if (repository / name).is_file()
     ]
-    if len(candidates) != 1:
+    if len(candidates) != 1 or candidates[0].suffix != ".json":
         raise PublicationAdapterError(
-            "first publication requires exactly one repository standards manifest"
-        )
-    if candidates[0].suffix != ".json":
-        raise PublicationAdapterError(
-            "dependency-free first publication requires .repository-standards.json"
+            "publication requires exactly one dependency-free JSON standards manifest"
         )
     try:
         value = json.loads(candidates[0].read_text(encoding="utf-8"))
         release = value["standards-release"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise PublicationAdapterError(f"cannot read selected standards release: {exc}") from exc
+        raise PublicationAdapterError(
+            f"cannot read selected standards release: {exc}"
+        ) from exc
     if not isinstance(release, str) or not STABLE_VERSION.fullmatch(release):
-        raise PublicationAdapterError("selected standards release must be a stable semantic version")
+        raise PublicationAdapterError(
+            "selected standards release must be a stable semantic version"
+        )
     return release
 
 
@@ -84,17 +68,6 @@ def _checkout(release: str, temporary_root: Path) -> Path:
             "https://github.com/lutzseverino/repository-standards.git",
         )
         tag = f"v{release}"
-        exists = subprocess.run(
-            ["git", "ls-remote", "--exit-code", "--tags", source, f"refs/tags/{tag}"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if exists.returncode != 0:
-            raise PublicationAdapterError(
-                f"cannot prove stable release tag {tag}: "
-                + (exists.stderr.strip() or exists.stdout.strip())
-            )
         checkout = temporary_root / "standards"
         cloned = subprocess.run(
             [
@@ -134,42 +107,36 @@ def _checkout(release: str, temporary_root: Path) -> Path:
         raise PublicationAdapterError(
             f"release tag v{release} declares incompatible VERSION {declared!r}"
         )
-    tool = checkout / "scripts/first-publication"
+    tool = checkout / "scripts/standards"
     if not tool.is_file():
         raise PublicationAdapterError(
-            f"selected release {release} does not provide first publication"
+            f"selected release {release} does not provide the publication goal"
         )
     return checkout
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the selected release's first-publication operation")
-    subparsers = parser.add_subparsers(dest="operation", required=True)
-    plan_parser = subparsers.add_parser("plan")
-    plan_parser.add_argument("repository")
-    plan_parser.add_argument("--plan-file", required=True)
-    publish_parser = subparsers.add_parser("publish")
-    publish_parser.add_argument("--plan-file", required=True)
-    publish_parser.add_argument("--confirm", required=True)
+    parser = argparse.ArgumentParser(
+        description="Run the selected release's publication goal"
+    )
+    parser.add_argument("repository", nargs="?", default=".")
+    parser.add_argument("--confirm")
     args = parser.parse_args()
 
     try:
-        plan_file = _lexical_absolute_path(args.plan_file)
-        repository = (
-            Path(args.repository).expanduser().resolve()
-            if args.operation == "plan"
-            else _repository_from_plan(plan_file)
-        )
+        repository = Path(args.repository).expanduser().resolve()
         release = _selected_release(repository)
-        with tempfile.TemporaryDirectory(prefix="first-publication-release-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="repository-publication-release-"
+        ) as directory:
             checkout = _checkout(release, Path(directory))
-            command = [str(checkout / "scripts/first-publication"), args.operation]
-            if args.operation == "plan":
-                command.extend([str(repository), "--plan-file", str(plan_file)])
-            else:
-                command.extend(
-                    ["--plan-file", str(plan_file), "--confirm", args.confirm]
-                )
+            command = [
+                str(checkout / "scripts/standards"),
+                "publish",
+                str(repository),
+            ]
+            if args.confirm is not None:
+                command.extend(["--confirm", args.confirm])
             return subprocess.run(command, check=False).returncode
     except (PublicationAdapterError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

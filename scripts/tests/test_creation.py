@@ -28,6 +28,24 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.github_state.write_text('{"created": false}\n', encoding="utf-8")
         self.release = self.create_release()
         self.gh = self.create_fake_gh()
+        self.validation = self.directory / "validate"
+        self.validation.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env python3
+                import os
+                import sys
+
+                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
+                    handle.write("canonical validation\\n")
+                if os.environ.get("FAKE_CANONICAL_VALIDATION_FAILURE"):
+                    print("injected canonical validation failure", file=sys.stderr)
+                    raise SystemExit(1)
+                """
+            ),
+            encoding="utf-8",
+        )
+        self.validation.chmod(0o755)
 
     def create_release(self) -> Path:
         release = self.directory / "release"
@@ -455,6 +473,8 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 str(self.destination),
                 "--version",
                 "4.0.0",
+                "--validation-command",
+                str(self.validation),
                 *arguments,
             ],
             cwd=self.directory,
@@ -492,6 +512,8 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 str(self.destination),
                 "--version",
                 "4.0.0",
+                "--validation-command",
+                str(self.validation),
                 "--fact",
                 "ecosystem=unsupported",
                 "--fact",
@@ -560,9 +582,35 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "init write",
                 "standards repair content",
                 "standards check content",
+                "canonical validation",
                 "github create",
                 "standards repair repository",
                 "standards check repository",
+            ],
+        )
+
+    def test_canonical_validation_failure_stops_before_remote_creation(self) -> None:
+        result = self.run_create(
+            "--fact",
+            "ecosystem=unsupported",
+            "--fact",
+            "project-kind=application",
+            extra_environment={"FAKE_CANONICAL_VALIDATION_FAILURE": "1"},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Canonical validation failed", result.stderr)
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
+        self.assertEqual(
+            self.log.read_text(encoding="utf-8").splitlines(),
+            [
+                "init preview",
+                "init write",
+                "standards repair content",
+                "standards check content",
+                "canonical validation",
             ],
         )
 
@@ -1015,7 +1063,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("GitHub repository creation failed", result.stderr)
-        self.assertIn("offline baseline validated", result.stderr)
+        self.assertIn("canonical validation passed", result.stderr)
         self.assertIn(
             "GitHub repository: repository currently exists after an unconfirmed "
             "creation attempt; attribution unknown",

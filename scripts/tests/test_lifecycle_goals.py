@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -69,9 +70,146 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
         distributed = sorted(
             entry["target"].removeprefix(".agents/skills/")
             for entry in profile["files"]
-            if entry["target"].startswith(".agents/skills/")
+            if entry["mode"] == "tree"
+            and entry["target"].startswith(".agents/skills/")
         )
         self.assertEqual(distributed, inventory["bundle"]["skills"])
+
+    def test_lifecycle_profile_removes_every_retired_skill_file(self) -> None:
+        profile = json.loads(
+            (
+                ROOT / "profiles/repository-lifecycle-skills/profile.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        absences = {
+            entry["target"]
+            for entry in profile["files"]
+            if entry["mode"] == "absent"
+        }
+        self.assertEqual(
+            absences,
+            {
+                ".agents/skills/adopt-repository-standards/SKILL.md",
+                ".agents/skills/adopt-repository-standards/scripts/adopt",
+                ".agents/skills/first-publication/SKILL.md",
+                ".agents/skills/first-publication/scripts/publish",
+            },
+        )
+
+    def test_distributed_skills_invoke_bundled_adapters(self) -> None:
+        for name in (
+            "create-repository",
+            "publish-repository",
+            "adopt-standards",
+            "deliver-change",
+        ):
+            skill = (DISTRIBUTED_SKILLS / name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn("scripts/standards", skill, name)
+
+        for name, runner in (
+            ("create-repository", "create"),
+            ("publish-repository", "publish"),
+            ("adopt-standards", "adopt"),
+        ):
+            skill = (DISTRIBUTED_SKILLS / name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                f"python3 .agents/skills/{name}/scripts/{runner}",
+                skill,
+            )
+
+        self.assertTrue(
+            (
+                DISTRIBUTED_SKILLS
+                / "publish-repository/scripts/publish"
+            ).is_file()
+        )
+
+    def test_publication_adapter_invokes_the_selected_release_goal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "release"
+            scripts = release / "scripts"
+            scripts.mkdir(parents=True)
+            (release / "VERSION").write_text("1.2.3\n", encoding="utf-8")
+            log = root / "publication.log"
+            standards = scripts / "standards"
+            standards.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_PUBLICATION_LOG\"\n",
+                encoding="utf-8",
+            )
+            standards.chmod(0o755)
+            subprocess.run(
+                ["git", "init", "--quiet", "--initial-branch=main"],
+                cwd=release,
+                check=True,
+            )
+            subprocess.run(["git", "add", "."], cwd=release, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Test User",
+                    "-c",
+                    "user.email=test@example.com",
+                    "commit",
+                    "--quiet",
+                    "--message",
+                    "release",
+                ],
+                cwd=release,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "tag", "--no-sign", "v1.2.3"],
+                cwd=release,
+                check=True,
+            )
+            repository = root / "repository"
+            repository.mkdir()
+            repository = repository.resolve()
+            (repository / ".repository-standards.json").write_text(
+                '{"standards-release":"1.2.3"}\n', encoding="utf-8"
+            )
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "FAKE_PUBLICATION_LOG": str(log),
+                    "REPOSITORY_STANDARDS_CHECKOUT": str(release),
+                }
+            )
+            runner = (
+                DISTRIBUTED_SKILLS / "publish-repository/scripts/publish"
+            )
+
+            preview = subprocess.run(
+                [str(runner), str(repository)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            confirmed = subprocess.run(
+                [str(runner), str(repository), "--confirm", "exact phrase"],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(confirmed.returncode, 0, confirmed.stderr)
+            self.assertEqual(
+                log.read_text(encoding="utf-8").splitlines(),
+                [
+                    f"publish {repository}",
+                    f"publish {repository} --confirm exact phrase",
+                ],
+            )
 
     def test_publication_skill_hides_proposal_persistence(self) -> None:
         skill = (

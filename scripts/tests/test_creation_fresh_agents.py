@@ -41,7 +41,8 @@ class CreationFreshAgentTests(unittest.TestCase):
                 if arguments == ["--help"]:
                     print("usage: create --name NAME --purpose PURPOSE --visibility "
                           "VISIBILITY --license LICENSE --owner OWNER --destination "
-                          "DESTINATION [--fact FACT] [--profile PROFILE] [--version VERSION]")
+                          "DESTINATION --validation-command COMMAND [--fact FACT] "
+                          "[--profile PROFILE] [--version VERSION]")
                     raise SystemExit(0)
                 pathlib.Path(".creation-invoked").write_text(
                     "\\n".join(arguments) + "\\n", encoding="utf-8"
@@ -91,7 +92,9 @@ class CreationFreshAgentTests(unittest.TestCase):
         )
         runner.chmod(0o755)
         (self.repository / "AGENTS.md").write_text(
-            "# Agent guidance\n\nRespond in English.\n", encoding="utf-8"
+            "# Agent guidance\n\nRespond in English. The canonical validation "
+            "command for new repository baselines is `true`.\n",
+            encoding="utf-8",
         )
         subprocess.run(
             ["git", "-C", str(self.repository), "init", "-q", "-b", "main"],

@@ -18,20 +18,22 @@ Create one prepared creation baseline from settled repository facts.
    every selectable profile fully matches or conflicts with a settled fact.
    Express the license as an SPDX identifier or key from the selected standards
    release's pinned license catalog.
-2. Run the repository goal interface with those facts. Pass an exact release when
+2. Identify the new repository's canonical validation command. Run the bundled
+   adapter with that command and the settled facts. Pass an exact release when
    the user selected one; omit `--version` to select the latest stable release.
-   Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves an
-   ambiguous match, repeat `--profile NAME` for every explicitly selected
+   Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves
+   an ambiguous match, repeat `--profile NAME` for every explicitly selected
    ecosystem profile.
 
    ```sh
-   scripts/standards create \
+   python3 .agents/skills/create-repository/scripts/create \
      --name NAME \
      --purpose 'ONE LINE' \
      --visibility private \
      --license MIT \
      --owner OWNER \
      --destination /ABSOLUTE/PATH \
+     --validation-command 'CANONICAL VALIDATION COMMAND' \
      [--fact NAME=VALUE ...] [--profile NAME ...] [--version VERSION]
    ```
 

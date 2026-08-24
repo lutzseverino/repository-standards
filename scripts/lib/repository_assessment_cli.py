@@ -49,7 +49,12 @@ def assessment_mapping(assessment: RepositoryAssessment) -> dict[str, Any]:
         "differences": _entries(assessment.differences),
         "evidence-gaps": _entries(assessment.evidence_gaps),
         "automatic-corrections": [
-            {"subject": correction.subject, "action": correction.action}
+            {
+                "subject": correction.subject,
+                "action": correction.action,
+                "kind": correction.kind.value,
+                "target": correction.target,
+            }
             for correction in assessment.automatic_corrections
         ],
         "required-maintainer-work": [
@@ -194,6 +199,7 @@ def standards_main(
     create.add_argument("--license", required=True)
     create.add_argument("--owner", required=True)
     create.add_argument("--destination", default=".")
+    create.add_argument("--validation-command", required=True)
     create.add_argument("--version")
     create.add_argument("--fact", action="append", default=[])
     create.add_argument("--profile", action="append", default=[])
@@ -237,6 +243,8 @@ def standards_main(
             args.owner,
             "--destination",
             str(Path(args.destination).expanduser().resolve()),
+            "--validation-command",
+            args.validation_command,
         ]
         if args.version:
             command.extend(("--version", args.version))

@@ -245,6 +245,14 @@ responses.
     ) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
+        retired = (
+            ".agents/skills/adopt-repository-standards/SKILL.md",
+            ".agents/skills/adopt-repository-standards/scripts/adopt",
+            ".agents/skills/first-publication/SKILL.md",
+            ".agents/skills/first-publication/scripts/publish",
+        )
+        for relative in retired:
+            self.write_file(repository, relative, "retired lifecycle adapter\n")
 
         output = StringIO()
         with redirect_stdout(output):
@@ -254,7 +262,7 @@ responses.
             ("adopt-standards", "adopt"),
             ("create-repository", "create"),
             ("deliver-change", None),
-            ("publish-repository", None),
+            ("publish-repository", "publish"),
         ):
             skill = repository / f".agents/skills/{name}/SKILL.md"
             self.assertTrue(skill.is_file())
@@ -264,6 +272,8 @@ responses.
             skill_text = skill.read_text(encoding="utf-8")
             self.assertIn(f"name: {name}", skill_text)
             self.assertIn("disable-model-invocation: true", skill_text)
+        for relative in retired:
+            self.assertFalse((repository / relative).exists(), relative)
 
         inventory = json.loads(
             (

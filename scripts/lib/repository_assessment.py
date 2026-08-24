@@ -44,6 +44,15 @@ class AssessmentScope(str, Enum):
     GITHUB = "github"
 
 
+class CorrectionKind(str, Enum):
+    """Machine-readable automatic correction operation."""
+
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    APPLY = "apply"
+
+
 class RepositoryLifecycle(str, Enum):
     """The lifecycle state proven by repository evidence."""
 
@@ -72,6 +81,8 @@ class AssessmentEntry:
 class AutomaticCorrection:
     subject: str
     action: str
+    kind: CorrectionKind
+    target: str
 
 
 @dataclass(frozen=True)
@@ -167,7 +178,10 @@ def _calculate_assessment(
             )
             corrections.append(
                 AutomaticCorrection(
-                    "repository-content", _operation_action(operation)
+                    "repository-content",
+                    _operation_action(operation),
+                    _operation_kind(operation),
+                    operation.target,
                 )
             )
         for blocker in plan.blockers:
@@ -292,7 +306,10 @@ def _calculate_assessment(
                                 for operation in difference.operations:
                                     corrections.append(
                                         AutomaticCorrection(
-                                            "github", operation.description
+                                            "github",
+                                            operation.description,
+                                            CorrectionKind.APPLY,
+                                            operation.endpoint,
                                         )
                                     )
                             if difference.pending:
@@ -391,11 +408,15 @@ def assess_repository(
 
 
 def _operation_action(operation: SynchronizationOperation) -> str:
+    return f"{_operation_kind(operation).value.upper()} {operation.target}"
+
+
+def _operation_kind(operation: SynchronizationOperation) -> CorrectionKind:
     if operation.mode == "absent":
-        return f"DELETE {operation.target}"
+        return CorrectionKind.DELETE
     if operation.status == "missing":
-        return f"CREATE {operation.target}"
-    return f"UPDATE {operation.target}"
+        return CorrectionKind.CREATE
+    return CorrectionKind.UPDATE
 
 
 def _remaining_work(assessment: RepositoryAssessment) -> tuple[str, ...]:

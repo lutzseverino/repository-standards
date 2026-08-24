@@ -199,7 +199,8 @@ scripts/standards create \
   --visibility private \
   --license MIT \
   --owner example-owner \
-  --destination /path/to/parent
+  --destination /path/to/parent \
+  --validation-command scripts/validate
 scripts/standards publish /path/to/repository
 scripts/standards publish \
   --confirm 'EXACT PHRASE PRINTED BY THE LIFECYCLE PROPOSAL' \

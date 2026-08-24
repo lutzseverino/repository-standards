@@ -8,10 +8,10 @@ disable-model-invocation: true
 
 Carry one validated commit through review and into the default branch.
 
-1. Invoke `scripts/standards deliver` for the participating repository and
-   perform delivery preparation. Validate the exact candidate, preserve and
-   restore unrelated local state, push the head, and reuse or create a ready
-   pull request with an unambiguous non-closing tracked-work link.
+1. Perform delivery preparation through this adapter. Validate the exact
+   candidate, preserve and restore unrelated local state, push the head, and
+   reuse or create a ready pull request with an unambiguous non-closing
+   tracked-work link.
 2. Present one exact lifecycle proposal containing the pull request, prepared
    head, validation evidence, linked work, checks and review evidence, proposed
    squash merge, cleanup, warnings, and observed starting state. Stop for

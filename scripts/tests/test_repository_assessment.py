@@ -203,6 +203,13 @@ class RepositoryAssessmentTests(unittest.TestCase):
             [item.action for item in assessment.automatic_corrections],
             ["DELETE retired.txt"],
         )
+        self.assertEqual(
+            [
+                (item.kind.value, item.target)
+                for item in assessment.automatic_corrections
+            ],
+            [("delete", "retired.txt")],
+        )
 
     def test_symlinked_managed_path_blocks_repair_without_following_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
