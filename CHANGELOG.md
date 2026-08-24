@@ -19,6 +19,8 @@ and standards releases use semantic versioning.
   lifecycle profile into the current standards-adoption goal.
 - Prove the complete public surface, retired-interface absence, and concrete
   fresh-agent maintainer goals in dedicated tests.
+- Forward-test GitHub delivery preparation and confirmed completion through
+  isolated repositories, controlled GitHub responses, and confirmation gates.
 
 ### Changed
 
