@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Callable
+from typing import Callable, Protocol
 
 from .live_reconciliation import (
     GitHubAdapter,
@@ -49,6 +49,17 @@ class RepositoryLifecycle(str, Enum):
 
     PREPARED = "prepared"
     PUBLISHED = "published"
+
+
+class RepositoryObserver(Protocol):
+    """Read-only boundary required to calculate repository evidence."""
+
+    def observe(
+        self,
+        contract: RepositoryContract,
+        *,
+        lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED,
+    ) -> GitHubSnapshot: ...
 
 
 @dataclass(frozen=True)
@@ -117,7 +128,7 @@ def _infer_lifecycle(snapshot: GitHubSnapshot) -> RepositoryLifecycle | None:
 
 def _calculate_assessment(
     contract: RepositoryContract,
-    github_adapter: GitHubAdapter,
+    github_adapter: RepositoryObserver,
     *,
     scope: AssessmentScope = AssessmentScope.REPOSITORY,
     application_report: ApplicationReport | None = None,
@@ -366,7 +377,7 @@ def _calculate_assessment(
 
 def assess_repository(
     contract: RepositoryContract,
-    github_adapter: GitHubAdapter,
+    github_adapter: RepositoryObserver,
     *,
     scope: AssessmentScope = AssessmentScope.REPOSITORY,
 ) -> RepositoryAssessment:

@@ -83,7 +83,7 @@ skill has a one-time rollout order:
 2. Publish an immutable GitHub Release for the existing `v3.1.0` tag using its
    matching changelog section, then verify that the unauthenticated
    latest-release redirect resolves `v3.1.0`.
-3. Prepare and merge the introducing release on `main`, run `scripts/check`,
+3. Prepare and merge the introducing release on `main`, run `scripts/validate`,
    push its annotated stable tag, and wait for release automation to publish a
    non-draft, non-prerelease GitHub Release from the matching changelog section.
    Verify that the unauthenticated latest-release redirect now resolves the
@@ -99,7 +99,7 @@ skill has a one-time rollout order:
      the installed adoption runner once with the exact introducing version and
      once with the version omitted. Both runs must acquire the public release,
      prepare the repository changes, and pass the fixture's canonical
-     validation plus the release's offline and live audits.
+     validation plus the release's `standards check`.
 4. Hand each participating repository to its maintainer for the manual
    bootstrap described below. Older repositories do not contain the new skill,
    so they must not be told to invoke it for this first adoption.
@@ -110,52 +110,53 @@ repositories.
 
 ## Adopt a standards release
 
-Invoke `adopt-repository-standards VERSION` in the participating repository for
+Invoke `adopt-standards VERSION` in the participating repository for
 an exact stable release, or omit `VERSION` to select the latest stable GitHub
 Release. The skill requires a clean Git tree, obtains an isolated checkout of
 the exact tag, and uses that release's own tooling. It previews offline writes
 and deletions plus live labels, settings, and the named ruleset before applying
 them. The adoption is prepared only after the target's canonical validation and
-the release's offline and live audits pass.
+the selected release's final `standards check` passes.
 
-The skill leaves successful changes uncommitted and leaves the surrounding
-workflow and GitHub delivery to the user. Repository-owned conflicts and
-migrations stay explicit. Live application is idempotent; a partial failure
-reports completed and remaining operations and preserves the applied state for
-a safe rerun.
+The skill records successful adoption in a dedicated validated commit and
+leaves GitHub delivery as a separate operation. A failed validation or final
+standards check leaves applied changes uncommitted for diagnosis.
+Repository-owned conflicts and migrations stay explicit. Live application is
+idempotent; a partial failure reports completed and remaining operations and
+preserves the applied state for a safe rerun.
 
 The release that first introduces the lifecycle bundle requires one manual
 bootstrap. Check out that exact standards tag, update the target manifest,
-preview and apply `scripts/sync`, preview and apply `scripts/sync-live`, then run
-the target's canonical validation plus `scripts/audit` and `scripts/audit-live`.
+preview and apply the selected release's `standards repair`, then run the
+target's canonical validation and the selected release's `standards check`.
 Later releases use the installed adoption skill.
 
-## Drift checks
+## Standards checks
 
-An audit is meaningful only when the standards checkout matches the manifest's
-`standards-release`. The tool rejects a mismatch rather than silently comparing
-against newer or older content.
+A repository assessment is meaningful only when the standards checkout matches
+the manifest's `standards-release`. `standards check` rejects a mismatch rather
+than silently comparing against newer or older content.
 
-Teams may run audits locally or in CI from an exact public standards release.
-Target repository CI remains self-contained for its ordinary build and test
-gate.
+Teams may run `standards check` locally or in CI from an exact public standards
+release. Target repository CI remains self-contained for its ordinary build
+and test gate.
 
-Live audits require `gh` authentication and repository-settings visibility.
-Because GitHub hides ruleset bypass actors from callers without write access,
-auditing a declared ruleset also requires Administration write permission.
-Live writes additionally require Issues and Administration write permissions.
-Both operations remain intentionally separate from offline managed-file work.
-Audit findings and live synchronization operations are projections of one
-observed GitHub snapshot and one shared live desired-state delta.
+Checking declared GitHub state requires `gh` authentication and
+repository-settings visibility. Because GitHub hides ruleset bypass actors from
+callers without write access, assessing a declared ruleset also requires
+Administration write permission. Repairs additionally require Issues and
+Administration write permissions. Repository content and declared GitHub state
+are projections of one repository assessment and one shared live desired-state
+delta.
 
 The scheduled `Standards Audit` workflow covers participating repositories
 accessible with its repository token. Repositories owned elsewhere are
 excluded until a dedicated least-privilege GitHub App or fine-grained token is
-configured. Ruleset audits need Administration write permission solely because
+configured. Ruleset checks need Administration write permission solely because
 GitHub otherwise withholds bypass-actor data; personal maintainer tokens must
 not be reused as automation credentials.
 
-The scheduled audit validates each repository against its adopted release. It
+The scheduled workflow checks each repository against its adopted release. It
 does not announce that a newer standards release is available; release
 discovery and adoption remain separate maintenance work.
 

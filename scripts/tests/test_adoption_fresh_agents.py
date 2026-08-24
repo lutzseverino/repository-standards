@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SKILL_SOURCE = (
     ROOT
     / "profiles/repository-lifecycle-skills/files/.agents/skills"
-    / "adopt-repository-standards"
+    / "adopt-standards"
 )
 
 
@@ -27,7 +27,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.repository = Path(self.temporary.name) / "repository"
         self.repository.mkdir()
-        skill = self.repository / ".agents/skills/adopt-repository-standards"
+        skill = self.repository / ".agents/skills/adopt-standards"
         shutil.copytree(SKILL_SOURCE, skill)
         runner = skill / "scripts/adopt"
         runner.write_text(

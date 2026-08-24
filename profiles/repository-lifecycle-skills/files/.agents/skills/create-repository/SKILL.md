@@ -18,14 +18,14 @@ Create one prepared creation baseline from settled repository facts.
    every selectable profile fully matches or conflicts with a settled fact.
    Express the license as an SPDX identifier or key from the selected standards
    release's pinned license catalog.
-2. Run the bundled creation runner with those facts. Pass an exact release when
+2. Run the repository goal interface with those facts. Pass an exact release when
    the user selected one; omit `--version` to select the latest stable release.
    Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves an
    ambiguous match, repeat `--profile NAME` for every explicitly selected
    ecosystem profile.
 
    ```sh
-   python3 .agents/skills/create-repository/scripts/create \
+   scripts/standards create \
      --name NAME \
      --purpose 'ONE LINE' \
      --visibility private \
@@ -35,7 +35,7 @@ Create one prepared creation baseline from settled repository facts.
      [--fact NAME=VALUE ...] [--profile NAME ...] [--version VERSION]
    ```
 
-3. Surface the runner's previews, retained-state report, and recovery action.
+3. Surface the goal's assessment, retained-state report, and recovery action.
    Completion means an uncommitted baseline on unborn `main`, an empty GitHub
    repository configured as `origin`, and first publication still required.
    Use the exact canonical phrase `first publication` in the final report and

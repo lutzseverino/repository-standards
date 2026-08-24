@@ -171,7 +171,7 @@ def _checked_out_release(version: str, temporary_root: Path) -> Path:
         raise CreationError(
             f"release tag v{version} declares incompatible VERSION {declared!r}"
         )
-    for tool in ("init", "sync", "audit", "sync-live", "audit-live"):
+    for tool in ("init", "standards"):
         if not (checkout / "scripts" / tool).is_file():
             raise CreationError(f"release v{version} is missing scripts/{tool}")
     return checkout
@@ -541,9 +541,8 @@ def _observe_prepared_live_state(
     try:
         result = subprocess.run(
             [
-                _tool(checkout, "audit-live"),
-                "--lifecycle",
-                "prepared",
+                _tool(checkout, "standards"),
+                "check",
                 "--json",
                 str(destination),
             ],
@@ -558,45 +557,78 @@ def _observe_prepared_live_state(
             (str(exc),),
         )
     diagnostic = result.stderr.strip() or result.stdout.strip()
-    if result.returncode not in (0, 1):
+    if result.returncode not in (0, 1, 2):
         return PreparedLiveState(
             "state unknown; retained-state observation failed",
-            (diagnostic or f"audit-live exited {result.returncode}",),
+            (diagnostic or f"standards check exited {result.returncode}",),
         )
     try:
         report = json.loads(result.stdout)
-        errors = report["errors"]
-        pending = report["pending"]
-        applicable_clean = report["applicable-clean"]
+        lifecycle = report["lifecycle"]
+        differences = report["differences"]
+        evidence_gaps = report["evidence-gaps"]
+        corrections = report["automatic-corrections"]
+        maintainer_work = report["required-maintainer-work"]
     except (json.JSONDecodeError, KeyError, TypeError):
         return PreparedLiveState(
             "state unknown; retained-state observation was invalid",
-            (diagnostic or "audit-live returned no diagnostic",),
+            (diagnostic or "standards check returned no diagnostic",),
         )
-    if (
-        not isinstance(errors, list)
-        or not all(isinstance(finding, str) for finding in errors)
-        or not isinstance(pending, list)
-        or not all(isinstance(finding, str) for finding in pending)
-        or not isinstance(applicable_clean, bool)
-        or applicable_clean != (not errors)
-        or result.returncode != (1 if errors else 0)
-    ):
+    categories = (differences, evidence_gaps, corrections, maintainer_work)
+    if lifecycle != "prepared" or not all(isinstance(items, list) for items in categories):
         return PreparedLiveState(
             "state unknown; retained-state observation was invalid",
-            (diagnostic or "audit-live returned an incoherent report",),
+            (diagnostic or "standards check returned an incoherent assessment",),
         )
     findings = tuple(
-        [f"applicable drift: {finding}" for finding in errors]
-        + [f"publication pending: {finding}" for finding in pending]
+        f"applicable drift: {item.get('description') or item.get('action')}"
+        for item in (*differences, *evidence_gaps, *corrections)
+        if isinstance(item, dict)
+    ) + tuple(
+        f"publication pending: {item.get('action')}"
+        for item in maintainer_work
+        if isinstance(item, dict)
     )
-    if errors:
+    if differences or evidence_gaps or corrections:
         return PreparedLiveState("re-observed with applicable drift", findings)
-    if pending:
+    if any(
+        isinstance(item, dict) and "first publication" in str(item.get("action"))
+        for item in maintainer_work
+    ):
         return PreparedLiveState(
             "re-observed; applicable prepared state validated", findings
         )
     return PreparedLiveState("re-observed; prepared live state validated")
+
+
+def _validate_prepared_content(checkout: Path, destination: Path) -> None:
+    result = subprocess.run(
+        [
+            _tool(checkout, "standards"),
+            "check",
+            "--scope",
+            "content",
+            "--json",
+            str(destination),
+        ],
+        cwd=destination,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    try:
+        assessment = json.loads(result.stdout)
+        differences = assessment["differences"]
+        corrections = assessment["automatic-corrections"]
+        maintainer_work = assessment["required-maintainer-work"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CreationError("prepared content assessment was invalid") from exc
+    if result.returncode != 2 or differences or corrections or maintainer_work:
+        raise CreationError("prepared repository content is not fully reconciled")
 
 
 def _write_repository_content(
@@ -757,6 +789,7 @@ def main() -> int:
     parser.add_argument("--version")
     parser.add_argument("--fact", action="append", default=[])
     parser.add_argument("--profile", action="append", default=[])
+    parser.add_argument("--release-root", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     remote_state = RemoteState.NOT_ATTEMPTED
@@ -802,7 +835,15 @@ def main() -> int:
         # Retain the selected release until failure-state observation completes.
         with nullcontext(temporary_checkout.name) as directory:
             temporary_root = Path(directory)
-            checkout = _checked_out_release(selected_version, temporary_root)
+            if args.release_root:
+                checkout = Path(args.release_root).expanduser().resolve()
+                declared = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+                if declared != selected_version:
+                    raise CreationError(
+                        f"active release declares {declared!r}, not {selected_version!r}"
+                    )
+            else:
+                checkout = _checked_out_release(selected_version, temporary_root)
             license_identifier, license_text = _resolve_license(
                 checkout, args.license, args.owner
             )
@@ -859,21 +900,18 @@ def main() -> int:
             )
             local_state = "unborn main with repository-owned content"
             _run_phase(
-                "Offline synchronization preview",
-                [_tool(checkout, "sync"), str(destination)],
+                "Prepared content repair",
+                [
+                    _tool(checkout, "standards"),
+                    "repair",
+                    "--scope",
+                    "content",
+                    str(destination),
+                ],
                 cwd=destination,
-                allowed=(0, 1),
+                allowed=(2,),
             )
-            _run_phase(
-                "Offline synchronization write",
-                [_tool(checkout, "sync"), "--write", str(destination)],
-                cwd=destination,
-            )
-            _run_phase(
-                "Offline standards audit",
-                [_tool(checkout, "audit"), str(destination)],
-                cwd=destination,
-            )
+            _validate_prepared_content(checkout, destination)
             local_state = "offline baseline validated"
 
             remote_creation = RemoteCreationOutcome.ATTEMPTED_UNCONFIRMED
@@ -908,42 +946,21 @@ def main() -> int:
             origin_configured = True
 
             _run_phase(
-                "Prepared live synchronization preview",
+                "Prepared repository repair",
                 [
-                    _tool(checkout, "sync-live"),
-                    "--lifecycle",
-                    "prepared",
+                    _tool(checkout, "standards"),
+                    "repair",
                     str(destination),
                 ],
                 cwd=destination,
-                allowed=(0, 1),
-            )
-            live_state = PreparedLiveState("preview completed")
-            _run_phase(
-                "Prepared live synchronization write",
-                [
-                    _tool(checkout, "sync-live"),
-                    "--lifecycle",
-                    "prepared",
-                    "--write",
-                    str(destination),
-                ],
-                cwd=destination,
+                allowed=(1,),
             )
             live_state = PreparedLiveState("applicable changes applied")
-            _run_phase(
-                "Prepared live standards audit",
-                [
-                    _tool(checkout, "audit-live"),
-                    "--lifecycle",
-                    "prepared",
-                    str(destination),
-                ],
-                cwd=destination,
-            )
-            live_state = PreparedLiveState(
-                "validated; publication requirements pending"
-            )
+            live_state = _observe_prepared_live_state(checkout, destination)
+            if live_state.summary != "re-observed; applicable prepared state validated":
+                raise CreationError(
+                    "prepared repository assessment did not prove the creation baseline"
+                )
 
         head = _git(destination, "rev-parse", "--verify", "HEAD")
         if head.returncode == 0:

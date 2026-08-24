@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+python3 -m compileall -q scripts
+python3 .github/scripts/check-workflows.py
+python3 -m unittest discover -s scripts/tests -v
+scripts/changelog validate
+
+validation_assessment_file="$(mktemp)"
+trap 'rm -f "$validation_assessment_file"' EXIT
+validation_assessment_status=0
+scripts/standards check --scope content --json . >"$validation_assessment_file" \
+  || validation_assessment_status=$?
+if [[ "$validation_assessment_status" -ne 2 ]]; then
+  cat "$validation_assessment_file" >&2
+  exit "$validation_assessment_status"
+fi
+python3 - "$validation_assessment_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+assessment = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+problems = [
+    *assessment["differences"],
+    *assessment["automatic-corrections"],
+    *assessment["required-maintainer-work"],
+]
+expected_gap = [{
+    "subject": "repository",
+    "description": "content-only assessment cannot prove repository completeness",
+}]
+if (
+    assessment["conclusion"] != "unverified"
+    or assessment["scope"] != "content"
+    or assessment["evidence-gaps"] != expected_gap
+    or problems
+):
+    print(json.dumps(assessment, indent=2), file=sys.stderr)
+    raise SystemExit("repository content does not pass standards check")
+print("Repository content passes standards check")
+PY
