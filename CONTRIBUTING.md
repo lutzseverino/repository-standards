@@ -75,8 +75,9 @@ before considering implementation complete.
 
 ### GitHub delivery
 
-Until the family-owned delivery skill is released, execute its accepted phases
-manually.
+Use the family-owned `deliver-change` skill to execute its accepted phases. The
+agent presents one exact lifecycle proposal and stops for explicit human
+confirmation between preparation and finalization.
 
 Prepare after implementation:
 

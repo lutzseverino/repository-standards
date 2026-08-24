@@ -98,7 +98,7 @@ completeness.
 
 Every created repository selects the mandatory `common` and `documentation`
 profiles. An ecosystem profile is selectable only when it declares explicit
-applicability and owns observable managed or audited behavior. Creation infers
+applicability and owns observable managed or assessed behavior. Creation infers
 the profile when exactly one selectable profile matches settled facts, uses
 only the mandatory baseline when none matches, and stops before mutation for
 explicit selection when multiple profiles match.
@@ -106,20 +106,22 @@ explicit selection when multiple profiles match.
 The family-owned `create-repository` skill is one execution adapter for this
 operation. It reuses settled facts and requires repository name, one-line
 purpose, visibility, and license to be explicit. The selected release's own
-initialization, offline synchronization and audit, and prepared-lifecycle live
-interfaces validate the baseline. Local and remote collisions and every other
-deterministic blocker are resolved before target mutation. Application-time
-failures retain recoverable work and report completed state without rollback.
+initialization, `standards repair`, canonical validation, and final
+`standards check` validate the baseline. Local and remote collisions and every
+other deterministic blocker are resolved before target mutation.
+Application-time failures retain recoverable work and report completed state
+without rollback.
 
 First publication is the separate next lifecycle operation. It owns the first
 commit, publication of `main`, default-branch establishment, applicable branch
 protection, and proof that the repository is standards-complete. Its read-only
-Plan records local content, commit metadata, repository identity, permissions,
-and observed GitHub state while previewing the complete ordered transition.
-Publish requires explicit human confirmation of that current Plan, rejects any
-changed input before mutation, retains successful work after partial failure,
-and creates no pull request. The family-owned `first-publication` skill is one
-execution adapter for this actor-neutral operation.
+lifecycle proposal records local content, commit metadata, repository identity,
+permissions, and observed GitHub state while previewing the complete ordered
+transition. Publication requires exact human confirmation of that current
+proposal, rejects any changed input before mutation, retains successful work
+after partial failure, and creates no pull request. The family-owned
+`publish-repository` skill is one execution adapter for this actor-neutral
+operation.
 
 ## Branch, commit, and implementation
 
@@ -149,8 +151,10 @@ jobs must collectively run every constituent check.
 
 ## GitHub delivery
 
-Until the family-owned delivery skill is released, contributors execute its
-accepted Prepare and Finalize phases manually.
+The family-owned `deliver-change` skill adapts the accepted Prepare and
+Finalize phases below. The public `standards deliver` goal routes execution to
+that agent-owned adapter because pull-request review and confirmation require
+the surrounding agent session.
 
 Prepare begins after implementation:
 

@@ -158,7 +158,8 @@ also supply exact `boundaries`, `dependency-updates`, `github`, `variables`,
 mutate the target.
 Local-fragment declarations are validated against selected compose targets
 without requiring their repository-owned source files to exist during
-initialization; author those sources before the first offline sync or audit.
+initialization; author those sources before the first `standards repair` or
+`standards check`.
 
 For a prepared creation baseline, repository assessment identifies the empty
 remote automatically. Applicable settings, features, and labels remain
@@ -166,39 +167,54 @@ repairable; default-branch and ruleset requirements are reported as pending
 first publication rather than as current.
 
 GitHub omits ruleset bypass actors from read responses unless the caller has
-write access to the ruleset. A complete live audit of a declared ruleset
-therefore requires Administration write permission and fails rather than
-reporting false conformance when that field is not observable.
+write access to the ruleset. A complete repository assessment of a declared
+ruleset therefore requires Administration write permission and returns an
+unverified conclusion rather than false conformance when that field is not
+observable.
 
-Participating repositories receive three user-invoked lifecycle skills.
-`adopt-repository-standards` prepares an exact or latest stable release through
-that release's own tools and leaves its changes uncommitted. `create-repository`
+Participating repositories receive four user-invoked lifecycle skills.
+`adopt-standards` adopts an exact or latest stable release through that
+release's own tools, validates the result, and records a dedicated adoption
+commit. `create-repository`
 reuses settled facts, asks only for missing explicit decisions, validates the
 local baseline before creating an empty GitHub repository, configures `origin`,
 and leaves uncommitted content on unborn `main`. License identifiers and text
-come from the selected release's pinned catalog. `first-publication` then
+come from the selected release's pinned catalog. `publish-repository` then
 previews the complete initial commit, publication of `main`, default-branch
 establishment, and live desired-state delta without target mutation. After the
-human explicitly confirms that current Plan, Publish revalidates its recorded
-inputs, performs the transition without a pull request, and proves the result
-standards-complete.
+human exactly confirms that lifecycle proposal, publication revalidates its
+recorded inputs, performs the transition without a pull request, and proves the
+result standards-complete. `deliver-change` separately prepares a validated
+commit and pull request for exact confirmation, then reverifies and completes
+delivery without editing implementation work.
 
-The actor-neutral first-publication command used by that skill is also
-available directly. Keep the Plan file outside the target repository:
+The actor-neutral lifecycle goals used by those skills are also available
+directly. Publication proposal state is private implementation state outside
+the participating repository:
 
 ```sh
-scripts/first-publication plan \
-  --plan-file /tmp/example-first-publication.json \
+scripts/standards create \
+  --name example \
+  --purpose 'One-line repository purpose' \
+  --visibility private \
+  --license MIT \
+  --owner example-owner \
+  --destination /path/to/parent \
+  --validation-command scripts/validate
+scripts/standards publish /path/to/repository
+scripts/standards publish \
+  --confirm 'EXACT PHRASE PRINTED BY THE LIFECYCLE PROPOSAL' \
   /path/to/repository
-scripts/first-publication publish \
-  --plan-file /tmp/example-first-publication.json \
-  --confirm 'EXACT PHRASE PRINTED BY PLAN'
+scripts/standards adopt VERSION \
+  --repository /path/to/repository \
+  --validation-command scripts/validate
+scripts/standards deliver /path/to/repository
 ```
 
 Run the canonical validation gate with:
 
 ```sh
-scripts/check
+scripts/validate
 ```
 
 ## Profiles
@@ -206,7 +222,7 @@ scripts/check
 | Profile | Use |
 | --- | --- |
 | `agent-skills` | Standard repository-local agent skills; inherited by `common` |
-| `repository-lifecycle-skills` | Family-owned adoption and creation skills; inherited by `common` |
+| `repository-lifecycle-skills` | Family-owned creation, publication, adoption, and delivery skills; inherited by `common` |
 | `common` | Every participating repository |
 | `documentation` | Repositories using the shared Diataxis documentation set |
 | `node-npm` | Standalone npm install units |

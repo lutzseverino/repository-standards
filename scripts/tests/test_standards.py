@@ -245,23 +245,35 @@ responses.
     ) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
+        retired = (
+            ".agents/skills/adopt-repository-standards/SKILL.md",
+            ".agents/skills/adopt-repository-standards/scripts/adopt",
+            ".agents/skills/first-publication/SKILL.md",
+            ".agents/skills/first-publication/scripts/publish",
+        )
+        for relative in retired:
+            self.write_file(repository, relative, "retired lifecycle adapter\n")
 
         output = StringIO()
         with redirect_stdout(output):
             self.assertEqual(sync_main(["--write", str(repository)]), 0)
 
         for name, runner_name in (
-            ("adopt-repository-standards", "adopt"),
+            ("adopt-standards", "adopt"),
             ("create-repository", "create"),
-            ("first-publication", "publish"),
+            ("deliver-change", None),
+            ("publish-repository", "publish"),
         ):
             skill = repository / f".agents/skills/{name}/SKILL.md"
-            runner = repository / f".agents/skills/{name}/scripts/{runner_name}"
             self.assertTrue(skill.is_file())
-            self.assertTrue(runner.is_file())
+            if runner_name:
+                runner = repository / f".agents/skills/{name}/scripts/{runner_name}"
+                self.assertTrue(runner.is_file())
             skill_text = skill.read_text(encoding="utf-8")
             self.assertIn(f"name: {name}", skill_text)
             self.assertIn("disable-model-invocation: true", skill_text)
+        for relative in retired:
+            self.assertFalse((repository / relative).exists(), relative)
 
         inventory = json.loads(
             (
@@ -278,9 +290,10 @@ responses.
         self.assertEqual(
             inventory["bundle"]["skills"],
             [
-                "adopt-repository-standards",
+                "adopt-standards",
                 "create-repository",
-                "first-publication",
+                "deliver-change",
+                "publish-repository",
             ],
         )
         license_text = (

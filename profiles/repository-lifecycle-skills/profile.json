@@ -3,7 +3,14 @@
   "description": "Repository-family-owned lifecycle skills",
   "extends": [],
   "files": [
-    {"mode": "tree", "source": "files/.agents/skills", "target": ".agents/skills"},
+    {"mode": "tree", "source": "files/.agents/skills/create-repository", "target": ".agents/skills/create-repository"},
+    {"mode": "tree", "source": "files/.agents/skills/publish-repository", "target": ".agents/skills/publish-repository"},
+    {"mode": "tree", "source": "files/.agents/skills/adopt-standards", "target": ".agents/skills/adopt-standards"},
+    {"mode": "tree", "source": "files/.agents/skills/deliver-change", "target": ".agents/skills/deliver-change"},
+    {"mode": "absent", "target": ".agents/skills/adopt-repository-standards/SKILL.md"},
+    {"mode": "absent", "target": ".agents/skills/adopt-repository-standards/scripts/adopt"},
+    {"mode": "absent", "target": ".agents/skills/first-publication/SKILL.md"},
+    {"mode": "absent", "target": ".agents/skills/first-publication/scripts/publish"},
     {"mode": "exact", "source": "files/.agents/repository-lifecycle-skills.json", "target": ".agents/repository-lifecycle-skills.json"},
     {"mode": "exact", "source": "files/.agents/licenses/repository-lifecycle-skills.txt", "target": ".agents/licenses/repository-lifecycle-skills.txt"}
   ]

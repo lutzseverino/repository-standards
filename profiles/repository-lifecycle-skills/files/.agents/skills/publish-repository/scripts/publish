@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+STABLE_VERSION = re.compile(
+    r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
+)
+
+
+class PublicationAdapterError(Exception):
+    pass
+
+
+def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _selected_release(repository: Path) -> str:
+    candidates = [
+        repository / name
+        for name in (
+            ".repository-standards.json",
+            ".repository-standards.yml",
+            ".repository-standards.yaml",
+        )
+        if (repository / name).is_file()
+    ]
+    if len(candidates) != 1 or candidates[0].suffix != ".json":
+        raise PublicationAdapterError(
+            "publication requires exactly one dependency-free JSON standards manifest"
+        )
+    try:
+        value = json.loads(candidates[0].read_text(encoding="utf-8"))
+        release = value["standards-release"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise PublicationAdapterError(
+            f"cannot read selected standards release: {exc}"
+        ) from exc
+    if not isinstance(release, str) or not STABLE_VERSION.fullmatch(release):
+        raise PublicationAdapterError(
+            "selected standards release must be a stable semantic version"
+        )
+    return release
+
+
+def _checkout(release: str, temporary_root: Path) -> Path:
+    reusable = os.environ.get("REPOSITORY_STANDARDS_CHECKOUT")
+    if reusable:
+        checkout = Path(reusable).expanduser().resolve()
+    else:
+        source = os.environ.get(
+            "REPOSITORY_STANDARDS_SOURCE",
+            "https://github.com/lutzseverino/repository-standards.git",
+        )
+        tag = f"v{release}"
+        checkout = temporary_root / "standards"
+        cloned = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                tag,
+                source,
+                str(checkout),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if cloned.returncode != 0:
+            raise PublicationAdapterError(
+                f"cannot obtain isolated checkout for {tag}: "
+                + (cloned.stderr.strip() or cloned.stdout.strip())
+            )
+    exact = _git(checkout, "describe", "--tags", "--exact-match", "HEAD")
+    if exact.returncode != 0 or exact.stdout.strip() != f"v{release}":
+        raise PublicationAdapterError(
+            f"standards checkout is not proven at exact tag v{release}"
+        )
+    status = _git(checkout, "status", "--porcelain=v1", "--untracked-files=all")
+    if status.returncode != 0 or status.stdout:
+        raise PublicationAdapterError("exact standards release checkout must be clean")
+    try:
+        declared = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise PublicationAdapterError(f"cannot read release VERSION: {exc}") from exc
+    if declared != release:
+        raise PublicationAdapterError(
+            f"release tag v{release} declares incompatible VERSION {declared!r}"
+        )
+    tool = checkout / "scripts/standards"
+    if not tool.is_file():
+        raise PublicationAdapterError(
+            f"selected release {release} does not provide the publication goal"
+        )
+    return checkout
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run the selected release's publication goal"
+    )
+    parser.add_argument("repository", nargs="?", default=".")
+    parser.add_argument("--confirm")
+    args = parser.parse_args()
+
+    try:
+        repository = Path(args.repository).expanduser().resolve()
+        release = _selected_release(repository)
+        with tempfile.TemporaryDirectory(
+            prefix="repository-publication-release-"
+        ) as directory:
+            checkout = _checkout(release, Path(directory))
+            command = [
+                str(checkout / "scripts/standards"),
+                "publish",
+                str(repository),
+            ]
+            if args.confirm is not None:
+                command.extend(["--confirm", args.confirm])
+            return subprocess.run(command, check=False).returncode
+    except (PublicationAdapterError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

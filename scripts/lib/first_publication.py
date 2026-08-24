@@ -24,6 +24,11 @@ from .live_reconciliation import (
     reconcile_live_github,
 )
 from .repository_contract import ContractError, RepositoryContract, resolve_repository_contract
+from .repository_assessment import (
+    AssessmentConclusion,
+    RepositoryLifecycle,
+    assess_repository,
+)
 from .standards import (
     StandardsError,
     inspect,
@@ -98,6 +103,21 @@ class PublicationReport:
             and self.uncertain is None
             and self.standards_complete
         )
+
+
+class _ObservedGitHubAdapter:
+    """Present one proposal-bound observation to repository assessment."""
+
+    def __init__(self, snapshot: GitHubSnapshot) -> None:
+        self.snapshot = snapshot
+
+    def observe(
+        self,
+        contract: RepositoryContract,
+        *,
+        lifecycle: LiveLifecycle = LiveLifecycle.PUBLISHED,
+    ) -> GitHubSnapshot:
+        return self.snapshot
 
 
 def _git(
@@ -723,6 +743,29 @@ def plan_first_publication(
         rulesets=snapshot.rulesets,
         lifecycle=LiveLifecycle.PREPARED,
     )
+    prepared_assessment = assess_repository(
+        contract, _ObservedGitHubAdapter(prepared_snapshot)
+    )
+    applicable_differences = tuple(
+        item
+        for item in prepared_assessment.differences
+        if "pending first publication" not in item.description
+    )
+    if (
+        prepared_assessment.lifecycle is not RepositoryLifecycle.PREPARED
+        or applicable_differences
+        or prepared_assessment.evidence_gaps
+        or prepared_assessment.automatic_corrections
+    ):
+        findings = (
+            *(item.description for item in applicable_differences),
+            *(item.description for item in prepared_assessment.evidence_gaps),
+            *(item.action for item in prepared_assessment.automatic_corrections),
+        )
+        raise PublicationError(
+            "prepared GitHub state has applicable drift"
+            + (":\n- " + "\n- ".join(findings) if findings else "")
+        )
     prepared_delta = reconcile_live_github(contract, prepared_snapshot)
     applicable_findings = tuple(
         finding
@@ -758,7 +801,7 @@ def plan_first_publication(
             live_delta=live_delta,
         )
     )
-    confirmation = f"Publish {repository_name} from plan {plan_id}"
+    confirmation = f"Publish {repository_name} from proposal {plan_id}"
     return PublicationPlan(
         plan_id=plan_id,
         repository=repository,
@@ -985,8 +1028,8 @@ def publication_plan_from_mapping(
     if plan_id != expected_id:
         raise PublicationError("publication Plan identity does not match its recorded inputs")
     confirmation = _string(root.get("confirmation"), "confirmation")
-    if confirmation != f"Publish {repository_name} from plan {plan_id}":
-        raise PublicationError("publication Plan confirmation is invalid")
+    if confirmation != f"Publish {repository_name} from proposal {plan_id}":
+        raise PublicationError("lifecycle proposal confirmation is invalid")
     expected_steps = _publication_steps(live_delta)
     if tuple(raw_steps) != expected_steps:
         raise PublicationError(
@@ -1207,7 +1250,9 @@ def _verify_live_state(
 ) -> str | None:
     try:
         snapshot = adapter.observe(contract, lifecycle=LiveLifecycle.PUBLISHED)
-        delta = reconcile_live_github(contract, snapshot)
+        assessment = assess_repository(
+            contract, _ObservedGitHubAdapter(snapshot)
+        )
         pulls = _collect_pages(
             adapter, f"repos/{plan.repository_name}/pulls?state=all"
         )
@@ -1215,9 +1260,16 @@ def _verify_live_state(
         return str(exc)
     if snapshot.repository.get("full_name") != plan.repository_name:
         return "re-observed GitHub repository identity changed"
-    if delta.findings:
-        return "live GitHub state remains non-conforming:\n- " + "\n- ".join(
-            delta.findings
+    if assessment.conclusion is not AssessmentConclusion.STANDARDS_COMPLETE:
+        findings = (
+            *(item.description for item in assessment.differences),
+            *(item.description for item in assessment.evidence_gaps),
+            *(item.action for item in assessment.required_maintainer_work),
+        )
+        return (
+            "final repository assessment is "
+            f"{assessment.conclusion.value}"
+            + (":\n- " + "\n- ".join(findings) if findings else "")
         )
     if not any(branch.get("name") == plan.branch for branch in snapshot.branches):
         return f"GitHub did not re-observe published branch {plan.branch!r}"

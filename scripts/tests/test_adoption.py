@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ADOPT = (
     ROOT
     / "profiles/repository-lifecycle-skills/files/.agents/skills"
-    / "adopt-repository-standards/scripts/adopt"
+    / "adopt-standards/scripts/adopt"
 )
 
 
@@ -99,6 +99,32 @@ class AdoptionCommandTests(unittest.TestCase):
             text=True,
         )
 
+    def run_standards_adopt(
+        self,
+        *arguments: str,
+        environment: dict[str, str] | None = None,
+        validation_command: str = "true",
+    ) -> subprocess.CompletedProcess[str]:
+        command_environment = os.environ.copy()
+        if environment:
+            command_environment.update(environment)
+        return subprocess.run(
+            [
+                str(ROOT / "scripts/standards"),
+                "adopt",
+                *arguments,
+                "--repository",
+                str(self.repository),
+                "--validation-command",
+                validation_command,
+            ],
+            cwd=self.repository,
+            env=command_environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
     def create_release_source(self, version: str = "2.0.0") -> Path:
         source = self.directory / f"standards-{version}"
         source.mkdir()
@@ -114,6 +140,74 @@ class AdoptionCommandTests(unittest.TestCase):
         scripts = source / "scripts"
         scripts.mkdir()
         tools = {
+            "standards": """\
+                #!/usr/bin/env python3
+                import json
+                import os
+                from pathlib import Path
+                import sys
+
+                goal = sys.argv[1]
+                repository = Path(sys.argv[-1])
+                version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
+                with open(os.environ["FAKE_RELEASE_LOG"], "a", encoding="utf-8") as handle:
+                    handle.write(f"standards {goal} {version}\\n")
+                manifest = json.loads(
+                    (repository / ".repository-standards.json").read_text(encoding="utf-8")
+                )
+                if manifest.get("standards-version") != 5:
+                    print("error: unsupported standards-version", file=sys.stderr)
+                    raise SystemExit(2)
+                if "managed.txt" in manifest.get("repository-owned", []):
+                    print(
+                        "error: managed target 'managed.txt' conflicts with repository-owned pattern",
+                        file=sys.stderr,
+                    )
+                    raise SystemExit(2)
+                managed = repository / "managed.txt"
+                obsolete = repository / "obsolete.txt"
+                expected = f"managed by {version}\\n"
+                drift = not managed.is_file() or managed.read_text() != expected or obsolete.exists()
+                if goal == "check":
+                    if os.environ.get("FAKE_LIVE_AUDIT_FAILURE") and not drift:
+                        print("Conclusion: unverified")
+                        raise SystemExit(2)
+                    if "--json" in sys.argv:
+                        corrections = []
+                        if not managed.is_file() or managed.read_text() != expected:
+                            corrections.append({
+                                "subject": "repository-content",
+                                "action": "WRITE managed.txt",
+                                "kind": "update",
+                                "target": "managed.txt",
+                            })
+                        if obsolete.exists():
+                            corrections.append({
+                                "subject": "repository-content",
+                                "action": "DELETE obsolete.txt",
+                                "kind": "delete",
+                                "target": "obsolete.txt",
+                            })
+                        print(json.dumps({
+                            "conclusion": "not-standards-complete" if drift else "standards-complete",
+                            "lifecycle": "published",
+                            "automatic-corrections": corrections,
+                        }))
+                    else:
+                        print("Conclusion: " + ("not-standards-complete" if drift else "standards-complete"))
+                    raise SystemExit(1 if drift else 0)
+                if goal != "repair":
+                    print(f"unsupported goal: {goal}", file=sys.stderr)
+                    raise SystemExit(2)
+                print("Assessment before repair:")
+                if os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
+                    print("live write failed", file=sys.stderr)
+                    raise SystemExit(2)
+                managed.write_text(expected, encoding="utf-8")
+                if obsolete.exists():
+                    obsolete.unlink()
+                print("Assessment after repair:\\nConclusion: standards-complete")
+            """,
             "sync": """\
                 #!/usr/bin/env python3
                 import argparse
@@ -328,13 +422,13 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertEqual(
             release_log.read_text(encoding="utf-8").splitlines(),
             [
-                "sync-live preview 1.0.0",
-                "sync-live write 1.0.0",
-                "audit-live 1.0.0",
+                "standards check 1.0.0",
+                "standards repair 1.0.0",
+                "standards check 1.0.0",
             ],
         )
 
-    def test_explicit_release_is_prepared_with_its_own_tools_and_left_uncommitted(
+    def test_explicit_release_uses_its_goal_interface_and_creates_a_validated_commit(
         self,
     ) -> None:
         source = self.create_release_source()
@@ -353,8 +447,7 @@ class AdoptionCommandTests(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
-        self.assertIn("DELETE   obsolete.txt", output)
-        self.assertIn("LIVE PREVIEW 2.0.0", output)
+        self.assertIn("Assessment before repair", output)
         self.assertIn("Prepared standards adoption 1.0.0 -> 2.0.0", output)
         manifest = json.loads(
             (self.repository / ".repository-standards.json").read_text(
@@ -367,16 +460,38 @@ class AdoptionCommandTests(unittest.TestCase):
             "managed by 2.0.0\n",
         )
         self.assertFalse((self.repository / "obsolete.txt").exists())
-        self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
-        self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+        self.assertNotEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+        self.assertEqual(
+            self.run_git("show", "-s", "--format=%s", "HEAD").stdout.strip(),
+            "chore(standards): adopt repository standards 2.0.0",
+        )
         self.assertEqual(
             release_log.read_text(encoding="utf-8").splitlines(),
             [
-                "sync-live preview 2.0.0",
-                "sync-live write 2.0.0",
-                "audit-live 2.0.0",
+                "standards check 2.0.0",
+                "standards repair 2.0.0",
+                "standards check 2.0.0",
             ],
         )
+
+    def test_standards_adopt_uses_the_participating_repository_goal(self) -> None:
+        source = self.create_release_source()
+        self.prepare_target_for_adoption()
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_standards_adopt(
+            "2.0.0",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+            },
+            validation_command="./check.sh",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+        self.assertIn("validated adoption commit", result.stdout)
 
     def test_omitted_version_adopts_the_latest_stable_release(self) -> None:
         source = self.create_release_source()
@@ -506,7 +621,10 @@ class AdoptionCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("conflicts with repository-owned pattern", result.stderr)
-        self.assertFalse(release_log.exists())
+        self.assertEqual(
+            release_log.read_text(encoding="utf-8").splitlines(),
+            ["standards check 2.0.0"],
+        )
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
     def test_ignored_managed_absence_is_rejected_before_preview_or_writes(self) -> None:
@@ -542,7 +660,10 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertIn("obsolete.txt", result.stderr)
         self.assertTrue(obsolete.exists())
         self.assertFalse((self.repository / "managed.txt").exists())
-        self.assertFalse(release_log.exists())
+        self.assertEqual(
+            release_log.read_text(encoding="utf-8").splitlines(),
+            ["standards check 2.0.0"],
+        )
 
     def test_canonical_validation_failure_leaves_applied_changes_uncommitted(
         self,
@@ -567,10 +688,10 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
         self.assertEqual(
             release_log.read_text(encoding="utf-8").splitlines(),
-            ["sync-live preview 2.0.0", "sync-live write 2.0.0"],
+            ["standards check 2.0.0", "standards repair 2.0.0"],
         )
 
-    def test_live_audit_failure_is_reported_with_applied_changes_left_in_place(
+    def test_final_standards_check_failure_leaves_applied_changes_uncommitted(
         self,
     ) -> None:
         source = self.create_release_source()
@@ -588,8 +709,8 @@ class AdoptionCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("Live audit failed", result.stdout)
-        self.assertIn("Live standards audit failed", result.stderr)
+        self.assertIn("Conclusion: unverified", result.stdout)
+        self.assertIn("Final standards check failed", result.stderr)
         self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
 

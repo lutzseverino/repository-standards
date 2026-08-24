@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from .live_reconciliation import GitHubAdapter, GitHubCliAdapter
+from .publication_goal import run_publish_goal
 from .repository_assessment import (
     AssessmentConclusion,
     AssessmentScope,
@@ -47,7 +49,12 @@ def assessment_mapping(assessment: RepositoryAssessment) -> dict[str, Any]:
         "differences": _entries(assessment.differences),
         "evidence-gaps": _entries(assessment.evidence_gaps),
         "automatic-corrections": [
-            {"subject": correction.subject, "action": correction.action}
+            {
+                "subject": correction.subject,
+                "action": correction.action,
+                "kind": correction.kind.value,
+                "target": correction.target,
+            }
             for correction in assessment.automatic_corrections
         ],
         "required-maintainer-work": [
@@ -164,12 +171,14 @@ def standards_main(
     argv: list[str] | None = None,
     *,
     github_adapter: GitHubAdapter | None = None,
+    _publication_state_home: Path | None = None,
+    _allow_local_push_for_testing: bool = False,
 ) -> int:
     """Run one repository-level standards goal."""
 
     parser = argparse.ArgumentParser(
         prog="standards",
-        description="Check or repair repository standards conformance",
+        description="Perform one repository standards goal",
     )
     commands = parser.add_subparsers(dest="goal", required=True)
     check = commands.add_parser("check", help="assess repository conformance")
@@ -179,10 +188,142 @@ def standards_main(
         "repair", help="preview and apply safe automatic corrections"
     )
     _add_repository_arguments(repair)
+    create = commands.add_parser(
+        "create", help="create a prepared repository baseline"
+    )
+    create.add_argument("--name", required=True)
+    create.add_argument("--purpose", required=True)
+    create.add_argument(
+        "--visibility", required=True, choices=("private", "public", "internal")
+    )
+    create.add_argument("--license", required=True)
+    create.add_argument("--owner", required=True)
+    create.add_argument("--destination", default=".")
+    create.add_argument("--validation-command", required=True)
+    create.add_argument("--version")
+    create.add_argument("--fact", action="append", default=[])
+    create.add_argument("--profile", action="append", default=[])
+    publish = commands.add_parser(
+        "publish", help="publish a prepared repository for the first time"
+    )
+    publish.add_argument("repository", nargs="?", default=".")
+    publish.add_argument("--confirm")
+    adopt = commands.add_parser(
+        "adopt", help="prepare and commit a standards adoption"
+    )
+    adopt.add_argument("version", nargs="?")
+    adopt.add_argument("--repository", default=".")
+    adopt.add_argument(
+        "--validation-command", default="scripts/validate"
+    )
+    deliver = commands.add_parser(
+        "deliver", help="deliver a validated change through GitHub"
+    )
+    deliver.add_argument("repository", nargs="?", default=".")
+    deliver.add_argument("--confirm")
     args = parser.parse_args(argv)
 
-    repository = Path(args.repository).expanduser().resolve()
     standards_root = Path(__file__).resolve().parents[2]
+    if args.goal == "create":
+        command = [
+            sys.executable,
+            str(
+                standards_root
+                / ".agents/skills/create-repository/scripts/create"
+            ),
+            "--name",
+            args.name,
+            "--purpose",
+            args.purpose,
+            "--visibility",
+            args.visibility,
+            "--license",
+            args.license,
+            "--owner",
+            args.owner,
+            "--destination",
+            str(Path(args.destination).expanduser().resolve()),
+            "--validation-command",
+            args.validation_command,
+        ]
+        if args.version:
+            command.extend(("--version", args.version))
+        for fact in args.fact:
+            command.extend(("--fact", fact))
+        for profile in args.profile:
+            command.extend(("--profile", profile))
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
+
+    if args.goal == "publish":
+        return run_publish_goal(
+            Path(args.repository),
+            github_adapter or GitHubCliAdapter(),
+            standards_root=standards_root,
+            confirmation=args.confirm,
+            state_home=_publication_state_home,
+            allow_local_push_for_testing=_allow_local_push_for_testing,
+        )
+
+    if args.goal == "adopt":
+        command = [
+            sys.executable,
+            str(
+                standards_root
+                / ".agents/skills/adopt-standards/scripts/adopt"
+            ),
+            "--repository",
+            str(Path(args.repository).expanduser().resolve()),
+            "--validation-command",
+            args.validation_command,
+        ]
+        if args.version:
+            command.append(args.version)
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
+
+    if args.goal == "deliver":
+        if args.confirm:
+            print(
+                "error: delivery confirmation requires the current exact "
+                "lifecycle proposal held by the deliver-change adapter",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            "GitHub delivery requires the repository-local deliver-change "
+            "adapter to prepare one exact lifecycle proposal and pause for "
+            "explicit human confirmation. A pull-request reference is not "
+            "authorization. No mutation was performed."
+        )
+        return 2
+
+    if args.goal not in {"check", "repair"}:
+        print(
+            f"error: standards {args.goal} is not yet available",
+            file=sys.stderr,
+        )
+        return 2
+
+    repository = Path(args.repository).expanduser().resolve()
     try:
         contract = resolve_repository_contract(
             repository,

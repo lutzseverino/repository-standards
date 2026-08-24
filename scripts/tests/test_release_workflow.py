@@ -10,9 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ReleaseWorkflowContractTests(unittest.TestCase):
     def test_canonical_validation_checks_the_changelog_unconditionally(self) -> None:
-        canonical_check = (ROOT / "scripts/check").read_text(encoding="utf-8")
+        canonical_check = (ROOT / "scripts/validate").read_text(encoding="utf-8")
 
         self.assertIn("scripts/changelog validate", canonical_check)
+        self.assertIn("scripts/standards check --scope content --json", canonical_check)
+        self.assertNotIn("scripts/audit", canonical_check)
 
     def test_stable_tag_publishes_matching_changelog_notes(self) -> None:
         workflow = (ROOT / ".github/workflows/release.yml").read_text(

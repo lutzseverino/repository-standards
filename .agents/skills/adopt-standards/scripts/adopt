@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -228,30 +229,43 @@ def _release_tool(checkout: Path, name: str) -> str:
 
 def _managed_absences(checkout: Path, preview: Path) -> list[str]:
     result = subprocess.run(
-        [_release_tool(checkout, "audit"), "--json", str(preview)],
+        [
+            _release_tool(checkout, "standards"),
+            "check",
+            "--scope",
+            "content",
+            "--json",
+            str(preview),
+        ],
         cwd=preview,
         check=False,
         capture_output=True,
         text=True,
     )
-    if result.returncode not in (0, 1):
+    print("\n== Standards adoption assessment ==")
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode not in (0, 1, 2):
         raise AdoptionError(
-            "cannot inspect managed absences in the adoption preview: "
+            "cannot assess the adoption preview: "
             + (result.stderr.strip() or result.stdout.strip())
         )
     try:
         report = json.loads(result.stdout)
-        files = report["files"]
+        corrections = report["automatic-corrections"]
         return sorted(
-            item["path"]
-            for item in files
+            item["target"]
+            for item in corrections
             if isinstance(item, dict)
-            and item.get("mode") == "absent"
-            and isinstance(item.get("path"), str)
+            and item.get("kind") == "delete"
+            and isinstance(item.get("target"), str)
+            and item["target"]
         )
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise AdoptionError(
-            "release audit returned an invalid managed-file report"
+            "release standards check returned an invalid assessment"
         ) from exc
 
 
@@ -283,6 +297,7 @@ def main() -> int:
         required=True,
         help="the target repository's canonical validation command",
     )
+    parser.add_argument("--release-root", help=argparse.SUPPRESS)
     args = parser.parse_args()
     requested_repository = Path(args.repository).expanduser().resolve()
     root_result = _git(requested_repository, "rev-parse", "--show-toplevel")
@@ -330,19 +345,21 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="repository-standards-adoption-") as directory:
             temporary_root = Path(directory)
-            checkout = _checked_out_release(selected_version, temporary_root)
+            if args.release_root:
+                checkout = Path(args.release_root).expanduser().resolve()
+                declared = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+                if declared != selected_version:
+                    raise AdoptionError(
+                        f"active release declares {declared!r}, not {selected_version!r}"
+                    )
+            else:
+                checkout = _checked_out_release(selected_version, temporary_root)
             preview = temporary_root / "preview"
-            cloned = subprocess.run(
-                ["git", "clone", "--quiet", "--no-hardlinks", str(repository), str(preview)],
-                check=False,
-                capture_output=True,
-                text=True,
+            shutil.copytree(
+                repository,
+                preview,
+                ignore=shutil.ignore_patterns(".git"),
             )
-            if cloned.returncode != 0:
-                raise AdoptionError(
-                    "cannot create isolated target preview: "
-                    + (cloned.stderr.strip() or cloned.stdout.strip())
-                )
             _update_release(preview, selected_version)
 
             ignored_absences = _ignored_present_targets(
@@ -355,28 +372,10 @@ def main() -> int:
                     + ", ".join(ignored_absences)
                 )
 
-            _run_phase(
-                "Offline preview",
-                [_release_tool(checkout, "sync"), str(preview)],
-                repository=preview,
-                allowed=(0, 1),
-            )
-            _run_phase(
-                "Live preview",
-                [_release_tool(checkout, "sync-live"), str(preview)],
-                repository=preview,
-                allowed=(0, 1),
-            )
-
             _update_release(repository, selected_version)
             _run_phase(
-                "Offline write",
-                [_release_tool(checkout, "sync"), "--write", str(repository)],
-                repository=repository,
-            )
-            _run_phase(
-                "Live write",
-                [_release_tool(checkout, "sync-live"), "--write", str(repository)],
+                "Standards repair",
+                [_release_tool(checkout, "standards"), "repair", str(repository)],
                 repository=repository,
             )
             _run_phase(
@@ -386,27 +385,41 @@ def main() -> int:
                 shell=True,
             )
             _run_phase(
-                "Offline standards audit",
-                [_release_tool(checkout, "audit"), str(repository)],
+                "Final standards check",
+                [_release_tool(checkout, "standards"), "check", str(repository)],
                 repository=repository,
             )
-            _run_phase(
-                "Live standards audit",
-                [_release_tool(checkout, "audit-live"), str(repository)],
-                repository=repository,
+            staged = _git(repository, "add", "--all")
+            if staged.returncode != 0:
+                raise AdoptionError(
+                    "cannot stage the validated adoption: "
+                    + (staged.stderr.strip() or staged.stdout.strip())
+                )
+            committed = _git(
+                repository,
+                "commit",
+                "--allow-empty",
+                "--message",
+                f"chore(standards): adopt repository standards {selected_version}",
             )
+            if committed.returncode != 0:
+                raise AdoptionError(
+                    "cannot create the validated adoption commit: "
+                    + (committed.stderr.strip() or committed.stdout.strip())
+                )
+            commit_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
     except (AdoptionError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if requested == current:
         print(
             f"\nReconciled standards release {selected_version}; "
-            "changes remain uncommitted."
+            f"validated adoption commit: {commit_oid}."
         )
     else:
         print(
             f"\nPrepared standards adoption {current_value} -> {selected_version}; "
-            "changes remain uncommitted."
+            f"validated adoption commit: {commit_oid}."
         )
     return 0
 

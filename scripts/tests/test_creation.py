@@ -28,6 +28,24 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.github_state.write_text('{"created": false}\n', encoding="utf-8")
         self.release = self.create_release()
         self.gh = self.create_fake_gh()
+        self.validation = self.directory / "validate"
+        self.validation.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env python3
+                import os
+                import sys
+
+                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
+                    handle.write("canonical validation\\n")
+                if os.environ.get("FAKE_CANONICAL_VALIDATION_FAILURE"):
+                    print("injected canonical validation failure", file=sys.stderr)
+                    raise SystemExit(1)
+                """
+            ),
+            encoding="utf-8",
+        )
+        self.validation.chmod(0o755)
 
     def create_release(self) -> Path:
         release = self.directory / "release"
@@ -120,6 +138,73 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                             json.dump(state, handle)
                     (destination / "LICENSE").mkdir()
                 print("initialized")
+            """,
+            "standards": """\
+                #!/usr/bin/env python3
+                import json
+                import os
+                from pathlib import Path
+                import sys
+
+                goal = sys.argv[1]
+                repository = Path(sys.argv[-1])
+                scope = "content" if "--scope" in sys.argv and "content" in sys.argv else "repository"
+                with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
+                    handle.write(f"standards {goal} {scope}\\n")
+                state_path = Path(os.environ["FAKE_GITHUB_STATE"])
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                required = [
+                    ".repository-standards.json", "managed.txt", "README.md", "LICENSE",
+                    "CONTEXT.md", "docs/README.md", "docs/agents/domain.md",
+                ]
+                content_clean = all((repository / path).is_file() for path in required)
+                if goal == "repair" and scope == "content":
+                    if not (repository / "LICENSE").is_file():
+                        print("repository content is invalid", file=sys.stderr)
+                        raise SystemExit(2)
+                    (repository / "managed.txt").write_text("managed\\n", encoding="utf-8")
+                    print("Assessment after repair:\\nConclusion: unverified")
+                    raise SystemExit(2)
+                if goal == "repair":
+                    if os.environ.get("FAKE_LIVE_WRITE_FAILURE"):
+                        if os.environ.get("FAKE_DELETE_DURING_LIVE_FAILURE"):
+                            state["created"] = False
+                            state_path.write_text(json.dumps(state), encoding="utf-8")
+                        print("injected GitHub repair failure", file=sys.stderr)
+                        raise SystemExit(2)
+                    state["live_applied"] = True
+                    state_path.write_text(json.dumps(state), encoding="utf-8")
+                    print("Assessment after repair:\\nConclusion: not-standards-complete")
+                    raise SystemExit(1)
+                if goal != "check":
+                    print(f"unsupported goal: {goal}", file=sys.stderr)
+                    raise SystemExit(2)
+                differences = []
+                corrections = []
+                if not content_clean:
+                    differences.append({"subject": "repository-content", "description": "content differs"})
+                    corrections.append({"subject": "repository-content", "action": "WRITE managed content"})
+                if scope == "repository" and state.get("created") and not state.get("live_applied"):
+                    differences.append({"subject": "github", "description": "required labels differ"})
+                    corrections.append({"subject": "github", "action": "CREATE required labels"})
+                lifecycle = "prepared" if scope == "repository" and state.get("created") else None
+                payload = {
+                    "conclusion": "not-standards-complete" if lifecycle else "unverified",
+                    "scope": scope,
+                    "lifecycle": lifecycle,
+                    "differences": differences,
+                    "evidence-gaps": [] if lifecycle else [{"subject": "scope", "description": "restricted evidence"}],
+                    "automatic-corrections": corrections,
+                    "required-maintainer-work": (
+                        [{"subject": "lifecycle", "action": "perform first publication"}]
+                        if lifecycle and not differences else []
+                    ),
+                }
+                if "--json" in sys.argv:
+                    print(json.dumps(payload))
+                else:
+                    print("Conclusion: " + payload["conclusion"])
+                raise SystemExit(1 if lifecycle else 2)
             """,
             "sync": """\
                 #!/usr/bin/env python3
@@ -388,7 +473,51 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 str(self.destination),
                 "--version",
                 "4.0.0",
+                "--validation-command",
+                str(self.validation),
                 *arguments,
+            ],
+            cwd=self.directory,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def run_standards_create(self) -> subprocess.CompletedProcess[str]:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "REPOSITORY_STANDARDS_CHECKOUT": str(self.release),
+                "REPOSITORY_STANDARDS_GH": str(self.gh),
+                "FAKE_GITHUB_STATE": str(self.github_state),
+                "FAKE_CREATION_LOG": str(self.log),
+            }
+        )
+        return subprocess.run(
+            [
+                str(ROOT / "scripts/standards"),
+                "create",
+                "--name",
+                "example",
+                "--purpose",
+                "Exercise prepared repository creation.",
+                "--visibility",
+                "private",
+                "--license",
+                "MIT",
+                "--owner",
+                "owner",
+                "--destination",
+                str(self.destination),
+                "--version",
+                "4.0.0",
+                "--validation-command",
+                str(self.validation),
+                "--fact",
+                "ecosystem=unsupported",
+                "--fact",
+                "project-kind=application",
             ],
             cwd=self.directory,
             env=environment,
@@ -451,14 +580,53 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             [
                 "init preview",
                 "init write",
-                "sync preview",
-                "sync write",
-                "audit offline",
+                "standards repair content",
+                "standards check content",
+                "canonical validation",
                 "github create",
-                f"sync-live preview --lifecycle prepared {resolved_destination}",
-                f"sync-live write --lifecycle prepared --write {resolved_destination}",
-                f"audit-live --lifecycle prepared {resolved_destination}",
+                "standards repair repository",
+                "standards check repository",
             ],
+        )
+
+    def test_canonical_validation_failure_stops_before_remote_creation(self) -> None:
+        result = self.run_create(
+            "--fact",
+            "ecosystem=unsupported",
+            "--fact",
+            "project-kind=application",
+            extra_environment={"FAKE_CANONICAL_VALIDATION_FAILURE": "1"},
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Canonical validation failed", result.stderr)
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
+        )
+        self.assertEqual(
+            self.log.read_text(encoding="utf-8").splitlines(),
+            [
+                "init preview",
+                "init write",
+                "standards repair content",
+                "standards check content",
+                "canonical validation",
+            ],
+        )
+
+    def test_standards_create_defaults_to_the_participating_repository_goal(self) -> None:
+        result = self.run_standards_create()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Prepared creation baseline", result.stdout)
+        self.assertFalse(
+            subprocess.run(
+                ["git", "-C", str(self.destination), "rev-parse", "--verify", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+            ).returncode
+            == 0
         )
 
     def test_live_failure_retains_both_repositories_and_reports_exact_state(self) -> None:
@@ -468,7 +636,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared live synchronization write failed", result.stderr)
+        self.assertIn("Prepared repository repair failed", result.stderr)
         self.assertIn("local destination: present", result.stderr)
         self.assertIn(
             "GitHub repository: creation confirmed; repository currently exists",
@@ -480,7 +648,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             result.stderr,
         )
         self.assertIn(
-            "applicable drift: github label enhancement is missing",
+            "applicable drift: required labels differ",
             result.stderr,
         )
         self.assertIn("no automatic deletion or rollback", result.stderr)
@@ -496,7 +664,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared live synchronization write failed", result.stderr)
+        self.assertIn("Prepared repository repair failed", result.stderr)
         self.assertIn(
             "GitHub repository: creation was confirmed; repository is now absent",
             result.stderr,
@@ -519,7 +687,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 2)
-        self.assertIn("Prepared live synchronization write failed", result.stderr)
+        self.assertIn("Prepared repository repair failed", result.stderr)
         self.assertIn("GitHub repository: state unknown", result.stderr)
         self.assertNotIn("repository currently exists", result.stderr)
         self.assertIn(
@@ -895,7 +1063,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("GitHub repository creation failed", result.stderr)
-        self.assertIn("offline baseline validated", result.stderr)
+        self.assertIn("canonical validation passed", result.stderr)
         self.assertIn(
             "GitHub repository: repository currently exists after an unconfirmed "
             "creation attempt; attribution unknown",

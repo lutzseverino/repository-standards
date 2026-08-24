@@ -24,6 +24,29 @@ and standards releases use semantic versioning.
 - Add one repository-assessment interface and actor-neutral `standards check`
   and `standards repair` goals across repository content and declared GitHub
   state, including evidence-aware conclusions and safe partial recovery.
+- Expose prepared creation, first publication, standards adoption, and GitHub
+  delivery as the public `standards create`, `publish`, `adopt`, and `deliver`
+  goals with identically distributed `create-repository`,
+  `publish-repository`, `adopt-standards`, and `deliver-change` skills.
+
+### Changed
+
+- Make `scripts/validate` the canonical complete validation gate for standards
+  changes and reserve standards-conformance conclusions for `standards check`.
+- Record a successful standards adoption as its own validated commit while
+  keeping GitHub delivery a separately confirmed lifecycle transition.
+
+### Fixed
+
+- Derive ignored managed-absence targets from structured
+  repository-assessment correction evidence so adoption rejects a present
+  ignored target before repair can delete it.
+- Make every distributed lifecycle skill invoke its bundled adapter, including
+  a publication adapter that delegates to the exact selected release.
+- Remove retired adoption and first-publication skill files during profile
+  synchronization instead of leaving conflicting entry points behind.
+- Run the new repository's canonical validation before creation performs its
+  first remote mutation.
 
 ## [4.0.0] - 2026-08-16
 

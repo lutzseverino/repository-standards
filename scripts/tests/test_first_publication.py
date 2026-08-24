@@ -8,7 +8,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,6 +26,7 @@ from lib.first_publication import (
     write_publication_plan,
 )
 from lib.live_reconciliation import GitHubAdapter
+from lib.repository_assessment_cli import standards_main
 from lib.standards import StandardsError
 
 
@@ -475,6 +478,187 @@ print(json.dumps(responses[endpoint]))
         self.assertEqual(self.github.repository["default_branch"], "main")
         self.assertEqual(len(self.github.rulesets), 1)
         self.assertEqual(self.github.pulls, [])
+
+    def test_goal_interface_hides_proposal_state_and_publishes_after_confirmation(
+        self,
+    ) -> None:
+        state_home = self.directory / "private-state"
+        preview = StringIO()
+        with redirect_stdout(preview), redirect_stderr(StringIO()):
+            preview_status = standards_main(
+                ["publish", str(self.repository)],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(preview_status, 0, preview.getvalue())
+        self.assertIn("Lifecycle proposal", preview.getvalue())
+        self.assertNotIn(str(state_home), preview.getvalue())
+        proposal_files = [path for path in state_home.rglob("*") if path.is_file()]
+        self.assertEqual(len(proposal_files), 1)
+        self.assertEqual(proposal_files[0].stat().st_mode & 0o777, 0o600)
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in preview.getvalue().splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+
+        published = StringIO()
+        publish_errors = StringIO()
+        with redirect_stdout(published), redirect_stderr(publish_errors):
+            publish_status = standards_main(
+                ["publish", str(self.repository), "--confirm", confirmation],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(
+            publish_status, 0, published.getvalue() + publish_errors.getvalue()
+        )
+        self.assertIn("Standards-complete repository: owner/example", published.getvalue())
+        self.assertFalse(proposal_files[0].exists())
+
+    def test_goal_interface_invalidates_a_stale_confirmed_proposal(self) -> None:
+        state_home = self.directory / "private-state"
+        preview = StringIO()
+        with redirect_stdout(preview), redirect_stderr(StringIO()):
+            self.assertEqual(
+                standards_main(
+                    ["publish", str(self.repository)],
+                    github_adapter=self.github,
+                    _publication_state_home=state_home,
+                    _allow_local_push_for_testing=True,
+                ),
+                0,
+            )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in preview.getvalue().splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        (self.repository / "README.md").write_text(
+            "changed after proposal\n", encoding="utf-8"
+        )
+
+        errors = StringIO()
+        with redirect_stdout(StringIO()), redirect_stderr(errors):
+            status = standards_main(
+                ["publish", str(self.repository), "--confirm", confirmation],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(status, 2)
+        self.assertIn("is stale", errors.getvalue())
+        self.assertEqual(self.github.mutations, [])
+        self.assertFalse(any(path.is_file() for path in state_home.rglob("*")))
+
+    def test_goal_interface_reports_partial_execution_and_invalidates_proposal(
+        self,
+    ) -> None:
+        state_home = self.directory / "private-state"
+        preview = StringIO()
+        with redirect_stdout(preview), redirect_stderr(StringIO()):
+            self.assertEqual(
+                standards_main(
+                    ["publish", str(self.repository)],
+                    github_adapter=self.github,
+                    _publication_state_home=state_home,
+                    _allow_local_push_for_testing=True,
+                ),
+                0,
+            )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in preview.getvalue().splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        self.github.failure = "ruleset"
+
+        errors = StringIO()
+        with redirect_stdout(StringIO()), redirect_stderr(errors):
+            status = standards_main(
+                ["publish", str(self.repository), "--confirm", confirmation],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(status, 2)
+        self.assertIn("Completed work:", errors.getvalue())
+        self.assertIn("Failed work:\n- CREATE   ruleset", errors.getvalue())
+        self.assertIn("Remaining work:", errors.getvalue())
+        self.assertIn("No destructive rollback was attempted", errors.getvalue())
+        self.assertFalse(any(path.is_file() for path in state_home.rglob("*")))
+
+    def test_goal_interface_reports_unknown_transition_completion(self) -> None:
+        state_home = self.directory / "private-state"
+        preview = StringIO()
+        with redirect_stdout(preview), redirect_stderr(StringIO()):
+            self.assertEqual(
+                standards_main(
+                    ["publish", str(self.repository)],
+                    github_adapter=self.github,
+                    _publication_state_home=state_home,
+                    _allow_local_push_for_testing=True,
+                ),
+                0,
+            )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in preview.getvalue().splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        self.github.failure = "ruleset-response-and-observation-lost"
+
+        errors = StringIO()
+        with redirect_stdout(StringIO()), redirect_stderr(errors):
+            status = standards_main(
+                ["publish", str(self.repository), "--confirm", confirmation],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(status, 2)
+        self.assertIn("Completion unknown:\n- CREATE   ruleset", errors.getvalue())
+        self.assertFalse(any(path.is_file() for path in state_home.rglob("*")))
+
+    def test_goal_interface_reports_final_reobservation_failure(self) -> None:
+        state_home = self.directory / "private-state"
+        preview = StringIO()
+        with redirect_stdout(preview), redirect_stderr(StringIO()):
+            self.assertEqual(
+                standards_main(
+                    ["publish", str(self.repository)],
+                    github_adapter=self.github,
+                    _publication_state_home=state_home,
+                    _allow_local_push_for_testing=True,
+                ),
+                0,
+            )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in preview.getvalue().splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        self.github.failure = "verification"
+
+        errors = StringIO()
+        with redirect_stdout(StringIO()), redirect_stderr(errors):
+            status = standards_main(
+                ["publish", str(self.repository), "--confirm", confirmation],
+                github_adapter=self.github,
+                _publication_state_home=state_home,
+                _allow_local_push_for_testing=True,
+            )
+
+        self.assertEqual(status, 2)
+        self.assertIn("Failed work:\n- VERIFY   live GitHub state", errors.getvalue())
+        self.assertFalse(any(path.is_file() for path in state_home.rglob("*")))
 
     def test_plan_rejects_nonempty_remote_and_unexpected_local_commits(self) -> None:
         self.github.branches = [{"name": "main"}]
