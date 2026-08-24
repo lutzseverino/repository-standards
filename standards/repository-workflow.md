@@ -200,8 +200,8 @@ planning flow.
 - keep Issues enabled;
 - disable Wiki and repository Projects unless actively used.
 
-The common profile declares the required label names. `scripts/audit-live`
-renders their presence together with declared repository settings, features,
-and rulesets from one live desired-state delta. `scripts/sync-live` previews and
-applies operations projected from that same delta while preserving undeclared
-live resources.
+The common profile declares the required label names. `scripts/standards check`
+assesses their presence together with repository content and declared settings,
+features, and rulesets. `scripts/standards repair` renders the complete
+repository assessment before applying safe corrections while preserving
+repository-owned content and undeclared live resources.

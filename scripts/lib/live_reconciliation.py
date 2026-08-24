@@ -72,6 +72,7 @@ class LiveDifference:
     findings: tuple[str, ...]
     operations: tuple[LiveOperation, ...] = ()
     pending: bool = False
+    blockers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,14 @@ class LiveDesiredStateDelta:
             for difference in self.differences
             if difference.pending
             for finding in difference.findings
+        )
+
+    @property
+    def blockers(self) -> tuple[str, ...]:
+        return tuple(
+            blocker
+            for difference in self.differences
+            for blocker in difference.blockers
         )
 
     @property
@@ -173,21 +182,24 @@ class GitHubAdapter:
             and label["name"]
         )
 
-        observed_rulesets: tuple[dict[str, Any], ...] = ()
+        summaries = self._collect_pages(
+            f"{endpoint}/rulesets?includes_parents=false"
+        )
+        observed_rulesets = [
+            dict(item)
+            for item in summaries
+            if isinstance(item, dict)
+            and item.get("source_type", "Repository") == "Repository"
+            and item.get("source", github["repository"])
+            == github["repository"]
+        ]
         expected_ruleset = github["ruleset"]
         if expected_ruleset is not None:
-            summaries = self._collect_pages(
-                f"{endpoint}/rulesets?includes_parents=false"
-            )
             summary = next(
                 (
                     item
-                    for item in summaries
-                    if isinstance(item, dict)
-                    and item.get("name") == expected_ruleset["name"]
-                    and item.get("source_type", "Repository") == "Repository"
-                    and item.get("source", github["repository"])
-                    == github["repository"]
+                    for item in observed_rulesets
+                    if item.get("name") == expected_ruleset["name"]
                 ),
                 None,
             )
@@ -202,7 +214,10 @@ class GitHubAdapter:
                         "GitHub ruleset bypass actors are not observable; complete "
                         "reconciliation requires Administration (write) permission"
                     )
-                observed_rulesets = ({**summary, **ruleset},)
+                observed_rulesets[observed_rulesets.index(summary)] = {
+                    **summary,
+                    **ruleset,
+                }
 
         branches = self._collect_pages(f"{endpoint}/branches")
         if not all(
@@ -217,7 +232,7 @@ class GitHubAdapter:
             repository=dict(repository),
             branches=tuple(dict(branch) for branch in branches),
             label_names=label_names,
-            rulesets=observed_rulesets,
+            rulesets=tuple(observed_rulesets),
             lifecycle=lifecycle,
         )
 
@@ -497,6 +512,10 @@ def reconcile_live_github(
                 f"{snapshot.repository.get('default_branch')!r}; "
                 f"expected {github['default-branch']!r}"
             )
+        default_branch = github["default-branch"]
+        branch_exists = any(
+            branch.get("name") == default_branch for branch in snapshot.branches
+        )
         differences.append(
             LiveDifference(
                 (default_branch_finding,),
@@ -507,6 +526,14 @@ def reconcile_live_github(
                         endpoint,
                         {"default_branch": github["default-branch"]},
                     ),
+                ),
+                blockers=(
+                    ()
+                    if branch_exists
+                    else (
+                        f"create or publish default branch {default_branch!r} "
+                        "before reconciliation",
+                    )
                 ),
             )
         )

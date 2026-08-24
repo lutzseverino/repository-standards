@@ -92,6 +92,12 @@ A published repository whose committed content and observed live GitHub state
 satisfy every applicable rule of its selected standards release.
 _Avoid_: Lifecycle-relative conformance, prepared creation baseline
 
+**Repository assessment**:
+One complete account of how repository content and declared GitHub state
+compare with the selected standards release, including known differences,
+missing evidence, safe corrections, and required maintainer work.
+_Avoid_: Local audit, live audit, synchronization plan
+
 **Selectable ecosystem profile**:
 The prepared-creation lifecycle treats an ecosystem profile as selectable only
 when it has explicit applicability and observable managed or audited behavior.

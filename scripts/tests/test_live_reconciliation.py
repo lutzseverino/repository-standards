@@ -212,7 +212,9 @@ class LiveReconciliationTests(unittest.TestCase):
 
         self.assertEqual(snapshot.branches, ({"name": "main"},))
         self.assertIn("bug", snapshot.label_names)
-        self.assertEqual(snapshot.rulesets[0]["id"], 101)
+        self.assertIn(101, {ruleset["id"] for ruleset in snapshot.rulesets})
+        self.assertIn(2, {ruleset["id"] for ruleset in snapshot.rulesets})
+        self.assertNotIn(1, {ruleset["id"] for ruleset in snapshot.rulesets})
         self.assertIn(
             ("GET", "repos/owner/example/labels?per_page=100&page=2"),
             adapter.requests,
@@ -225,6 +227,43 @@ class LiveReconciliationTests(unittest.TestCase):
             adapter.requests,
         )
 
+    def test_adapter_retains_undeclared_rulesets_when_none_is_managed(self) -> None:
+        class FakeAdapter(GitHubAdapter):
+            def request(self, method, endpoint, payload=None):
+                responses = {
+                    "repos/owner/example": {},
+                    "repos/owner/example/labels?per_page=100&page=1": [],
+                    "repos/owner/example/rulesets?includes_parents=false&per_page=100&page=1": [
+                        {
+                            "id": 7,
+                            "name": "Repository local",
+                            "source_type": "Repository",
+                            "source": "owner/example",
+                        }
+                    ],
+                    "repos/owner/example/branches?per_page=100&page=1": [],
+                }
+                return responses[endpoint]
+
+        contract = self.contract()
+        contract = replace(
+            contract,
+            github=replace(contract.github, ruleset=None),
+        )
+
+        snapshot = FakeAdapter().observe(contract)
+
+        self.assertEqual(
+            snapshot.rulesets,
+            (
+                {
+                    "id": 7,
+                    "name": "Repository local",
+                    "source_type": "Repository",
+                    "source": "owner/example",
+                },
+            ),
+        )
     def test_adapter_surfaces_observation_authentication_failures(self) -> None:
         class FailingAdapter(GitHubAdapter):
             def request(
@@ -470,6 +509,10 @@ class LiveReconciliationTests(unittest.TestCase):
         )
 
         operation = delta.operations[0]
+        self.assertEqual(
+            delta.blockers,
+            ("create or publish default branch 'main' before reconciliation",),
+        )
         self.assertEqual(operation.description, "ESTABLISH default branch 'main'")
         self.assertEqual(operation.method, "PATCH")
         self.assertEqual(operation.endpoint, "repos/owner/example")

@@ -47,6 +47,12 @@ def main() -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    if delta.blockers:
+        for blocker in delta.blockers:
+            print(f"BLOCKED  {blocker}")
+        print("\nPreflight blocked. No live operation was applied.")
+        return 2
+
     if not operations:
         if delta.pending_findings:
             print(f"Prepared live GitHub contract for {contract.repository}:")
