@@ -97,4 +97,6 @@ repository lifecycle adapters.
 - [Documentation index](docs/README.md) links the remaining standards,
   templates, domain language, and architectural decisions.
 
+## License
+
 Distributed under the [MIT License](LICENSE).
