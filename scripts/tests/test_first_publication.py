@@ -938,6 +938,24 @@ print(json.dumps(responses[endpoint]))
         with self.assertRaisesRegex(Exception, "steps do not match"):
             load_publication_plan(path, _allow_local_push_for_testing=True)
 
+    def test_version_one_plan_without_blockers_remains_loadable(self) -> None:
+        plan = self.plan()
+        path = self.directory / "publication-plan.json"
+        write_publication_plan(plan, path)
+        value = json.loads(path.read_text(encoding="utf-8"))
+        for difference in value["live-delta"]["differences"]:
+            difference.pop("blockers")
+        path.write_text(json.dumps(value), encoding="utf-8")
+
+        loaded = load_publication_plan(
+            path, _allow_local_push_for_testing=True
+        )
+
+        self.assertTrue(loaded.live_delta.differences)
+        self.assertTrue(
+            all(not difference.blockers for difference in loaded.live_delta.differences)
+        )
+
     def test_plan_record_uses_a_private_exclusive_temporary_file(self) -> None:
         plan = self.plan()
         path = self.directory / "publication-plan.json"

@@ -897,7 +897,7 @@ def publication_plan_from_mapping(
         raw_findings = difference.get("findings")
         raw_operations = difference.get("operations")
         pending = difference.get("pending")
-        raw_blockers = difference.get("blockers")
+        raw_blockers = difference.get("blockers", [])
         if not isinstance(raw_findings, list) or not all(
             isinstance(item, str) for item in raw_findings
         ):
