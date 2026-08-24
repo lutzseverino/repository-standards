@@ -154,12 +154,9 @@ def _calculate_assessment(
                     f"{operation.target} is {operation.status}",
                 )
             )
-            action = "DELETE" if operation.mode == "absent" else (
-                "CREATE" if operation.status == "missing" else "UPDATE"
-            )
             corrections.append(
                 AutomaticCorrection(
-                    "repository-content", f"{action} {operation.target}"
+                    "repository-content", _operation_action(operation)
                 )
             )
         for blocker in plan.blockers:
@@ -372,7 +369,6 @@ def assess_repository(
     github_adapter: GitHubAdapter,
     *,
     scope: AssessmentScope = AssessmentScope.REPOSITORY,
-    application_report: ApplicationReport | None = None,
 ) -> RepositoryAssessment:
     """Observe and calculate one deterministic repository assessment."""
 
@@ -380,7 +376,6 @@ def assess_repository(
         contract,
         github_adapter,
         scope=scope,
-        application_report=application_report,
     ).assessment
 
 
