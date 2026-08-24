@@ -818,6 +818,7 @@ def publication_plan_mapping(plan: PublicationPlan) -> dict[str, Any]:
                 {
                     "findings": list(difference.findings),
                     "pending": difference.pending,
+                    "blockers": list(difference.blockers),
                     "operations": [
                         {
                             "description": operation.description,
@@ -896,11 +897,17 @@ def publication_plan_from_mapping(
         raw_findings = difference.get("findings")
         raw_operations = difference.get("operations")
         pending = difference.get("pending")
+        raw_blockers = difference.get("blockers")
         if not isinstance(raw_findings, list) or not all(
             isinstance(item, str) for item in raw_findings
         ):
             raise PublicationError("publication Plan findings must be strings")
-        if not isinstance(raw_operations, list) or not isinstance(pending, bool):
+        if (
+            not isinstance(raw_operations, list)
+            or not isinstance(pending, bool)
+            or not isinstance(raw_blockers, list)
+            or not all(isinstance(item, str) for item in raw_blockers)
+        ):
             raise PublicationError("publication Plan live difference is invalid")
         operations: list[LiveOperation] = []
         for raw_operation in raw_operations:
@@ -915,7 +922,12 @@ def publication_plan_from_mapping(
                 )
             )
         differences.append(
-            LiveDifference(tuple(raw_findings), tuple(operations), pending)
+            LiveDifference(
+                tuple(raw_findings),
+                tuple(operations),
+                pending,
+                tuple(raw_blockers),
+            )
         )
     live_delta = LiveDesiredStateDelta(
         _string(delta_value.get("repository"), "live-delta.repository"),

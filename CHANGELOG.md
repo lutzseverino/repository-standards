@@ -21,6 +21,9 @@ and standards releases use semantic versioning.
 - Add read-only first-publication planning, explicitly confirmed publication,
   stale-input protection, exact partial-failure reports, final conformance
   proof, and the family-owned `first-publication` execution skill.
+- Add one repository-assessment interface and actor-neutral `standards check`
+  and `standards repair` goals across repository content and declared GitHub
+  state, including evidence-aware conclusions and safe partial recovery.
 
 ## [4.0.0] - 2026-08-16
 

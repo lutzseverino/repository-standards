@@ -119,29 +119,30 @@ this repository.
 Requires Python 3.11 or later.
 
 ```sh
-scripts/audit /path/to/repository
-scripts/audit-live /path/to/repository
-scripts/audit-live --lifecycle prepared /path/to/repository
+scripts/standards check /path/to/repository
+scripts/standards repair /path/to/repository
 scripts/init --input /path/to/initialization.json /path/to/new-repository
 scripts/init --input /path/to/initialization.json --write /path/to/new-repository
-scripts/sync /path/to/repository
-scripts/sync --write /path/to/repository
-scripts/sync-live /path/to/repository
-scripts/sync-live --write /path/to/repository
 ```
 
-`audit` reports drift and exits non-zero. `sync` previews the same plan and
-unified diffs. `sync --write` changes managed targets only. It refuses a plan
-that conflicts with a `repository-owned` path.
+`standards check` is read-only and gives one complete repository assessment for
+managed and authored content plus declared GitHub state. It reports
+`standards-complete`, `not-standards-complete`, or `unverified` with exit status
+0, 1, or 2. Missing GitHub access retains useful content findings but cannot
+produce a standards-complete conclusion. Prepared versus published state is
+inferred from observed repository evidence.
 
-`audit-live` is deliberately separate: it requires an authenticated GitHub CLI
-and renders the shared live desired-state delta for required labels, declared
-repository settings and features, and the named ruleset. `sync-live` previews
-operations projected from that same delta, and `sync-live --write` applies
-them. Extra labels, rulesets, and undeclared live resources remain untouched.
+`standards repair` renders that complete assessment before its first mutation,
+applies only safe automatic corrections, and assesses the repository again.
+Whole-repository repair requires complete preflight evidence. Explicit
+`--scope content` or `--scope github` is available for outage and diagnostic
+recovery, but a restricted result remains `unverified`. Repository-owned
+content and undeclared GitHub resources remain untouched; partial failures
+report completed, failed, and remaining work without rollback claims.
+
 Repository features default to Issues enabled and Projects and Wiki disabled;
 declare `github.features` to record intentional use. Repositories that cannot
-use rulesets may declare `"ruleset": null` while retaining auditable repository
+use rulesets may declare `"ruleset": null` while retaining assessable repository
 settings, features, and labels.
 
 `init` accepts a non-interactive JSON input containing the exact
@@ -159,10 +160,10 @@ Local-fragment declarations are validated against selected compose targets
 without requiring their repository-owned source files to exist during
 initialization; author those sources before the first offline sync or audit.
 
-Use `--lifecycle prepared` with live synchronization and audit while a created
-repository still has no published branch. Applicable settings, features, and
-labels remain reconcilable; default-branch and ruleset requirements are
-reported as pending first publication rather than as current.
+For a prepared creation baseline, repository assessment identifies the empty
+remote automatically. Applicable settings, features, and labels remain
+repairable; default-branch and ruleset requirements are reported as pending
+first publication rather than as current.
 
 GitHub omits ruleset bypass actors from read responses unless the caller has
 write access to the ruleset. A complete live audit of a declared ruleset
