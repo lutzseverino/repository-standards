@@ -64,10 +64,11 @@ class DeliveryFreshAgentTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        (self.repository / ".zshenv").write_text(
-            'export PATH="$PWD/.fake-bin:$PATH"\n',
-            encoding="utf-8",
-        )
+        for startup_file in (".zshenv", ".zprofile"):
+            (self.repository / startup_file).write_text(
+                'export PATH="$PWD/.fake-bin:$PATH"\n',
+                encoding="utf-8",
+            )
 
     def write_validation_command(self) -> None:
         validation = self.repository / "validate"
@@ -76,7 +77,12 @@ class DeliveryFreshAgentTests(unittest.TestCase):
                 """\
                 #!/bin/sh
                 set -eu
-                git rev-parse HEAD >>"$FAKE_VALIDATION_LOG"
+                validation_head=$(git rev-parse HEAD)
+                if test "$validation_head" != "$FAKE_VALIDATION_EXPECTED_HEAD"; then
+                    echo "validation ran outside the candidate worktree" >&2
+                    exit 43
+                fi
+                printf '%s\n' "$validation_head" >>"$FAKE_VALIDATION_LOG"
                 if test -e "$FAKE_VALIDATION_FAILURE"; then
                     echo "canonical validation failed by fixture" >&2
                     exit 42
@@ -336,6 +342,9 @@ class DeliveryFreshAgentTests(unittest.TestCase):
         self.git("init", "-q", "-b", "main")
         self.git("config", "user.name", "Test User")
         self.git("config", "user.email", "test@example.com")
+        (self.repository / "caller-state.txt").write_text(
+            "committed caller state\n", encoding="utf-8"
+        )
         self.git("add", ".")
         self.git("commit", "-qm", "chore: create delivery fixture")
         subprocess.run(
@@ -352,6 +361,13 @@ class DeliveryFreshAgentTests(unittest.TestCase):
         self.git("commit", "-qm", "test(delivery): exercise forward workflow")
         self.candidate_head = self.git("rev-parse", "HEAD").stdout.strip()
         self.git("switch", "-qc", "scratch/context", "main")
+        (self.repository / "caller-state.txt").write_text(
+            "staged caller state\n", encoding="utf-8"
+        )
+        self.git("add", "caller-state.txt")
+        (self.repository / "caller-state.txt").write_text(
+            "staged caller state\nunstaged caller state\n", encoding="utf-8"
+        )
         (self.repository / "notes.txt").write_text(
             "unrelated local notes\n", encoding="utf-8"
         )
@@ -395,6 +411,7 @@ class DeliveryFreshAgentTests(unittest.TestCase):
                 "FAKE_GITHUB_STATE": str(self.github_state),
                 "FAKE_REMOTE": str(self.remote),
                 "FAKE_VALIDATION_FAILURE": str(self.directory / "fail-validation"),
+                "FAKE_VALIDATION_EXPECTED_HEAD": self.state()["candidate_head"],
                 "FAKE_VALIDATION_LOG": str(self.validation_log),
                 "GH_REPO": "owner/example",
                 "PATH": (
@@ -423,7 +440,7 @@ class DeliveryFreshAgentTests(unittest.TestCase):
             check=False,
             capture_output=True,
             text=True,
-            timeout=240,
+            timeout=360,
             env=environment,
         )
         final = (
@@ -442,11 +459,13 @@ class DeliveryFreshAgentTests(unittest.TestCase):
     def state(self) -> dict:
         return json.loads(self.github_state.read_text(encoding="utf-8"))
 
-    def local_state(self) -> tuple[str, str, str, bytes]:
+    def local_state(self) -> tuple[str, str, str, str, bytes, bytes]:
         return (
             self.git("branch", "--show-current").stdout,
             self.git("rev-parse", "HEAD").stdout,
             self.git("status", "--porcelain=v1", "--untracked-files=all").stdout,
+            self.git("rev-parse", ":caller-state.txt").stdout,
+            (self.repository / "caller-state.txt").read_bytes(),
             (self.repository / "notes.txt").read_bytes(),
         )
 
@@ -578,9 +597,9 @@ class DeliveryFreshAgentTests(unittest.TestCase):
         validation_heads = self.validation_log.read_text(
             encoding="utf-8"
         ).splitlines()
-        self.assertIn(
-            self.candidate_head,
-            validation_heads,
+        self.assertEqual(
+            set(validation_heads),
+            {self.candidate_head},
             self.diagnostics(result, final),
         )
         self.assertEqual(
@@ -603,6 +622,7 @@ class DeliveryFreshAgentTests(unittest.TestCase):
             "squash",
             "#28",
             "warning",
+            "caller-state.txt",
             "notes.txt",
             confirmation,
         ):
@@ -669,22 +689,39 @@ class DeliveryFreshAgentTests(unittest.TestCase):
             self.diagnostics(result, final),
         )
         log = self.github_log()
-        self.assertTrue(
-            any(
-                arguments[:2] == ["pr", "checks"]
-                or (
-                    arguments[:2] == ["pr", "view"]
-                    and any("statusCheckRollup" in value for value in arguments)
-                )
-                for arguments in log
-            )
-        )
-        self.assertTrue(any(arguments[:2] == ["api", "graphql"] for arguments in log))
         merge_index, merge = next(
             (index, arguments)
             for index, arguments in enumerate(log)
             if arguments[:2] == ["pr", "merge"]
         )
+        evidence_queries = {
+            "checks": [
+                index
+                for index, arguments in enumerate(log)
+                if arguments[:2] == ["pr", "checks"]
+                or (
+                    arguments[:2] == ["pr", "view"]
+                    and any("statusCheckRollup" in value for value in arguments)
+                )
+            ],
+            "reviews": [
+                index
+                for index, arguments in enumerate(log)
+                if arguments[:2] == ["pr", "view"]
+                and any("reviews" in value for value in arguments)
+            ],
+            "threads": [
+                index
+                for index, arguments in enumerate(log)
+                if arguments[:2] == ["api", "graphql"]
+            ],
+        }
+        for evidence, indices in evidence_queries.items():
+            self.assertTrue(indices, f"missing {evidence}: {self.diagnostics(result, final)}")
+            self.assertTrue(
+                all(index < merge_index for index in indices),
+                f"late {evidence}: {self.diagnostics(result, final)}",
+            )
         policy_indices = [
             index
             for index, arguments in enumerate(log)
@@ -720,7 +757,30 @@ class DeliveryFreshAgentTests(unittest.TestCase):
             ("28", "https://github.com/owner/example/issues/28"),
         )
         self.assertEqual(self.local_state(), local_state_before)
-        for evidence in (pull_request["url"], "merged", "closed", "scratch/context"):
+        for evidence in (pull_request["url"], "merged", "closed", "caller"):
+            self.assertIn(evidence.casefold(), final.casefold())
+
+    def test_inexact_confirmation_does_not_authorize_delivery(self) -> None:
+        pull_request = self.seed_pull_request()
+        local_state_before = self.local_state()
+
+        result, final = self.run_fresh_agent(
+            "Use $deliver-change for the prepared proposal at "
+            f"{pull_request['url']}. The prepared head was {self.candidate_head}. "
+            "My reply is: The review looks good; please merge it."
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.state()["merged"], self.diagnostics(result, final))
+        self.assertFalse(
+            any(arguments[:2] == ["pr", "merge"] for arguments in self.github_log())
+        )
+        self.assertEqual(self.local_state(), local_state_before)
+        confirmation = (
+            "Confirm delivery of "
+            f"{self.candidate_head} via {pull_request['url']}"
+        )
+        for evidence in ("exact", confirmation):
             self.assertIn(evidence.casefold(), final.casefold())
 
     def test_confirmed_delivery_blockers_return_unchanged_work_to_implementation(
@@ -845,7 +905,7 @@ class DeliveryFreshAgentTests(unittest.TestCase):
         )
         self.assertEqual(self.local_state(), local_state_before)
         lowered = final.casefold()
-        for evidence in (prepared_head[:7], current_head, "confirmation"):
+        for evidence in (current_head, "confirmation", "stale"):
             self.assertIn(evidence.casefold(), lowered, self.diagnostics(result, final))
 
     def test_merge_failure_reports_remaining_work_without_tracker_mutation(

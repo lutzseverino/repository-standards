@@ -102,6 +102,9 @@ reconciliation, cleanup, warnings, and observed starting state. A pull-request
 reference is not authorization. After exact human confirmation, delivery
 re-observes the starting state, rejects stale evidence, reverifies merge policy,
 squash merges, reconciles tracked work, and safely cleans up the branch.
+Tracked-work reconciliation closes each delivered implementation ticket after
+the merge is verified. A parent specification closes only when every
+implementation ticket is delivered.
 
 Failures report exact completed, failed, uncertain, and remaining work without
 rollback. Changed state or partial execution requires a fresh proposal and
