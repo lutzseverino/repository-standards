@@ -7,8 +7,25 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-08-25
+
 ### Added
 
+- Resolve manifest identity, profile inheritance, managed content, ownership,
+  labels, boundaries, and GitHub declarations through one normalized
+  repository-contract interface with schema and runtime parity.
+- Build the complete offline repository-content preflight before mutation and
+  report every deterministic blocker, previewed operation, and partial
+  application result through shared plan semantics.
+- Reconcile repository settings and features, required labels, and the named
+  branch-protection ruleset through one shared declared GitHub reconciliation,
+  including publication-pending and idempotent application evidence.
+- Create prepared creation baselines with mandatory profiles and deterministic
+  ecosystem-profile selection, leaving validated local content uncommitted and
+  the GitHub repository empty for first publication.
+- Publish prepared creation baselines through an explicit proposal and
+  confirmation boundary that commits and publishes `main`, applies declared
+  GitHub corrections, and verifies the standards-complete result.
 - Add one repository-assessment interface and actor-neutral `standards check`
   and `standards repair` goals across repository content and declared GitHub
   state, including evidence-aware conclusions and safe partial recovery.
@@ -55,6 +72,9 @@ and standards releases use semantic versioning.
 - Repositories pinned to `4.0.0` use the documented immutable-tree bootstrap,
   then invoke the new release's current `standards adopt` goal; the new release
   contains no permanent compatibility adapter.
+- Keep manifest compatibility at `standards-version: 5`; this major release
+  replaces the public lifecycle interface without introducing a new manifest
+  protocol or a hypothetical future transition.
 
 ## [4.0.0] - 2026-08-16
 

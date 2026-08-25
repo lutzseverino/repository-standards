@@ -77,7 +77,7 @@ class RepositoryContractTests(unittest.TestCase):
         )
 
         self.assertEqual(contract.protocol, 5)
-        self.assertEqual(contract.release, "4.0.0")
+        self.assertEqual(contract.release, "5.0.0")
         self.assertEqual(
             contract.selected_profiles,
             ("common", "documentation", "node-protocol"),
@@ -207,7 +207,7 @@ class RepositoryContractTests(unittest.TestCase):
         standards_temporary = tempfile.TemporaryDirectory()
         self.addCleanup(standards_temporary.cleanup)
         custom_root = Path(standards_temporary.name)
-        (custom_root / "VERSION").write_text("4.0.0\n", encoding="utf-8")
+        (custom_root / "VERSION").write_text("5.0.0\n", encoding="utf-8")
         for name, applicability in (
             ("common", {"ecosystem": "baseline"}),
             ("documentation", None),
