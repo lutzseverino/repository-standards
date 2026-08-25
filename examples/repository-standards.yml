@@ -1,6 +1,6 @@
 # YAML is optional and requires PyYAML. JSON is the dependency-free default.
 standards-version: 5
-standards-release: 4.0.0
+standards-release: 5.0.0
 profiles:
   - common
   - documentation

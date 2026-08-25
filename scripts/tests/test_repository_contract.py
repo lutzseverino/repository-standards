@@ -21,6 +21,26 @@ class RepositoryContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.standards_root = Path(__file__).resolve().parents[2]
 
+    def test_bundled_examples_match_the_current_release(self) -> None:
+        release = (self.standards_root / "VERSION").read_text(
+            encoding="utf-8"
+        ).strip()
+        json_example = json.loads(
+            (self.standards_root / "examples/repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        yaml_release_lines = [
+            line
+            for line in (
+                self.standards_root / "examples/repository-standards.yml"
+            ).read_text(encoding="utf-8").splitlines()
+            if line.startswith("standards-release:")
+        ]
+
+        self.assertEqual(json_example["standards-release"], release)
+        self.assertEqual(yaml_release_lines, [f"standards-release: {release}"])
+
     def base_manifest(self) -> dict:
         return {
             "standards-version": 5,
@@ -77,7 +97,7 @@ class RepositoryContractTests(unittest.TestCase):
         )
 
         self.assertEqual(contract.protocol, 5)
-        self.assertEqual(contract.release, "4.0.0")
+        self.assertEqual(contract.release, "5.0.0")
         self.assertEqual(
             contract.selected_profiles,
             ("common", "documentation", "node-protocol"),
@@ -207,7 +227,7 @@ class RepositoryContractTests(unittest.TestCase):
         standards_temporary = tempfile.TemporaryDirectory()
         self.addCleanup(standards_temporary.cleanup)
         custom_root = Path(standards_temporary.name)
-        (custom_root / "VERSION").write_text("4.0.0\n", encoding="utf-8")
+        (custom_root / "VERSION").write_text("5.0.0\n", encoding="utf-8")
         for name, applicability in (
             ("common", {"ecosystem": "baseline"}),
             ("documentation", None),
