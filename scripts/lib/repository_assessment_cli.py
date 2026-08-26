@@ -79,8 +79,10 @@ def assessment_mapping(assessment: RepositoryAssessment) -> dict[str, Any]:
     }
 
 
-def render_assessment(assessment: RepositoryAssessment) -> str:
-    """Render every category owned by the repository-assessment interface."""
+def render_assessment(
+    assessment: RepositoryAssessment, *, verbose: bool = False
+) -> str:
+    """Render an actionable human assessment, with full evidence on request."""
 
     lines = [
         f"Conclusion: {assessment.conclusion.value}",
@@ -91,15 +93,15 @@ def render_assessment(assessment: RepositoryAssessment) -> str:
             if assessment.lifecycle is not None
             else "unverified"
         ),
+        "Counts: "
+        f"{len(assessment.satisfied_requirements)} satisfied, "
+        f"{len(assessment.differences)} differences, "
+        f"{len(assessment.evidence_gaps)} evidence gaps, "
+        f"{len(assessment.automatic_corrections)} automatic corrections, "
+        f"{len(assessment.required_maintainer_work)} required maintainer actions, "
+        f"{len(assessment.preservation_evidence)} preservation items",
     ]
-    sections = (
-        (
-            "Satisfied requirements",
-            (
-                f"[{item.subject}] {item.description}"
-                for item in assessment.satisfied_requirements
-            ),
-        ),
+    actionable_sections = (
         (
             "Differences",
             (
@@ -128,6 +130,15 @@ def render_assessment(assessment: RepositoryAssessment) -> str:
                 for item in assessment.required_maintainer_work
             ),
         ),
+    )
+    evidence_sections = (
+        (
+            "Satisfied requirements",
+            (
+                f"[{item.subject}] {item.description}"
+                for item in assessment.satisfied_requirements
+            ),
+        ),
         (
             "Preservation evidence",
             (
@@ -135,6 +146,11 @@ def render_assessment(assessment: RepositoryAssessment) -> str:
                 for item in assessment.preservation_evidence
             ),
         ),
+    )
+    sections = (
+        evidence_sections[:1] + actionable_sections + evidence_sections[1:]
+        if verbose
+        else actionable_sections
     )
     for title, values in sections:
         items = tuple(values)
@@ -211,11 +227,22 @@ def standards_main(
     commands = parser.add_subparsers(dest="goal", required=True)
     check = commands.add_parser("check", help="assess repository conformance")
     _add_repository_arguments(check)
-    check.add_argument("--json", action="store_true", dest="json_output")
+    check_output = check.add_mutually_exclusive_group()
+    check_output.add_argument("--json", action="store_true", dest="json_output")
+    check_output.add_argument(
+        "--verbose",
+        action="store_true",
+        help="include complete satisfied and preservation evidence",
+    )
     repair = commands.add_parser(
         "repair", help="preview and apply safe automatic corrections"
     )
     _add_repository_arguments(repair)
+    repair.add_argument(
+        "--verbose",
+        action="store_true",
+        help="include complete satisfied and preservation evidence",
+    )
     create = commands.add_parser(
         "create", help="create a prepared repository baseline"
     )
@@ -244,11 +271,6 @@ def standards_main(
     adopt.add_argument(
         "--validation-command", default="scripts/validate"
     )
-    deliver = commands.add_parser(
-        "deliver", help="deliver a validated change through GitHub"
-    )
-    deliver.add_argument("repository", nargs="?", default=".")
-    deliver.add_argument("--confirm")
     args = parser.parse_args(arguments)
 
     if args.goal == "create":
@@ -327,22 +349,6 @@ def standards_main(
             print(result.stderr, end="", file=sys.stderr)
         return result.returncode
 
-    if args.goal == "deliver":
-        if args.confirm:
-            print(
-                "error: delivery confirmation requires the current exact "
-                "lifecycle proposal held by the deliver-change adapter",
-                file=sys.stderr,
-            )
-            return 2
-        print(
-            "GitHub delivery requires the repository-local deliver-change "
-            "adapter to prepare one exact lifecycle proposal and pause for "
-            "explicit human confirmation. A pull-request reference is not "
-            "authorization. No mutation was performed."
-        )
-        return 2
-
     if args.goal not in {"check", "repair"}:
         print(
             f"error: standards {args.goal} is not yet available",
@@ -369,13 +375,13 @@ def standards_main(
         if args.json_output:
             print(json.dumps(assessment_mapping(assessment), indent=2))
         else:
-            print(render_assessment(assessment), end="")
+            print(render_assessment(assessment, verbose=args.verbose), end="")
         return EXIT_STATUS[assessment.conclusion]
 
     print("Assessment before repair:")
 
     def preview(assessment: RepositoryAssessment) -> None:
-        print(render_assessment(assessment), end="")
+        print(render_assessment(assessment, verbose=args.verbose), end="")
         sys.stdout.flush()
 
     assessment = repair_repository(
@@ -385,7 +391,7 @@ def standards_main(
         preview=preview,
     )
     print("\nAssessment after repair:")
-    print(render_assessment(assessment), end="")
+    print(render_assessment(assessment, verbose=args.verbose), end="")
     report = assessment.application_report
     if report is not None and not report.succeeded:
         return 2

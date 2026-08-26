@@ -1,7 +1,7 @@
 # Documentation
 
-Documentation for the repository standards source, lifecycle tooling,
-and repository-family conventions.
+Documentation for the Repository Standards source, lifecycle tooling, and
+public repository environment.
 
 ## Standards
 
@@ -32,7 +32,7 @@ standards documentation.
 - [Own the workflow and distribute pinned agent skills](adr/0002-own-workflow-and-distribute-agent-skills.md):
   distinguish repository policy from upstream skill contracts and make the
   official skill bundle available in every participating repository;
-  superseded in part by ADR 0004.
+  superseded in part by ADR 0004 and ADR 0010.
 - [Distribute dependency-free repository lifecycle skills](adr/0003-distribute-dependency-free-repository-lifecycle-skills.md):
   ship family-owned adoption and repository-creation operations without
   coupling them to a planning or implementation workflow; superseded in part
@@ -50,10 +50,17 @@ standards documentation.
   normalize repository-contract knowledge once for assessment, correction,
   and lifecycle evidence.
 - [Replace the repository standards interface without deprecation](adr/0008-replace-conformance-commands-without-deprecation.md):
-  make the repository-level task grammar an intentional incompatible cutover.
+  make the repository-level task grammar an intentional incompatible cutover;
+  superseded in part by ADR 0011.
 - [Assign one living owner to each policy](adr/0009-assign-one-living-owner-to-each-policy.md):
   separate ordinary workflow, repository lifecycle, maintenance, orientation,
   and adapter mechanics by living owner.
+- [Define the public repository environment](adr/0010-define-the-public-repository-environment.md):
+  make the standards adoptable by unrelated maintainers while leaving product
+  implementation and repository-owned tooling under repository ownership.
+- [Advertise only operational lifecycle interfaces](adr/0011-advertise-only-operational-lifecycle-interfaces.md):
+  remove the delivery command stub, present agent-owned delivery through its
+  Agent Skill, and separate concise human output from complete evidence.
 
 ## Agent configuration
 

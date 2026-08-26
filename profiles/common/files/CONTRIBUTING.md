@@ -27,6 +27,12 @@ Invoke `implement <reference>` directly when a specification or ticket is
 already ready. Use `wayfinder` first when a large effort still has unresolved
 directional decisions. Work generated tickets blockers-first.
 
+The canonical workflow remains mandatory for participating repositories.
+Repositories may add supplementary workflows, but those workflows do not
+replace the canonical sequence or weaken its lifecycle boundaries. Selectable
+alternative workflow sets and community templates remain future work until
+real usage provides enough evidence to define them.
+
 `ready-for-agent` means the work is specified well enough for autonomous
 implementation. Selecting and starting that work is a separate dispatch act.
 
@@ -64,8 +70,8 @@ work.
 
 ## Deliver a validated change
 
-Use the repository's GitHub delivery operation after implementation. Follow
-the transition and confirmation policy owned by the selected standards
+Use the repository-local `$deliver-change` Agent Skill after implementation.
+Follow the transition and confirmation policy owned by the selected standards
 release's Repository lifecycle guidance.
 
 For tracked work, the pull request must contain an unambiguous non-closing link

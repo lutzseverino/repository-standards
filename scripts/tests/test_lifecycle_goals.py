@@ -16,7 +16,7 @@ ROOT_SKILLS = ROOT / ".agents/skills"
 
 
 class LifecycleGoalSurfaceTests(unittest.TestCase):
-    def test_standards_help_exposes_every_repository_goal(self) -> None:
+    def test_standards_help_exposes_every_executable_repository_goal(self) -> None:
         result = subprocess.run(
             [str(ROOT / "scripts/standards"), "--help"],
             check=False,
@@ -25,8 +25,9 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        for goal in ("check", "repair", "create", "publish", "adopt", "deliver"):
+        for goal in ("check", "repair", "create", "publish", "adopt"):
             self.assertIn(goal, result.stdout)
+        self.assertNotIn("deliver", result.stdout)
 
     def test_goal_oriented_lifecycle_skills_have_identical_copies(self) -> None:
         names = (
@@ -222,41 +223,21 @@ class LifecycleGoalSurfaceTests(unittest.TestCase):
         self.assertTrue(validation.is_file())
         self.assertIn("scripts/validate", workflows)
 
-    def test_delivery_goal_preserves_the_agent_confirmation_boundary(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            repository = Path(directory)
-            subprocess.run(
-                ["git", "init", "--quiet", "--initial-branch=main"],
-                cwd=repository,
-                check=True,
-            )
-            before = subprocess.run(
-                ["git", "status", "--porcelain=v1", "--untracked-files=all"],
-                cwd=repository,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout
+    def test_delivery_is_exposed_only_through_its_operational_skill(self) -> None:
+        result = subprocess.run(
+            [str(ROOT / "scripts/standards"), "deliver"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        skill = (ROOT_SKILLS / "deliver-change/SKILL.md").read_text(
+            encoding="utf-8"
+        )
 
-            result = subprocess.run(
-                [str(ROOT / "scripts/standards"), "deliver", str(repository)],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("deliver-change", result.stdout)
-            self.assertIn("exact lifecycle proposal", result.stdout)
-            self.assertIn("No mutation was performed", result.stdout)
-            after = subprocess.run(
-                ["git", "status", "--porcelain=v1", "--untracked-files=all"],
-                cwd=repository,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout
-            self.assertEqual(after, before)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid choice", result.stderr)
+        self.assertIn("Deliver one validated change through GitHub", skill)
+        self.assertIn("exact lifecycle proposal", skill)
 
 
 if __name__ == "__main__":
