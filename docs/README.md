@@ -61,6 +61,9 @@ standards documentation.
 - [Advertise only operational lifecycle interfaces](adr/0011-advertise-only-operational-lifecycle-interfaces.md):
   remove the delivery command stub, present agent-owned delivery through its
   Agent Skill, and separate concise human output from complete evidence.
+- [Declare structured canonical validation](adr/0012-declare-structured-canonical-validation.md):
+  persist one executable and literal argument sequence, execute it without a
+  shell, and keep repository readiness distinct from standards conformance.
 
 ## Agent configuration
 

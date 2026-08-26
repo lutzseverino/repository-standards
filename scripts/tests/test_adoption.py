@@ -9,6 +9,10 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from scripts.tests.canonical_validation_fixture import (
+    write_fake_canonical_validation,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 ADOPT = (
@@ -31,6 +35,9 @@ class AdoptionCommandTests(unittest.TestCase):
         (self.repository / ".repository-standards.json").write_text(
             json.dumps(self.manifest(), indent=2) + "\n", encoding="utf-8"
         )
+        check = self.repository / "check.sh"
+        check.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        check.chmod(0o755)
         self.run_git("add", ".")
         self.run_git("commit", "-qm", "initial")
 
@@ -38,6 +45,11 @@ class AdoptionCommandTests(unittest.TestCase):
         return {
             "standards-version": 5,
             "standards-release": "1.0.0",
+            "canonical-validation": {
+                "executable": "./check.sh",
+                "arguments": [],
+                "working-directory": ".",
+            },
             "profiles": ["common", "documentation"],
             "boundaries": [
                 {"path": ".", "type": "repository", "title": "Example"}
@@ -77,7 +89,6 @@ class AdoptionCommandTests(unittest.TestCase):
         self,
         *arguments: str,
         environment: dict[str, str] | None = None,
-        validation_command: str = "true",
     ) -> subprocess.CompletedProcess[str]:
         command_environment = os.environ.copy()
         if environment:
@@ -86,8 +97,6 @@ class AdoptionCommandTests(unittest.TestCase):
             [
                 "python3",
                 str(ADOPT),
-                "--validation-command",
-                validation_command,
                 *arguments,
                 "--repository",
                 str(self.repository),
@@ -103,7 +112,6 @@ class AdoptionCommandTests(unittest.TestCase):
         self,
         *arguments: str,
         environment: dict[str, str] | None = None,
-        validation_command: str = "true",
     ) -> subprocess.CompletedProcess[str]:
         command_environment = os.environ.copy()
         if environment:
@@ -115,8 +123,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 *arguments,
                 "--repository",
                 str(self.repository),
-                "--validation-command",
-                validation_command,
             ],
             cwd=self.repository,
             env=command_environment,
@@ -139,6 +145,9 @@ class AdoptionCommandTests(unittest.TestCase):
         (source / "VERSION").write_text(f"{version}\n", encoding="utf-8")
         scripts = source / "scripts"
         scripts.mkdir()
+        library = scripts / "lib"
+        library.mkdir()
+        write_fake_canonical_validation(library)
         tools = {
             "standards": """\
                 #!/usr/bin/env python3
@@ -310,7 +319,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         output = result.stdout + result.stderr
@@ -344,7 +352,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         output = result.stdout + result.stderr
@@ -388,7 +395,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -401,6 +407,7 @@ class AdoptionCommandTests(unittest.TestCase):
         manifest_path = self.repository / ".repository-standards.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["standards-release"] = "4.0.0"
+        del manifest["canonical-validation"]
         manifest_path.write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
         )
@@ -462,11 +469,14 @@ class AdoptionCommandTests(unittest.TestCase):
         release_log = self.directory / "release-tools.log"
         result = self.run_standards_adopt(
             "5.0.0",
+            "--validation-executable",
+            "./check.sh",
+            "--validation-argument",
+            "literal argument",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -474,6 +484,15 @@ class AdoptionCommandTests(unittest.TestCase):
             (self.repository / ".agents/skills/adopt-standards/SKILL.md").is_file()
         )
         self.assertTrue(all(not target.exists() for target in removed_targets))
+        adopted_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            adopted_manifest["canonical-validation"],
+            {
+                "executable": "./check.sh",
+                "arguments": ["literal argument"],
+                "working-directory": ".",
+            },
+        )
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
     def test_omitted_version_adopts_the_latest_stable_release(self) -> None:
@@ -487,7 +506,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_LATEST_RELEASE": "2.0.0",
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         output = result.stdout + result.stderr
@@ -635,7 +653,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="./check.sh",
         )
 
         self.assertEqual(result.returncode, 2)
@@ -653,6 +670,11 @@ class AdoptionCommandTests(unittest.TestCase):
     ) -> None:
         source = self.create_release_source()
         self.prepare_target_for_adoption()
+        (self.repository / "check.sh").write_text(
+            "#!/bin/sh\nexit 23\n", encoding="utf-8"
+        )
+        self.run_git("add", "check.sh")
+        self.run_git("commit", "-qm", "make canonical validation fail")
         release_log = self.directory / "release-tools.log"
         original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
 
@@ -662,11 +684,11 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
-            validation_command="false",
         )
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Canonical validation failed", result.stderr)
+        self.assertIn("canonical validation exited with status 23", result.stderr)
         self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
         self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
         self.assertEqual(
@@ -688,7 +710,6 @@ class AdoptionCommandTests(unittest.TestCase):
                 "FAKE_RELEASE_LOG": str(release_log),
                 "FAKE_GITHUB_CHECK_FAILURE": "1",
             },
-            validation_command="./check.sh",
         )
 
         self.assertEqual(result.returncode, 2)

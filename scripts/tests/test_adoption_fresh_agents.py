@@ -117,7 +117,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
         invocation = (self.repository / ".adoption-invoked").read_text(
             encoding="utf-8"
         )
-        self.assertIn("--validation-command true", invocation)
+        self.assertIn("--validation-executable true", invocation)
         self.assertIn("2.0.0", invocation)
         self.assertFalse((self.repository / ".workflow-invoked").exists())
         self.assertEqual(self.git("rev-parse", "HEAD").stdout.strip(), self.original_head)

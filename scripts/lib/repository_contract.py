@@ -83,6 +83,20 @@ class RepositoryBoundary:
 
 
 @dataclass(frozen=True)
+class CanonicalValidation:
+    executable: str
+    arguments: tuple[str, ...]
+    working_directory: str = "."
+
+    def as_mapping(self) -> dict[str, Any]:
+        return {
+            "executable": self.executable,
+            "arguments": list(self.arguments),
+            "working-directory": self.working_directory,
+        }
+
+
+@dataclass(frozen=True)
 class GitHubSettings:
     delete_branch_on_merge: bool
     allow_squash_merge: bool
@@ -154,6 +168,7 @@ class RepositoryContract:
     required_labels: tuple[str, ...]
     dependency_updates: tuple[DependencyUpdate, ...]
     boundaries: tuple[RepositoryBoundary, ...]
+    canonical_validation: CanonicalValidation
     github: GitHubContract
     content_blockers: tuple[ContractBlocker, ...] = ()
 
@@ -175,6 +190,7 @@ class InitialRepositoryContract:
     selected_profiles: tuple[str, ...]
     boundaries: tuple[RepositoryBoundary, ...]
     dependency_updates: tuple[DependencyUpdate, ...]
+    canonical_validation: CanonicalValidation
     github: GitHubContract
     variables: tuple[tuple[str, Any], ...]
     local_fragments: tuple[tuple[str, tuple[str, ...]], ...]
@@ -187,6 +203,7 @@ class InitialRepositoryContract:
         return {
             "standards-version": self.protocol,
             "standards-release": self.release,
+            "canonical-validation": self.canonical_validation.as_mapping(),
             "profiles": list(self.selected_profiles),
             "boundaries": [
                 {
@@ -363,6 +380,7 @@ def build_initial_repository_contract(
     standards_root = standards_root.expanduser().resolve()
     allowed = {
         "standards-release",
+        "canonical-validation",
         "repository",
         "title",
         "facts",
@@ -443,6 +461,7 @@ def build_initial_repository_contract(
     manifest = {
         "standards-version": repository_content.SUPPORTED_STANDARDS_VERSION,
         "standards-release": release,
+        "canonical-validation": initialization.get("canonical-validation"),
         "profiles": list(selection.profiles),
         "boundaries": initialization.get(
             "boundaries",
@@ -497,6 +516,7 @@ def build_initial_repository_contract(
         selected_profiles=resolved.selected_profiles,
         boundaries=resolved.boundaries,
         dependency_updates=resolved.dependency_updates,
+        canonical_validation=resolved.canonical_validation,
         github=resolved.github,
         variables=tuple(
             (name, _freeze_value(value)) for name, value in resolved.variables
@@ -604,6 +624,13 @@ def resolve_repository_contract(
                 title=item["title"],
             )
             for item in raw_manifest["boundaries"]
+        ),
+        canonical_validation=CanonicalValidation(
+            executable=raw_manifest["canonical-validation"]["executable"],
+            arguments=tuple(raw_manifest["canonical-validation"]["arguments"]),
+            working_directory=raw_manifest["canonical-validation"][
+                "working-directory"
+            ],
         ),
         github=GitHubContract(
             repository=github["repository"],

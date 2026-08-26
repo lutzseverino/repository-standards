@@ -21,12 +21,15 @@ operating this transition.
    every selectable profile fully matches or conflicts with a settled fact.
    Express the license as an SPDX identifier or key from the selected standards
    release's pinned license catalog.
-2. Identify the new repository's canonical validation command. Run the bundled
-   adapter with that command and the settled facts. Pass an exact release when
-   the user selected one; omit `--version` to select the latest stable release.
-   Repeat `--fact NAME=VALUE` for applicability facts. When the user resolves
-   an ambiguous match, repeat `--profile NAME` for every explicitly selected
-   ecosystem profile.
+2. Settle the new repository's canonical-validation declaration: one
+   executable, its ordered literal arguments, and an optional normalized
+   repository-relative working directory (default `.`). Do not encode shell
+   syntax, quoting, pipelines, redirects, glob expansion, or environment
+   expansion in these fields. Run the bundled adapter with the declaration and
+   settled facts. Pass an exact release when the user selected one; omit
+   `--version` to select the latest stable release. Repeat `--fact NAME=VALUE`
+   for applicability facts. When the user resolves an ambiguous match, repeat
+   `--profile NAME` for every explicitly selected ecosystem profile.
 
    ```sh
    python3 .agents/skills/create-repository/scripts/create \
@@ -36,7 +39,9 @@ operating this transition.
      --license MIT \
      --owner OWNER \
      --destination /ABSOLUTE/PATH \
-     --validation-command 'CANONICAL VALIDATION COMMAND' \
+     --validation-executable scripts/validate \
+     [--validation-argument='LITERAL ARGUMENT' ...] \
+     [--validation-working-directory RELATIVE/DIRECTORY] \
      [--fact NAME=VALUE ...] [--profile NAME ...] [--version VERSION]
    ```
 

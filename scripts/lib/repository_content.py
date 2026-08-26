@@ -186,6 +186,7 @@ def _load_manifest(repository: Path, requested: str | None = None) -> tuple[Path
         "$schema",
         "standards-version",
         "standards-release",
+        "canonical-validation",
         "profiles",
         "boundaries",
         "dependency-updates",
@@ -210,6 +211,60 @@ def _load_manifest(repository: Path, requested: str | None = None) -> tuple[Path
         standards_release
     ):
         raise StandardsError("standards-release must be a semantic version such as 1.0.0")
+
+    canonical_validation = manifest.get("canonical-validation")
+    required_validation_fields = {"executable", "arguments"}
+    if (
+        not isinstance(canonical_validation, dict)
+        or not required_validation_fields.issubset(canonical_validation)
+        or set(canonical_validation)
+        - (required_validation_fields | {"working-directory"})
+    ):
+        raise StandardsError(
+            "canonical-validation must define executable and arguments; "
+            "optional working-directory may also be declared"
+        )
+    validation_executable = canonical_validation.get("executable")
+    if (
+        not isinstance(validation_executable, str)
+        or not validation_executable.strip()
+        or "\0" in validation_executable
+    ):
+        raise StandardsError(
+            "canonical-validation.executable must be a non-empty executable name"
+        )
+    validation_arguments = canonical_validation.get("arguments")
+    if (
+        not isinstance(validation_arguments, list)
+        or not all(
+            isinstance(argument, str) and argument != "" and "\0" not in argument
+            for argument in validation_arguments
+        )
+    ):
+        raise StandardsError(
+            "canonical-validation.arguments must be a list of non-empty strings"
+        )
+    raw_validation_working_directory = canonical_validation.get(
+        "working-directory", "."
+    )
+    if (
+        not isinstance(raw_validation_working_directory, str)
+        or "\0" in raw_validation_working_directory
+        or "\\" in raw_validation_working_directory
+    ):
+        raise StandardsError(
+            "canonical-validation.working-directory must be a normalized "
+            "concrete directory"
+        )
+    validation_working_directory = _boundary_path(
+        raw_validation_working_directory,
+        "canonical-validation.working-directory",
+    )
+    manifest["canonical-validation"] = {
+        "executable": validation_executable,
+        "arguments": list(validation_arguments),
+        "working-directory": validation_working_directory,
+    }
 
     profiles = manifest.get("profiles")
     if not isinstance(profiles, list) or not profiles or not all(

@@ -8,6 +8,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from scripts.tests.canonical_validation_fixture import (
+    write_fake_canonical_validation,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CREATE = (
@@ -29,15 +33,22 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         self.release = self.create_release()
         self.gh = self.create_fake_gh()
         self.validation = self.directory / "validate"
+        self.validation_observation = self.directory / "validation.json"
         self.validation.write_text(
             textwrap.dedent(
                 """\
                 #!/usr/bin/env python3
+                import json
                 import os
+                from pathlib import Path
                 import sys
 
                 with open(os.environ["FAKE_CREATION_LOG"], "a", encoding="utf-8") as handle:
                     handle.write("canonical validation\\n")
+                Path(os.environ["FAKE_VALIDATION_OBSERVATION"]).write_text(
+                    json.dumps({"arguments": sys.argv[1:], "cwd": str(Path.cwd())}),
+                    encoding="utf-8",
+                )
                 if os.environ.get("FAKE_CANONICAL_VALIDATION_FAILURE"):
                     print("injected canonical validation failure", file=sys.stderr)
                     raise SystemExit(1)
@@ -121,6 +132,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                     return InitialContract({
                         "standards-version": 5,
                         "standards-release": facts["standards-release"],
+                        "canonical-validation": facts["canonical-validation"],
                         "profiles": ["common", "documentation"],
                         "boundaries": [{"path": ".", "type": "repository", "title": facts["title"]}],
                         "dependency-updates": [{"ecosystem": "github-actions", "directory": "/", "schedule": "weekly"}],
@@ -144,6 +156,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        write_fake_canonical_validation(library)
         tools = {
             "standards": """\
                 #!/usr/bin/env python3
@@ -404,6 +417,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
                 "FAKE_GITHUB_STATE": str(self.github_state),
                 "FAKE_CREATION_LOG": str(self.log),
+                "FAKE_VALIDATION_OBSERVATION": str(self.validation_observation),
             }
         )
         if use_reusable_checkout:
@@ -430,8 +444,13 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 str(self.destination),
                 "--version",
                 "4.0.0",
-                "--validation-command",
+                "--validation-executable",
                 str(self.validation),
+                "--validation-argument",
+                "argument with spaces",
+                "--validation-argument",
+                "$(touch sentinel)",
+                "--validation-argument=--strict",
                 *arguments,
             ],
             cwd=self.directory,
@@ -449,6 +468,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
                 "FAKE_GITHUB_STATE": str(self.github_state),
                 "FAKE_CREATION_LOG": str(self.log),
+                "FAKE_VALIDATION_OBSERVATION": str(self.validation_observation),
             }
         )
         return subprocess.run(
@@ -469,8 +489,13 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 str(self.destination),
                 "--version",
                 "4.0.0",
-                "--validation-command",
+                "--validation-executable",
                 str(self.validation),
+                "--validation-argument",
+                "argument with spaces",
+                "--validation-argument",
+                "$(touch sentinel)",
+                "--validation-argument=--strict",
                 "--fact",
                 "ecosystem=unsupported",
                 "--fact",
@@ -504,6 +529,30 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             )
         )
         self.assertIsNone(manifest["github"]["ruleset"])
+        self.assertEqual(
+            manifest["canonical-validation"],
+            {
+                "executable": str(self.validation),
+                "arguments": [
+                    "argument with spaces",
+                    "$(touch sentinel)",
+                    "--strict",
+                ],
+                "working-directory": ".",
+            },
+        )
+        self.assertEqual(
+            json.loads(self.validation_observation.read_text(encoding="utf-8")),
+            {
+                "arguments": [
+                    "argument with spaces",
+                    "$(touch sentinel)",
+                    "--strict",
+                ],
+                "cwd": str(self.destination.resolve()),
+            },
+        )
+        self.assertFalse((self.destination / "sentinel").exists())
         self.assertEqual(manifest["variables"]["license"], "MIT")
         self.assertEqual(
             (self.destination / "LICENSE").read_text(encoding="utf-8"),
@@ -556,6 +605,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("Canonical validation failed", result.stderr)
+        self.assertIn("canonical validation exited with status 1", result.stderr)
         self.assertFalse(
             json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
         )
@@ -567,6 +617,27 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "standards check content",
                 "canonical validation",
             ],
+        )
+
+    def test_unavailable_canonical_validation_stops_before_remote_creation(
+        self,
+    ) -> None:
+        self.validation.unlink()
+
+        result = self.run_create(
+            "--fact",
+            "ecosystem=unsupported",
+            "--fact",
+            "project-kind=application",
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "canonical validation executable is unavailable", result.stderr
+        )
+        self.assertIn("Canonical validation failed with exit code 127", result.stderr)
+        self.assertFalse(
+            json.loads(self.github_state.read_text(encoding="utf-8"))["created"]
         )
 
     def test_destination_replaced_during_preflight_is_rejected_before_write(

@@ -47,6 +47,11 @@ class RepositoryContractTests(unittest.TestCase):
             "standards-release": (self.standards_root / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
+            "canonical-validation": {
+                "executable": "scripts/validate",
+                "arguments": [],
+                "working-directory": ".",
+            },
             "profiles": ["common", "documentation", "node-protocol"],
             "boundaries": [
                 {"path": ".", "type": "repository", "title": "Example"}
@@ -98,6 +103,11 @@ class RepositoryContractTests(unittest.TestCase):
 
         self.assertEqual(contract.protocol, 5)
         self.assertEqual(contract.release, "5.0.0")
+        self.assertEqual(
+            contract.canonical_validation.executable, "scripts/validate"
+        )
+        self.assertEqual(contract.canonical_validation.arguments, ())
+        self.assertEqual(contract.canonical_validation.working_directory, ".")
         self.assertEqual(
             contract.selected_profiles,
             ("common", "documentation", "node-protocol"),
@@ -198,6 +208,28 @@ class RepositoryContractTests(unittest.TestCase):
         del missing["github"]
         cases.append(("missing field", missing, "github contract is required"))
 
+        missing_validation_executable = self.base_manifest()
+        del missing_validation_executable["canonical-validation"]["executable"]
+        cases.append(
+            (
+                "missing validation executable",
+                missing_validation_executable,
+                "canonical-validation must define executable and arguments",
+            )
+        )
+
+        unsafe_validation_directory = self.base_manifest()
+        unsafe_validation_directory["canonical-validation"][
+            "working-directory"
+        ] = "../outside"
+        cases.append(
+            (
+                "unsafe validation working directory",
+                unsafe_validation_directory,
+                "canonical-validation.working-directory must stay within the repository",
+            )
+        )
+
         unknown = self.base_manifest()
         unknown["unexpected"] = True
         cases.append(("unknown field", unknown, "unknown manifest fields"))
@@ -278,6 +310,71 @@ class RepositoryContractTests(unittest.TestCase):
         )
         cases: list[tuple[str, dict, bool]] = []
         cases.append(("valid", self.base_manifest(), True))
+
+        validation_with_literal_arguments = self.base_manifest()
+        validation_with_literal_arguments["canonical-validation"] = {
+            "executable": "tools/validate checks",
+            "arguments": ["argument with spaces", "$(touch sentinel)", "*.py"],
+        }
+        cases.append(
+            (
+                "literal validation arguments and default working directory",
+                validation_with_literal_arguments,
+                True,
+            )
+        )
+
+        validation_unknown_field = self.base_manifest()
+        validation_unknown_field["canonical-validation"]["shell"] = True
+        cases.append(("unknown validation field", validation_unknown_field, False))
+
+        missing_validation_executable = self.base_manifest()
+        del missing_validation_executable["canonical-validation"]["executable"]
+        cases.append(
+            ("missing validation executable", missing_validation_executable, False)
+        )
+
+        blank_validation_executable = self.base_manifest()
+        blank_validation_executable["canonical-validation"]["executable"] = "   "
+        cases.append(("blank validation executable", blank_validation_executable, False))
+
+        empty_validation_arguments = self.base_manifest()
+        empty_validation_arguments["canonical-validation"]["arguments"] = []
+        cases.append(("empty validation argument sequence", empty_validation_arguments, True))
+
+        empty_validation_argument = self.base_manifest()
+        empty_validation_argument["canonical-validation"]["arguments"] = [""]
+        cases.append(("empty validation argument", empty_validation_argument, False))
+
+        malformed_validation_arguments = self.base_manifest()
+        malformed_validation_arguments["canonical-validation"]["arguments"] = [1]
+        cases.append(
+            ("malformed validation arguments", malformed_validation_arguments, False)
+        )
+
+        nul_validation_argument = self.base_manifest()
+        nul_validation_argument["canonical-validation"]["arguments"] = ["bad\0arg"]
+        cases.append(("nul validation argument", nul_validation_argument, False))
+
+        unsafe_validation_directory = self.base_manifest()
+        unsafe_validation_directory["canonical-validation"][
+            "working-directory"
+        ] = "../outside"
+        cases.append(("unsafe validation directory", unsafe_validation_directory, False))
+
+        backslash_validation_directory = self.base_manifest()
+        backslash_validation_directory["canonical-validation"][
+            "working-directory"
+        ] = "..\\outside"
+        cases.append(
+            ("backslash validation directory", backslash_validation_directory, False)
+        )
+
+        nul_validation_directory = self.base_manifest()
+        nul_validation_directory["canonical-validation"][
+            "working-directory"
+        ] = "bad\0directory"
+        cases.append(("nul validation directory", nul_validation_directory, False))
 
         unsupported = self.base_manifest()
         unsupported["standards-version"] = 999

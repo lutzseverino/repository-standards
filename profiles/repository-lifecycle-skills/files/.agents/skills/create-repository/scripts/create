@@ -819,7 +819,9 @@ def main() -> int:
     parser.add_argument("--license", required=True)
     parser.add_argument("--owner", required=True)
     parser.add_argument("--destination", required=True)
-    parser.add_argument("--validation-command", required=True)
+    parser.add_argument("--validation-executable", required=True)
+    parser.add_argument("--validation-argument", action="append", default=[])
+    parser.add_argument("--validation-working-directory", default=".")
     parser.add_argument("--version")
     parser.add_argument("--fact", action="append", default=[])
     parser.add_argument("--profile", action="append", default=[])
@@ -887,6 +889,11 @@ def main() -> int:
                 "repository": repository_name,
                 "title": args.name,
                 "facts": facts,
+                "canonical-validation": {
+                    "executable": args.validation_executable,
+                    "arguments": args.validation_argument,
+                    "working-directory": args.validation_working_directory,
+                },
                 "variables": {"license": license_identifier},
             }
             if args.profile:
@@ -938,9 +945,14 @@ def main() -> int:
             local_state = "offline baseline validated"
             _run_phase(
                 "Canonical validation",
-                args.validation_command,
+                [
+                    sys.executable,
+                    str(checkout / "scripts/lib/canonical_validation.py"),
+                    "--standards-root",
+                    str(checkout),
+                    str(destination),
+                ],
                 cwd=destination,
-                shell=True,
             )
             local_state = "canonical validation passed"
 

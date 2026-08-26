@@ -17,6 +17,7 @@ from lib.github_reconciliation import (
     reconcile_github,
 )
 from lib.repository_contract import (
+    CanonicalValidation,
     GitHubContract,
     GitHubFeatures,
     GitHubSettings,
@@ -44,6 +45,7 @@ class GitHubReconciliationTests(unittest.TestCase):
             required_labels=("bug",),
             dependency_updates=(),
             boundaries=(),
+            canonical_validation=CanonicalValidation("scripts/validate", ()),
             github=GitHubContract(
                 repository="owner/example",
                 default_branch="main",

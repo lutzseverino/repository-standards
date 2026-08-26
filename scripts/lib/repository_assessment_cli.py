@@ -254,7 +254,9 @@ def standards_main(
     create.add_argument("--license", required=True)
     create.add_argument("--owner", required=True)
     create.add_argument("--destination", default=".")
-    create.add_argument("--validation-command", required=True)
+    create.add_argument("--validation-executable", required=True)
+    create.add_argument("--validation-argument", action="append", default=[])
+    create.add_argument("--validation-working-directory", default=".")
     create.add_argument("--version")
     create.add_argument("--fact", action="append", default=[])
     create.add_argument("--profile", action="append", default=[])
@@ -268,9 +270,9 @@ def standards_main(
     )
     adopt.add_argument("version", nargs="?")
     adopt.add_argument("--repository", default=".")
-    adopt.add_argument(
-        "--validation-command", default="scripts/validate"
-    )
+    adopt.add_argument("--validation-executable")
+    adopt.add_argument("--validation-argument", action="append", default=[])
+    adopt.add_argument("--validation-working-directory", default=".")
     args = parser.parse_args(arguments)
 
     if args.goal == "create":
@@ -292,9 +294,13 @@ def standards_main(
             args.owner,
             "--destination",
             str(Path(args.destination).expanduser().resolve()),
-            "--validation-command",
-            args.validation_command,
+            "--validation-executable",
+            args.validation_executable,
+            "--validation-working-directory",
+            args.validation_working_directory,
         ]
+        for argument in args.validation_argument:
+            command.append(f"--validation-argument={argument}")
         if args.version:
             command.extend(("--version", args.version))
         for fact in args.fact:
@@ -332,9 +338,18 @@ def standards_main(
             ),
             "--repository",
             str(Path(args.repository).expanduser().resolve()),
-            "--validation-command",
-            args.validation_command,
         ]
+        if args.validation_executable:
+            command.extend(("--validation-executable", args.validation_executable))
+        for argument in args.validation_argument:
+            command.append(f"--validation-argument={argument}")
+        if args.validation_working_directory != ".":
+            command.extend(
+                (
+                    "--validation-working-directory",
+                    args.validation_working_directory,
+                )
+            )
         if args.version:
             command.append(args.version)
         result = subprocess.run(

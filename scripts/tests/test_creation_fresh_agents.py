@@ -41,7 +41,8 @@ class CreationFreshAgentTests(unittest.TestCase):
                 if arguments == ["--help"]:
                     print("usage: create --name NAME --purpose PURPOSE --visibility "
                           "VISIBILITY --license LICENSE --owner OWNER --destination "
-                          "DESTINATION --validation-command COMMAND [--fact FACT] "
+                          "DESTINATION --validation-executable EXECUTABLE "
+                          "[--validation-argument ARGUMENT] [--fact FACT] "
                           "[--profile PROFILE] [--version VERSION]")
                     raise SystemExit(0)
                 pathlib.Path(".creation-invoked").write_text(

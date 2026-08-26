@@ -4,13 +4,29 @@
   "title": "Repository standards manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["standards-version", "standards-release", "profiles", "boundaries", "dependency-updates", "github", "repository-owned"],
+  "required": ["standards-version", "standards-release", "canonical-validation", "profiles", "boundaries", "dependency-updates", "github", "repository-owned"],
   "properties": {
     "$schema": {"type": "string", "format": "uri-reference"},
     "standards-version": {"const": 5},
     "standards-release": {
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "canonical-validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "arguments"],
+      "properties": {
+        "executable": {"type": "string", "minLength": 1, "pattern": "^(?=.*\\S)[^\\u0000]+$"},
+        "arguments": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "pattern": "^[^\\u0000]+$"}
+        },
+        "working-directory": {
+          "type": "string",
+          "pattern": "^(?!.*\\u0000)(?!.*\\\\)(?:\\.|(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[*?\\[])[^/]+(?:/[^/]+)*)$"
+        }
+      }
     },
     "profiles": {
       "type": "array",

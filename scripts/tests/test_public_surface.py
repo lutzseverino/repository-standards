@@ -39,7 +39,7 @@ class PublicSurfaceTests(unittest.TestCase):
         self.assertEqual(create_without_facts.returncode, 2)
         self.assertIn(
             "required: --name, --purpose, --visibility, --license, --owner, "
-            "--validation-command",
+            "--validation-executable",
             create_without_facts.stderr,
         )
         for retired in (
@@ -180,6 +180,8 @@ class PublicSurfaceTests(unittest.TestCase):
             "WSL",
             "Native Windows",
             "$deliver-change",
+            "canonical-validation",
+            "without shell parsing",
         ):
             self.assertIn(fragment, readme)
         self.assertNotIn("scripts/standards deliver", readme)
@@ -188,6 +190,8 @@ class PublicSurfaceTests(unittest.TestCase):
         self.assertIn("Product implementation", lifecycle)
         self.assertIn("Agent Skill", lifecycle)
         self.assertIn("$deliver-change", lifecycle)
+        self.assertIn("preserved process argument", lifecycle)
+        self.assertIn("Canonical validation is not a standards check", lifecycle)
         self.assertIn("supplementary workflows", contributing)
         self.assertIn("alternative workflow sets", contributing)
 
