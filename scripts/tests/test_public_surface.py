@@ -19,8 +19,9 @@ class PublicSurfaceTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
-            "{check,repair,create,publish,adopt,deliver}", result.stdout
+            "{check,repair,create,publish,adopt}", result.stdout
         )
+        self.assertNotIn("deliver", result.stdout)
         create_help = subprocess.run(
             [str(ROOT / "scripts/standards"), "create", "--help"],
             check=False,
@@ -159,6 +160,55 @@ class PublicSurfaceTests(unittest.TestCase):
                 if retired.casefold() in text.casefold()
             ]
             self.assertEqual(offenders, [], f"{retired}: {offenders}")
+
+    def test_public_orientation_states_the_repository_environment_contract(
+        self,
+    ) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        lifecycle = (ROOT / "standards/repository-lifecycle.md").read_text(
+            encoding="utf-8"
+        )
+        contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+        for fragment in (
+            "unrelated maintainers",
+            "repository environment",
+            "Product implementation",
+            "repository-owned tooling",
+            "Linux",
+            "macOS",
+            "WSL",
+            "Native Windows",
+            "$deliver-change",
+        ):
+            self.assertIn(fragment, readme)
+        self.assertNotIn("scripts/standards deliver", readme)
+
+        self.assertIn("repository environment", lifecycle)
+        self.assertIn("Product implementation", lifecycle)
+        self.assertIn("Agent Skill", lifecycle)
+        self.assertIn("$deliver-change", lifecycle)
+        self.assertIn("supplementary workflows", contributing)
+        self.assertIn("alternative workflow sets", contributing)
+
+    def test_superseding_decisions_record_the_truthful_public_boundary(
+        self,
+    ) -> None:
+        environment_decision = (
+            ROOT
+            / "docs/adr/0010-define-the-public-repository-environment.md"
+        ).read_text(encoding="utf-8")
+        lifecycle_decision = (
+            ROOT
+            / "docs/adr/0011-advertise-only-operational-lifecycle-interfaces.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("repository environment", environment_decision)
+        self.assertIn("product implementation", environment_decision)
+        self.assertIn("Supersedes", environment_decision)
+        self.assertIn("Agent Skill", lifecycle_decision)
+        self.assertIn("stub", lifecycle_decision)
+        self.assertIn("Supersedes", lifecycle_decision)
 
 
 if __name__ == "__main__":

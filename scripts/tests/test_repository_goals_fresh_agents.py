@@ -34,7 +34,6 @@ class RepositoryGoalFreshAgentTests(unittest.TestCase):
                     "create": "create a prepared repository baseline",
                     "publish": "publish a prepared repository",
                     "adopt": "create a validated standards-adoption commit",
-                    "deliver": "deliver a validated change through GitHub",
                 }
                 arguments = sys.argv[1:]
                 if not arguments or arguments == ["--help"]:
@@ -67,19 +66,18 @@ class RepositoryGoalFreshAgentTests(unittest.TestCase):
             check=True,
         )
 
-    def test_concrete_maintainer_requests_exercise_all_repository_goals(
+    def test_concrete_maintainer_requests_exercise_all_executable_goals(
         self,
     ) -> None:
         final_message = self.repository / ".agent-final.txt"
         prompt = (
-            "Handle these six independent maintainer requests using the public "
+            "Handle these five independent maintainer requests using the public "
             "repository interface: determine whether the current repository "
             "satisfies its selected standards; apply its safe automatic "
             "corrections; create a prepared private MIT repository baseline "
             "for owner/example whose purpose is 'Exercise repository goals'; "
-            "publish a prepared repository; adopt stable release 5.0.0; and "
-            "carry an already validated change through GitHub. Exercise each "
-            "request once and report the outcomes."
+            "publish a prepared repository; and adopt stable release 5.0.0. "
+            "Exercise each request once and report the outcomes."
         )
 
         result = subprocess.run(
@@ -111,7 +109,7 @@ class RepositoryGoalFreshAgentTests(unittest.TestCase):
                 .read_text(encoding="utf-8")
                 .splitlines()
             ),
-            {"check", "repair", "create", "publish", "adopt", "deliver"},
+            {"check", "repair", "create", "publish", "adopt"},
         )
 
 

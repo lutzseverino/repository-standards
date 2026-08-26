@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted in [issue #35](https://github.com/lutzseverino/repository-standards/issues/35)
-and implemented by
+Superseded in part by ADR 0011. Accepted in
+[issue #35](https://github.com/lutzseverino/repository-standards/issues/35) and
+implemented by
 [issue #38](https://github.com/lutzseverino/repository-standards/issues/38).
 
 ## Context

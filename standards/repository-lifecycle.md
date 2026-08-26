@@ -4,18 +4,29 @@ This document is the living owner of repository conformance and lifecycle
 policy. [Contributing](../CONTRIBUTING.md) separately owns the ordinary change
 workflow. Skills are execution adapters and do not define either policy.
 
-## Task grammar
+Repository Standards governs the repository environment: its recognizable
+structure, documentation, agent guidance, lifecycle interfaces, and declared
+GitHub behavior. Product implementation, application architecture, package
+policy, and repository-owned tooling remain outside that mandatory boundary.
+The environment is opinionated and harness-portable so unrelated maintainers
+can deliberately adopt it without becoming part of an author-owned repository
+family.
 
-One actor-neutral `standards` executable exposes six repository goals:
+## Lifecycle interfaces
 
-| Goal | Result |
+Lifecycle vocabulary names repository operations without promising that one
+executable implements all of them. Deterministic operations use the
+actor-neutral `standards` executable; operations that require agent judgment
+use repository-local Agent Skills.
+
+| Public interface | Result |
 | --- | --- |
-| `check` | assess the participating repository without mutation |
-| `repair` | apply safe corrections after complete preflight |
-| `create` | produce a prepared creation baseline |
-| `publish` | perform first publication |
-| `adopt` | create a validated standards-adoption commit |
-| `deliver` | carry a validated change through GitHub |
+| `standards check` | assess the participating repository without mutation |
+| `standards repair` | apply safe corrections after complete preflight |
+| `standards create` | produce a prepared creation baseline |
+| `standards publish` | perform first publication |
+| `standards adopt` | create a validated standards-adoption commit |
+| `$deliver-change` Agent Skill | carry a validated change through GitHub |
 
 The participating repository is the default subject. It includes repository
 content and declared GitHub state. Restricted `content` or `github` scope is
@@ -38,6 +49,12 @@ Whole-repository assessment has exactly three conclusions:
 - `standards-complete` (exit status 0);
 - `not-standards-complete` (exit status 1);
 - `unverified` (exit status 2).
+
+Default human output shows the conclusion, scope, lifecycle, compact category
+counts, differences, evidence gaps, automatic corrections, and required
+maintainer work. `--verbose` restores complete satisfied-requirement and
+preservation evidence. JSON is the stable complete automation contract;
+verbosity does not remove JSON fields or change exit meanings.
 
 Missing authentication, insufficient permissions, ambiguous lifecycle state,
 or incomplete observability retains useful known evidence but cannot produce a
@@ -91,10 +108,11 @@ and complete evidence is observed.
 
 ## GitHub delivery
 
-GitHub delivery starts from a validated commit and does not edit implementation
-work. It validates the exact candidate, preserves unrelated local state,
-pushes the branch, reuses or creates a ready pull request, and gathers current
-CI and review evidence.
+GitHub delivery is invoked through the repository-local `$deliver-change`
+Agent Skill. It starts from a validated commit and does not edit implementation
+work. It validates the exact candidate, preserves unrelated local state, pushes
+the branch, reuses or creates a ready pull request, and gathers current CI and
+review evidence.
 
 Delivery then presents one exact lifecycle proposal containing the pull
 request, prepared head, linked work, evidence, proposed squash merge, tracker
@@ -122,3 +140,9 @@ Projects disabled unless deliberately declared.
 GitHub may hide ruleset bypass actors from callers without Administration
 write permission. An assessment reports that missing evidence as unverified
 instead of guessing conformance.
+
+## Supported environments
+
+The public lifecycle interfaces support Linux, macOS, and WSL. Native Windows
+is unsupported future work; portable-looking commands do not imply current
+native Windows support.

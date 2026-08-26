@@ -84,10 +84,59 @@ class StandardsCommandTests(unittest.TestCase):
 
         self.assertEqual(complete[0], 0, complete)
         self.assertIn("Conclusion: standards-complete", complete[1])
+        self.assertRegex(
+            complete[1],
+            r"Counts: \d+ satisfied, 0 differences, 0 evidence gaps, "
+            r"0 automatic corrections, 0 required maintainer actions, "
+            r"\d+ preservation items",
+        )
+        self.assertNotIn("Satisfied requirements:", complete[1])
+        self.assertNotIn("Preservation evidence:", complete[1])
         self.assertEqual(incomplete[0], 1, incomplete)
         self.assertIn("Conclusion: not-standards-complete", incomplete[1])
+        self.assertIn("Differences:", incomplete[1])
+        self.assertIn("repository settings", incomplete[1])
         self.assertEqual(unverified[0], 2, unverified)
         self.assertIn("Conclusion: unverified", unverified[1])
+        self.assertIn("Evidence gaps:", unverified[1])
+        self.assertIn("GitHub evidence is unavailable", unverified[1])
+
+    def test_verbose_human_output_restores_complete_evidence(self) -> None:
+        status, stdout, stderr = self.run_command(
+            "check", "--verbose", str(ROOT), adapter=ConformanceGitHub()
+        )
+
+        self.assertEqual(status, 0, stderr)
+        self.assertIn("Satisfied requirements:", stdout)
+        self.assertIn("Preservation evidence:", stdout)
+        self.assertIn("[repository-content]", stdout)
+
+    def test_json_remains_complete_and_keeps_the_same_exit_meaning(self) -> None:
+        status, stdout, stderr = self.run_command(
+            "check", "--json", str(ROOT), adapter=ConformanceGitHub()
+        )
+
+        self.assertEqual(status, 0, stderr)
+        assessment = json.loads(stdout)
+        self.assertEqual(
+            set(assessment),
+            {
+                "conclusion",
+                "scope",
+                "lifecycle",
+                "satisfied-requirements",
+                "differences",
+                "evidence-gaps",
+                "automatic-corrections",
+                "required-maintainer-work",
+                "preservation-evidence",
+                "application",
+            },
+        )
+        self.assertTrue(assessment["satisfied-requirements"])
+        self.assertTrue(assessment["preservation-evidence"])
+        self.assertIn("differences", assessment)
+        self.assertIn("evidence-gaps", assessment)
 
     def test_create_keeps_contract_construction_behind_the_selected_executable(
         self,
@@ -136,7 +185,7 @@ class StandardsCommandTests(unittest.TestCase):
         self.assertEqual(adapter.applied, [])
         self.assertIn("content-only assessment", stdout)
 
-    def test_repair_renders_the_complete_preview_before_github_mutation(self) -> None:
+    def test_repair_renders_the_actionable_preview_before_github_mutation(self) -> None:
         adapter = ConformanceGitHub(drift=True)
         stdout = io.StringIO()
         observed_before_apply: list[str] = []
@@ -157,6 +206,8 @@ class StandardsCommandTests(unittest.TestCase):
         self.assertIn(
             "UPDATE   repository settings", observed_before_apply[0]
         )
+        self.assertIn("Counts:", observed_before_apply[0])
+        self.assertNotIn("Satisfied requirements:", observed_before_apply[0])
         self.assertIn("Conclusion: standards-complete", stdout.getvalue())
 
 

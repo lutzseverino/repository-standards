@@ -7,6 +7,19 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Define Repository Standards as a harness-portable repository environment for
+  unrelated GitHub maintainers, with explicit product-implementation,
+  workflow-extension, and supported-platform boundaries.
+- Make human repository assessments concise and actionable by default, add a
+  verbose complete-evidence mode, and preserve complete JSON and exit meanings.
+
+### Removed
+
+- Remove the non-operational `standards deliver` stub and present GitHub
+  delivery through the repository-local `deliver-change` Agent Skill.
+
 ## [5.0.0] - 2026-08-25
 
 ### Added
