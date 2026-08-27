@@ -17,9 +17,21 @@ requires it, such as quoted documents or translation content.
 _Avoid_: Input language, English-only content
 
 **Standard skill bundle**:
-A pinned, explicitly inventoried set of repository-agnostic agent skills
-distributed to every participating repository through the common profile.
-_Avoid_: Global skill installation, every upstream skill
+A release-pinned, explicitly inventoried set containing the transitive closure
+of Agent Skills required by the canonical workflow. It is distributed to every
+participating repository through the common profile. Agent Skills is the
+canonical skill format; harness-specific discovery uses adapters rather than a
+second skill format.
+_Avoid_: Global skill installation, harness-native skill format, every upstream
+skill
+
+**Bootstrap skill**:
+A thin user-scoped Agent Skill that lets a maintainer create a participating
+repository or adopt standards before repository-local standard skills exist.
+It delegates substantive behavior to a selected immutable standards release;
+the resulting repository remains release-pinned and self-contained.
+_Avoid_: Globally installed standard skill bundle, custom skill installer,
+standards source of truth
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting
@@ -71,15 +83,29 @@ A declared repository path that must not exist because its presence would
 restore retired or conflicting behavior.
 _Avoid_: Unmanaged path, optional file
 
+**Repository environment**:
+The recognizable repository-level structure, canonical workflow, documentation
+and agent guidance, lifecycle interfaces, managed community files, and declared
+GitHub behavior governed by a standards release. Product implementation and
+repository-owned tooling may vary or diverge without changing that environment.
+_Avoid_: Application skeleton, product architecture, project implementation
+
 **Standards adoption**:
-The deliberate work that brings a participating repository into full
-conformance with a specific standards release, including repository content
-and its declared GitHub contract.
+The deliberate work that initially brings a repository, or later updates a
+participating repository, into conformance with a specific standards release,
+including its repository environment and declared GitHub contract.
 _Avoid_: File copying, standards update
 
+**Participating repository**:
+A repository whose maintainer deliberately adopts an exact standards release.
+Participation is not limited by repository ownership or maintainer identity.
+_Avoid_: Repository maintained by Lutz Severino, internal repository
+
 **Prepared creation baseline**:
-The uncommitted local repository content and empty GitHub repository produced
-by repository creation. It still requires first publication.
+The uncommitted local repository content, including its settled
+canonical-validation declaration, and empty GitHub repository produced by
+repository creation. Repository-owned product content may be added before its
+still-required first publication.
 _Avoid_: Published repository, standards-complete repository
 
 **First publication**:
@@ -88,8 +114,10 @@ standards-complete repository.
 _Avoid_: GitHub delivery, initial delivery, repository creation
 
 **Standards-complete repository**:
-A published repository whose committed content and observed GitHub state
-satisfy every applicable rule of its selected standards release.
+A published repository whose committed repository environment and observed
+GitHub state satisfy the repository contract of its selected standards release.
+Required repository-environment interfaces cannot be waived while retaining
+this conclusion.
 _Avoid_: Lifecycle-relative conformance, prepared creation baseline
 
 **Repository assessment**:
@@ -98,10 +126,16 @@ compare with the selected standards release, including known differences,
 missing evidence, safe corrections, and required maintainer work.
 _Avoid_: Separate content and GitHub conformance operations
 
+**Consumer acceptance journey**:
+A clean-room exercise of public installation and a complete repository
+lifecycle path outside the standards source repository. It proves that a
+maintainer can enter and use the system without source-checkout knowledge.
+_Avoid_: Standards-repository dogfooding, unit test, showcase recording
+
 **Selectable ecosystem profile**:
-The prepared-creation lifecycle treats an ecosystem profile as selectable only
-when it has explicit applicability and observable managed or assessed behavior.
-Unenforced ecosystem guidance is not selectable.
+A profile with explicit applicability and observable managed or assessed
+repository-environment behavior. It may also provide maintainer and agent
+guidance, but it does not govern product implementation.
 _Avoid_: Applicability label, ecosystem advice
 
 **Declared GitHub reconciliation**:
@@ -111,10 +145,11 @@ operations.
 _Avoid_: Separate conformance result models, write-only correction lists
 
 **Canonical validation**:
-The single complete command that determines whether a change is ready for
-GitHub delivery. It is distinct from a standards check, which determines
-repository conformance.
-_Avoid_: Standards check, test suite, partial check, stronger quality gate
+The repository-owned aggregate command declared by a participating repository.
+It performs every self-contained check required before GitHub delivery, while
+additional commands and CI-only evidence may coexist.
+_Avoid_: Standards check, one prescribed script, every validation command,
+CI-only gate
 
 **Tracker reconciliation**:
 The work that updates or closes tracked work after its change reaches the
@@ -125,3 +160,9 @@ _Avoid_: Implementation, dispatch
 Repository-local documentation that tells standard skills where tracked work
 and domain documentation live and which triage labels to use.
 _Avoid_: Vendored skill, agent implementation
+
+**Harness adapter**:
+A thin repository-environment artifact that exposes canonical agent
+configuration or skills through a harness-specific discovery path without
+becoming another policy source.
+_Avoid_: Harness-specific workflow, duplicated agent policy
