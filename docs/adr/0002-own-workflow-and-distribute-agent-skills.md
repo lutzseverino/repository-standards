@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded in part by ADR 0004 and ADR 0010
+Superseded in part by ADR 0004, ADR 0010, and ADR 0013
 
 ## Context
 
@@ -35,6 +35,10 @@ dispatch actions; this repository does not provide an automatic pickup system.
 
 This decision supersedes ADR 0001 only where that record attributes a complete
 workflow to upstream or decides not to vendor the skills.
+
+ADR 0013 supersedes this decision where it distributes the complete 25-skill
+plugin bundle. Provenance, immutable pinning, repository-local distribution,
+and preservation of unrelated local skills remain in force.
 
 ## Consequences
 
