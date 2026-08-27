@@ -2,8 +2,8 @@
 
 This profile applies when `ecosystem=rust`, `framework=tauri`, and
 `project-kind=desktop-application`. Its managed behavior is limited to
-composing Rust and Tauri generated-path exclusions into `.gitignore`. Select it
-alongside every applicable JavaScript package-manager and UI profile.
+composing Rust and Tauri generated-path exclusions into `.gitignore`. Profile
+selection follows the [repository lifecycle](../../standards/repository-lifecycle.md).
 
 ## Guidance
 
