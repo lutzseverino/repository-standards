@@ -26,5 +26,5 @@ conformance. A React and Vite repository can expose an aggregate check such as:
 The example scripts and `examples/ci.yml` are guidance rather than managed
 files. Package-manager choice, scripts, tool selection, framework layout,
 working directory, deployment behavior, and test scope remain
-repository-owned. Select any other applicable package-manager profile alongside
-this one.
+repository-owned. Profile selection follows the [repository
+lifecycle](../../standards/repository-lifecycle.md).
