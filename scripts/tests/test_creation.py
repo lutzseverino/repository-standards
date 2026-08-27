@@ -118,6 +118,9 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                         handle.write("contract build\\n")
                     if facts.get("facts", {}).get("ambiguous") == "true":
                         raise ValueError("multiple selectable ecosystem profiles match")
+                    selected_profiles = ["common", "documentation"]
+                    if facts.get("facts", {}).get("ecosystem") == ["node", "rust"]:
+                        selected_profiles.extend(["node-npm", "tauri"])
                     default_ruleset = {
                         "name": "Protect main",
                         "required-status-checks": ["CI / Required"],
@@ -133,7 +136,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                         "standards-version": 5,
                         "standards-release": facts["standards-release"],
                         "canonical-validation": facts["canonical-validation"],
-                        "profiles": ["common", "documentation"],
+                        "profiles": selected_profiles,
                         "boundaries": [{"path": ".", "type": "repository", "title": facts["title"]}],
                         "dependency-updates": [{"ecosystem": "github-actions", "directory": "/", "schedule": "weekly"}],
                         "repository-owned": ["README.md", "LICENSE", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md"],
@@ -592,6 +595,25 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "standards repair repository",
                 "standards check repository",
             ],
+        )
+
+    def test_repeated_applicability_facts_reach_the_selected_release(self) -> None:
+        result = self.run_create(
+            "--fact",
+            "ecosystem=node",
+            "--fact",
+            "ecosystem=rust",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(
+            (self.destination / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            manifest["profiles"],
+            ["common", "documentation", "node-npm", "tauri"],
         )
 
     def test_canonical_validation_failure_stops_before_remote_creation(self) -> None:

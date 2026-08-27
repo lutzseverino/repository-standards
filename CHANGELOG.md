@@ -9,6 +9,10 @@ and standards releases use semantic versioning.
 
 ### Changed
 
+- Compose zero, one, or several applicable ecosystem profiles during initial
+  contract selection, reject guidance-only profiles, and keep profile
+  conformance limited to observable repository-environment behavior rather
+  than product implementation conventions.
 - Curate the release-pinned repository-local skill bundle to the canonical
   workflow's tested transitive closure, retire former managed skills through
   explicit absences, and add drift-checked Claude discovery adapters.

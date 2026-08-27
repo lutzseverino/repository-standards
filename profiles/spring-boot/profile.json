@@ -1,6 +1,6 @@
 {
   "name": "spring-boot",
-  "description": "Spring Boot service and Maven build baseline",
+  "description": "Maven and JVM generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "java",

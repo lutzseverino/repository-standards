@@ -1,11 +1,13 @@
 # Vite React profile
 
-Use React, Vite, strict TypeScript, and one canonical `check` script. Biome owns
-formatting, import organization, and fast general lint rules. ESLint owns
-type-aware TypeScript and React-specific rules not covered by Biome. Vitest is
-included where behavior merits tests.
+This profile applies when `ecosystem=node` and `framework=vite-react`. Its managed
+behavior is limited to composing Vite, build, coverage, and TypeScript cache
+exclusions into `.gitignore`.
 
-Recommended scripts:
+## Guidance
+
+The following guidance is advisory and is not assessed for standards
+conformance. A React and Vite repository can expose an aggregate check such as:
 
 ```json
 {
@@ -21,11 +23,8 @@ Recommended scripts:
 }
 ```
 
-Replace `npm run` with `pnpm` inside a pnpm install unit. Add architecture
-checks only when the repository has actual boundaries to enforce. The CI
-example assumes npm; pnpm repositories should start from the pnpm-workspace
-example and invoke their aggregate `check` script.
-
-`examples/ci.yml` is guidance, not a managed file, because the gate, working
-directory, deployment behavior, and test needs are repository-specific.
-Select either `node-npm` or `pnpm-workspace` for the install unit.
+The example scripts and `examples/ci.yml` are guidance rather than managed
+files. Package-manager choice, scripts, tool selection, framework layout,
+working directory, deployment behavior, and test scope remain
+repository-owned. Select any other applicable package-manager profile alongside
+this one.

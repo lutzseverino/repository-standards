@@ -1,11 +1,13 @@
 # Paper plugin profile
 
-Target Java 17 for Paper compatibility while running the build on JDK 21, which
-is required by Google Java Format 1.35. Use the Maven Wrapper, Maven Enforcer,
-compiler, Surefire, JAR, Shade, JUnit, ArchUnit, and Spotless. Run the canonical
-gate through `./mvnw verify`.
+This profile applies when `ecosystem=java`, `framework=paper`, and
+`project-kind=plugin`. Its managed behavior is limited to composing Maven,
+JVM, and Paper runtime exclusions into `.gitignore`.
 
-The common release preamble uses explicit permissions, pinned Actions, a fixed
-runner, concurrency, version validation, and a verified Maven build. Publishing
-destinations remain repository-specific: GitHub, Modrinth, Hangar, or any later
-target should not be hidden behind a pretend universal release workflow.
+## Guidance
+
+The following guidance is advisory and is not assessed for standards
+conformance: align Java and Paper compatibility deliberately, pin build tools,
+and include meaningful verification in the repository-owned aggregate command.
+Dependencies, Maven plugins, source layout, scripts, workflows, artifacts, and
+publishing destinations remain repository-owned.

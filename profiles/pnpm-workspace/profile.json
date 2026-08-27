@@ -1,6 +1,6 @@
 {
   "name": "pnpm-workspace",
-  "description": "pnpm workspace and install-unit conventions",
+  "description": "pnpm generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "node",

@@ -48,6 +48,56 @@ DEFAULT_INITIAL_REPOSITORY_OWNED = (
 
 
 @dataclass(frozen=True)
+class ApplicabilityFacts:
+    """Validated multi-value facts used to select ecosystem profiles."""
+
+    entries: tuple[tuple[str, tuple[str, ...]], ...]
+
+    @classmethod
+    def from_mapping(cls, value: object) -> ApplicabilityFacts:
+        if not isinstance(value, dict):
+            raise ContractError(
+                "facts must be an object of non-empty strings or unique "
+                "non-empty string lists"
+            )
+        entries: list[tuple[str, tuple[str, ...]]] = []
+        for name, raw_values in value.items():
+            if not isinstance(name, str) or not name:
+                raise ContractError(
+                    "facts must be an object of non-empty strings or unique "
+                    "non-empty string lists"
+                )
+            if isinstance(raw_values, str):
+                values = (raw_values,)
+            elif isinstance(raw_values, list) and all(
+                isinstance(item, str) for item in raw_values
+            ):
+                values = tuple(raw_values)
+            else:
+                values = ()
+            if (
+                not values
+                or any(not item for item in values)
+                or len(values) != len(set(values))
+            ):
+                raise ContractError(
+                    "facts must be an object of non-empty strings or unique "
+                    "non-empty string lists"
+                )
+            entries.append((name, values))
+        return cls(tuple(sorted(entries)))
+
+    def matches(self, name: str, expected: str) -> bool:
+        return any(
+            fact_name == name and expected in values
+            for fact_name, values in self.entries
+        )
+
+    def is_missing(self, name: str) -> bool:
+        return all(fact_name != name for fact_name, _ in self.entries)
+
+
+@dataclass(frozen=True)
 class ResolvedProfile:
     name: str
     description: str
@@ -174,14 +224,6 @@ class RepositoryContract:
 
 
 @dataclass(frozen=True)
-class InitialProfileSelection:
-    """Mandatory and explicitly selected or uniquely inferred initial profiles."""
-
-    profiles: tuple[str, ...]
-    inferred_profile: str | None
-
-
-@dataclass(frozen=True)
 class InitialRepositoryContract:
     """A complete validated initial repository declaration."""
 
@@ -195,7 +237,6 @@ class InitialRepositoryContract:
     variables: tuple[tuple[str, Any], ...]
     local_fragments: tuple[tuple[str, tuple[str, ...]], ...]
     repository_owned: tuple[str, ...]
-    inferred_profile: str | None
 
     def as_mapping(self) -> dict[str, Any]:
         """Return the normalized JSON manifest written by initialization."""
@@ -258,13 +299,19 @@ def _thaw_value(value: Any) -> Any:
     return value
 
 
+def _has_profile_environment_behavior(profile: Mapping[str, Any]) -> bool:
+    return bool(profile.get("files")) or bool(
+        profile.get("github", {}).get("required-labels")
+    )
+
+
 def select_initial_profiles(
     *,
     standards_root: Path,
-    facts: dict[str, str],
+    facts: ApplicabilityFacts,
     explicit_profiles: list[str] | None = None,
-) -> InitialProfileSelection:
-    """Select the mandatory baseline and at most one inferred ecosystem profile."""
+) -> tuple[str, ...]:
+    """Select the mandatory baseline and every inferred ecosystem profile."""
 
     from . import repository_content
 
@@ -284,9 +331,12 @@ def select_initial_profiles(
                 if loaded_name == name
             )
             applicability = data.get("applicability")
-            has_behavior = bool(data.get("files")) or bool(
-                data.get("github", {}).get("required-labels")
-            )
+            has_behavior = _has_profile_environment_behavior(data)
+            if isinstance(applicability, dict) and applicability and not has_behavior:
+                raise ContractError(
+                    f"guidance-only profile {name!r} has no managed or assessed "
+                    "repository-environment behavior"
+                )
             if (
                 name not in MANDATORY_INITIAL_PROFILES
                 and isinstance(applicability, dict)
@@ -300,16 +350,19 @@ def select_initial_profiles(
     matches = tuple(
         name
         for name, applicability in selectable.items()
-        if all(facts.get(key) == value for key, value in applicability.items())
-    )
-    incomplete = {
-        name: tuple(key for key in applicability if key not in facts)
-        for name, applicability in selectable.items()
         if all(
-            key not in facts or facts[key] == value
+            facts.matches(key, value)
             for key, value in applicability.items()
         )
-        and any(key not in facts for key in applicability)
+    )
+    incomplete = {
+        name: tuple(key for key in applicability if facts.is_missing(key))
+        for name, applicability in selectable.items()
+        if all(
+            facts.is_missing(key) or facts.matches(key, value)
+            for key, value in applicability.items()
+        )
+        and any(facts.is_missing(key) for key in applicability)
     }
 
     if incomplete:
@@ -341,25 +394,13 @@ def select_initial_profiles(
                 "explicit profiles do not match the supplied facts: "
                 + ", ".join(nonmatching)
             )
-        return InitialProfileSelection(
-            tuple(
-                dict.fromkeys(
-                    (*MANDATORY_INITIAL_PROFILES, *explicit_profiles)
-                )
-            ),
-            None,
+        return tuple(
+            dict.fromkeys(
+                (*MANDATORY_INITIAL_PROFILES, *explicit_profiles)
+            )
         )
 
-    if len(matches) > 1:
-        raise ContractError(
-            "multiple selectable ecosystem profiles match; choose explicitly: "
-            + ", ".join(matches)
-        )
-    inferred = matches[0] if matches else None
-    return InitialProfileSelection(
-        (*MANDATORY_INITIAL_PROFILES, *((inferred,) if inferred else ())),
-        inferred,
-    )
+    return (*MANDATORY_INITIAL_PROFILES, *matches)
 
 
 def _initial_mapping(value: object, field: str) -> dict[str, Any]:
@@ -416,19 +457,11 @@ def build_initial_repository_contract(
     title = initialization.get("title")
     if not isinstance(title, str) or not title.strip():
         raise ContractError("title must be an explicit non-empty string")
-    facts = initialization.get("facts", {})
-    if not isinstance(facts, dict) or not all(
-        isinstance(key, str)
-        and key
-        and isinstance(value, str)
-        and value
-        for key, value in facts.items()
-    ):
-        raise ContractError("facts must be an object of non-empty strings")
+    facts = ApplicabilityFacts.from_mapping(initialization.get("facts", {}))
     explicit_profiles = initialization.get("profiles")
     if explicit_profiles is not None and not isinstance(explicit_profiles, list):
         raise ContractError("profiles must be a non-empty unique list of names")
-    selection = select_initial_profiles(
+    selected_profiles = select_initial_profiles(
         standards_root=standards_root,
         facts=facts,
         explicit_profiles=explicit_profiles,
@@ -462,7 +495,7 @@ def build_initial_repository_contract(
         "standards-version": repository_content.SUPPORTED_STANDARDS_VERSION,
         "standards-release": release,
         "canonical-validation": initialization.get("canonical-validation"),
-        "profiles": list(selection.profiles),
+        "profiles": list(selected_profiles),
         "boundaries": initialization.get(
             "boundaries",
             [{"path": ".", "type": "repository", "title": title}],
@@ -523,7 +556,6 @@ def build_initial_repository_contract(
         ),
         local_fragments=resolved.local_fragments,
         repository_owned=resolved.repository_owned,
-        inferred_profile=selection.inferred_profile,
     )
 
 
@@ -548,6 +580,23 @@ def resolve_repository_contract(
         raw_profiles = repository_content._load_profiles(
             standards_root, raw_manifest["profiles"]
         )
+        profiles_by_name = {
+            name: data for name, data, _ in raw_profiles
+        }
+        for name in raw_manifest["profiles"]:
+            if name in MANDATORY_INITIAL_PROFILES:
+                continue
+            profile = profiles_by_name[name]
+            if not profile.get("applicability"):
+                raise repository_content.StandardsError(
+                    f"selected ecosystem profile {name!r} must declare "
+                    "applicability"
+                )
+            if not _has_profile_environment_behavior(profile):
+                raise repository_content.StandardsError(
+                    f"selected guidance-only profile {name!r} has no managed or "
+                    "assessed repository-environment behavior"
+                )
         managed_files, content_blockers = repository_content._build_content_with_blockers(
             standards_root,
             repository,

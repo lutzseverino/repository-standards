@@ -1,12 +1,13 @@
 # Codex skill profile
 
-Keep operational knowledge in the skill's own `references` model; do not create
-an empty parallel Diataxis tree. Extract validation from README prose into a
-checked-in script and run it in a workflow named `CI`.
+This profile applies when `ecosystem=codex` and `project-kind=skill`. Its managed
+behavior is limited to composing skill-validation scratch exclusions into
+`.gitignore`.
 
-The validation gate should check at least the skill package structure, metadata,
-internal links, and any resident-agnostic safety constraints. It must not expose
-credentials or assume access to the maintainer's live infrastructure.
+## Guidance
 
-Private repositories use truthful access, type, and license-status information
-in their root README instead of badges for public behavior they do not have.
+The following guidance is advisory and is not assessed for standards
+conformance: keep operational knowledge near the skill, provide a checked-in
+validation command, and keep documentation truthful about access and license
+status. Skill layout, validation scope, scripts, workflows, and documentation
+organization remain repository-owned.

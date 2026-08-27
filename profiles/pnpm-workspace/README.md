@@ -1,7 +1,14 @@
 # pnpm workspace profile
 
-Declare exactly one package manager per install unit. pnpm workspaces use the
-established exact declaration:
+This profile applies when `ecosystem=node`, `package-manager=pnpm`, and
+`project-kind=workspace`. Its managed behavior is limited to composing Node and
+pnpm generated-path exclusions into `.gitignore`.
+
+## Guidance
+
+The following guidance is advisory and is not assessed for standards
+conformance. A pnpm workspace can declare its package manager explicitly, for
+example:
 
 ```json
 {
@@ -9,14 +16,6 @@ established exact declaration:
 }
 ```
 
-Track `pnpm-lock.yaml` and do not track `package-lock.json` or `yarn.lock` in
-the same install unit. CI uses `pnpm install --frozen-lockfile` and a root
-aggregate `pnpm check` command. `pnpm check` is the sole canonical gate; CI may
-split it into jobs only when those jobs collectively execute every constituent
-check. Upgrade pnpm separately from standards adoption.
-
-Declare an `npm` dependency-update entry for the workspace root; Dependabot's
-`npm` ecosystem supports pnpm lockfiles.
-
-The workspace definition, filters, scripts, catalogs, and package boundaries
-remain repository-owned.
+Lockfile policy, install commands, workspace definitions, filters, scripts,
+catalogs, package boundaries, dependency-update declarations, and package
+manager upgrades remain repository-owned.

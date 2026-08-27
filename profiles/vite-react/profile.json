@@ -1,6 +1,6 @@
 {
   "name": "vite-react",
-  "description": "React, Vite, TypeScript, Biome, ESLint, and Vitest baseline",
+  "description": "Vite and frontend-test generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "node",

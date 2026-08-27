@@ -1,6 +1,6 @@
 {
   "name": "paper-plugin",
-  "description": "Java and Maven conventions for Paper server plugins",
+  "description": "Maven and Paper runtime generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "java",

@@ -28,8 +28,9 @@ operating this transition.
    expansion in these fields. Run the bundled adapter with the declaration and
    settled facts. Pass an exact release when the user selected one; omit
    `--version` to select the latest stable release. Repeat `--fact NAME=VALUE`
-   for applicability facts. When the user resolves an ambiguous match, repeat
-   `--profile NAME` for every explicitly selected ecosystem profile.
+   for applicability facts, including repeating the same name for each value of
+   a multi-value fact. Repeat `--profile NAME` for every explicitly selected
+   ecosystem profile.
 
    ```sh
    python3 .agents/skills/create-repository/scripts/create \

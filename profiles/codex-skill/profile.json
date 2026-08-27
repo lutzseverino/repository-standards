@@ -1,6 +1,6 @@
 {
   "name": "codex-skill",
-  "description": "Codex skill repository validation baseline",
+  "description": "Codex skill validation-scratch exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "codex",

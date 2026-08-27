@@ -45,3 +45,6 @@ environment.
   distribute only the canonical workflow's transitive skill closure, retire
   former managed skills explicitly, and expose canonical artifacts to Claude
   through drift-checked pointers.
+- [Compose product-neutral ecosystem profiles](0014-compose-product-neutral-ecosystem-profiles.md):
+  select every applicable ecosystem profile while keeping product
+  implementation and guidance outside mechanical conformance.

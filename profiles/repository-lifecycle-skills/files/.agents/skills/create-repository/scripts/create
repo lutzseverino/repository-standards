@@ -847,14 +847,21 @@ def main() -> int:
         if len(args.purpose) > 350:
             raise CreationError("purpose must not exceed 350 characters")
         destination = _destination(args.destination)
-        facts: dict[str, str] = {}
+        fact_values: dict[str, list[str]] = {}
         for declaration in args.fact:
             if "=" not in declaration:
                 raise CreationError(f"fact must use NAME=VALUE: {declaration!r}")
             name, value = declaration.split("=", 1)
-            if not name or not value or name in facts:
-                raise CreationError(f"fact must be unique and non-empty: {declaration!r}")
-            facts[name] = value
+            values = fact_values.setdefault(name, [])
+            if not name or not value or value in values:
+                raise CreationError(
+                    f"fact values must be unique and non-empty: {declaration!r}"
+                )
+            values.append(value)
+        facts: dict[str, str | list[str]] = {
+            name: values[0] if len(values) == 1 else values
+            for name, values in fact_values.items()
+        }
         if len(args.profile) != len(set(args.profile)):
             raise CreationError("explicit profiles must not contain duplicates")
 

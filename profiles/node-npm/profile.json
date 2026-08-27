@@ -1,6 +1,6 @@
 {
   "name": "node-npm",
-  "description": "Standalone npm install-unit conventions",
+  "description": "Node and npm generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "node",
