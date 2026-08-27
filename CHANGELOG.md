@@ -12,6 +12,9 @@ and standards releases use semantic versioning.
 - Curate the release-pinned repository-local skill bundle to the canonical
   workflow's tested transitive closure, retire former managed skills through
   explicit absences, and add drift-checked Claude discovery adapters.
+- Present issue-tracker, triage-label, and domain-documentation guidance as
+  independent agent configuration without obsolete interactive setup
+  commentary.
 - Define Repository Standards as a harness-portable repository environment for
   unrelated GitHub maintainers, with explicit product-implementation,
   workflow-extension, and supported-platform boundaries.
