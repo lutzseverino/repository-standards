@@ -338,9 +338,8 @@ responses.
             standards_root() / "profiles/agent-skills/files/.agents/skills"
         )
         for skill in expected_skills:
-            instructions = (bundled_root / skill / "SKILL.md").read_text(
-                encoding="utf-8"
-            )
+            skill_root = bundled_root / skill
+            instructions = (skill_root / "SKILL.md").read_text(encoding="utf-8")
             referenced_skills = {
                 candidate
                 for candidate in upstream_skills
@@ -355,6 +354,19 @@ responses.
                 set(expected_dependencies[skill]),
                 skill,
             )
+            resource_instructions = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in sorted(skill_root.rglob("*.md"))
+            )
+            retired_references = {
+                candidate
+                for candidate in upstream_skills - set(expected_skills)
+                if re.search(
+                    rf"/{re.escape(candidate)}(?![a-z0-9-])",
+                    resource_instructions,
+                )
+            }
+            self.assertEqual(retired_references, set(), skill)
         license_text = (
             repository / ".agents/licenses/mattpocock-skills.txt"
         ).read_text(encoding="utf-8")
@@ -432,11 +444,16 @@ responses.
             workflow_inventory["bundles"][0]["skills"]
             + lifecycle_inventory["bundle"]["skills"]
         )
-        adapter_skills = sorted(
-            path.parent.name
-            for path in (repository / ".claude/skills").glob("*/SKILL.md")
+        adapter_root = repository / ".claude/skills"
+        adapter_files = sorted(
+            path.relative_to(adapter_root).as_posix()
+            for path in adapter_root.rglob("*")
+            if path.is_file()
         )
-        self.assertEqual(adapter_skills, canonical_skills)
+        self.assertEqual(
+            adapter_files,
+            [f"{name}/SKILL.md" for name in canonical_skills],
+        )
 
         for name in canonical_skills:
             canonical = (
