@@ -1,6 +1,11 @@
 {
   "standards-version": 5,
   "standards-release": "5.0.0",
+  "canonical-validation": {
+    "executable": "scripts/validate",
+    "arguments": [],
+    "working-directory": "."
+  },
   "profiles": [
     "common",
     "documentation",

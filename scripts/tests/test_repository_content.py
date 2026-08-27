@@ -81,6 +81,11 @@ class RepositoryContentTests(unittest.TestCase):
             "standards-release": (standards_root() / "VERSION").read_text(
                 encoding="utf-8"
             ).strip(),
+            "canonical-validation": {
+                "executable": "scripts/validate",
+                "arguments": [],
+                "working-directory": ".",
+            },
             "profiles": ["common", "documentation", "node-npm", "vite-react"],
             "boundaries": [
                 {

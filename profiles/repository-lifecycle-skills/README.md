@@ -17,3 +17,7 @@ The bundle contains:
 - `deliver-change` for explicitly confirmed GitHub delivery;
 - `publish-repository` for the separately confirmed transition from a prepared
   creation baseline to a standards-complete repository.
+
+Creation persists, and adoption and delivery consume, the manifest's
+structured canonical-validation declaration. Lifecycle adapters preserve its
+literal process arguments and never reinterpret it as a shell command.

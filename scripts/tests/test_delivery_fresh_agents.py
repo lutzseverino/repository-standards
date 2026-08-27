@@ -55,13 +55,33 @@ class DeliveryFreshAgentTests(unittest.TestCase):
                 """\
                 # Agent guidance
 
-                The canonical validation command is `./validate`. GitHub delivery
-                uses a ready pull request, a Conventional Commit title, and squash
-                merge. Preserve unrelated local state. The GitHub repository is
-                `owner/example`, its default branch is `main`, and tracked work is
-                linked without a closing keyword until confirmed delivery completes.
+                Resolve canonical validation from `.repository-standards.json`.
+                GitHub delivery uses a ready pull request, a Conventional Commit
+                title, and squash merge. Preserve unrelated local state. The GitHub
+                repository is `owner/example`, its default branch is `main`, and
+                tracked work is linked without a closing keyword until confirmed
+                delivery completes.
                 """
             ),
+            encoding="utf-8",
+        )
+        (self.repository / ".repository-standards.json").write_text(
+            json.dumps(
+                {
+                    "standards-version": 5,
+                    "standards-release": "5.0.0",
+                    "canonical-validation": {
+                        "executable": "./validate",
+                        "arguments": [
+                            "argument with spaces",
+                            "$(touch validation-sentinel)",
+                        ],
+                        "working-directory": ".",
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
         )
         for startup_file in (".zshenv", ".zprofile"):
@@ -81,6 +101,11 @@ class DeliveryFreshAgentTests(unittest.TestCase):
                 if test "$validation_head" != "$FAKE_VALIDATION_EXPECTED_HEAD"; then
                     echo "validation ran outside the candidate worktree" >&2
                     exit 43
+                fi
+                if test "$#" -ne 2 || test "$1" != 'argument with spaces' || \
+                  test "$2" != '$(touch validation-sentinel)'; then
+                    echo "canonical validation argument boundaries changed" >&2
+                    exit 44
                 fi
                 printf '%s\n' "$validation_head" >>"$FAKE_VALIDATION_LOG"
                 if test -e "$FAKE_VALIDATION_FAILURE"; then
@@ -1017,6 +1042,7 @@ class DeliveryFreshAgentTests(unittest.TestCase):
         lowered = final.casefold()
         for evidence in ("validation", "fail"):
             self.assertIn(evidence, lowered, self.diagnostics(result, final))
+        self.assertIn("42", final, self.diagnostics(result, final))
 
 
 if __name__ == "__main__":

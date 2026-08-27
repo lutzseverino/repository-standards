@@ -27,6 +27,11 @@ class ReleaseDiscoveryTests(unittest.TestCase):
         self.manifest = {
             "standards-version": 5,
             "standards-release": self.release,
+            "canonical-validation": {
+                "executable": "scripts/validate",
+                "arguments": [],
+                "working-directory": ".",
+            },
             "profiles": ["common", "documentation"],
             "boundaries": [
                 {"path": ".", "type": "repository", "title": "Test Repository"}

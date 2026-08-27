@@ -5,7 +5,8 @@ instructions. Keep changes scoped to the requested outcome and preserve
 repository-specific behavior unless the task explicitly changes it.
 
 Read `CONTRIBUTING.md` before preparing a change. Use the repository's declared
-package or build manager and run its documented canonical validation command.
+package or build manager and execute the manifest's structured canonical
+validation with preserved argument boundaries and no shell interpretation.
 
 Prefer durable rules in tests, tooling, and documentation over instructions
 that exist only in agent context.

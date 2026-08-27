@@ -14,6 +14,9 @@ and standards releases use semantic versioning.
   workflow-extension, and supported-platform boundaries.
 - Make human repository assessments concise and actionable by default, add a
   verbose complete-evidence mode, and preserve complete JSON and exit meanings.
+- Persist canonical validation as one executable, ordered literal arguments,
+  and a safe repository-relative working directory; execute it without shell
+  interpretation across creation, adoption, and delivery.
 
 ### Removed
 

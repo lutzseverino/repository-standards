@@ -67,10 +67,30 @@ scripts/validate
 ## Repository contract
 
 Each participating repository carries `.repository-standards.json`. Its exact
-release, selected profiles, ownership boundaries, dependency-update policy,
-and declared GitHub settings determine the applicable repository contract.
+release, structured canonical validation, selected profiles, ownership
+boundaries, dependency-update policy, and declared GitHub settings determine
+the applicable repository contract.
 JSON is canonical and dependency-free; the schema is published at
 [`schema/repository-standards.schema.json`](schema/repository-standards.schema.json).
+
+Canonical validation is one executable plus an ordered literal argument
+sequence and an optional safe repository-relative working directory:
+
+```json
+{
+  "canonical-validation": {
+    "executable": "scripts/validate",
+    "arguments": [],
+    "working-directory": "."
+  }
+}
+```
+
+Lifecycle operations execute this declaration directly without shell parsing,
+expansion, globbing, redirects, or pipelines. Repositories may retain
+subordinate validation commands and CI-only evidence, but this declaration is
+the single aggregate delivery-readiness interface. It remains distinct from a
+standards check, which assesses conformance with the repository environment.
 
 The manifest distinguishes two versions:
 

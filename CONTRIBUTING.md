@@ -57,12 +57,10 @@ Keep changes scoped to their agreed work. Update tests and user-visible
 documentation with the behavior. Record release-facing changes under
 `Unreleased` in `CHANGELOG.md`.
 
-Run the single canonical validation command before considering implementation
-complete:
-
-```sh
-scripts/validate
-```
+Before considering implementation complete, execute the single
+`canonical-validation` declaration in `.repository-standards.json`: invoke its
+executable with its ordered literal arguments from its repository-relative
+working directory. Do not pass the declaration through a shell.
 
 `implement` changes the current branch, validates and reviews the work, and
 creates a commit. It does not open or merge a pull request or reconcile tracked

@@ -151,6 +151,11 @@ class StandardsCommandTests(unittest.TestCase):
                         .strip(),
                         "repository": "owner/example",
                         "title": "Example",
+                        "canonical-validation": {
+                            "executable": "scripts/validate",
+                            "arguments": [],
+                            "working-directory": ".",
+                        },
                         "facts": {
                             "ecosystem": "none",
                             "package-manager": "none",
@@ -173,6 +178,9 @@ class StandardsCommandTests(unittest.TestCase):
         contract = json.loads(stdout)
         self.assertEqual(contract["github"]["repository"], "owner/example")
         self.assertEqual(contract["profiles"], ["common", "documentation"])
+        self.assertEqual(
+            contract["canonical-validation"]["executable"], "scripts/validate"
+        )
 
     def test_check_is_read_only_and_restricted_check_is_unverified(self) -> None:
         adapter = ConformanceGitHub(drift=True)

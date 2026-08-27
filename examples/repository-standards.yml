@@ -1,6 +1,10 @@
 # YAML is optional and requires PyYAML. JSON is the dependency-free default.
 standards-version: 5
 standards-release: 5.0.0
+canonical-validation:
+  executable: scripts/validate
+  arguments: []
+  working-directory: "."
 profiles:
   - common
   - documentation

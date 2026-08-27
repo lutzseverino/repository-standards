@@ -139,6 +139,11 @@ class RepositoryPublicationTests(unittest.TestCase):
                 .strip(),
                 "repository": "owner/example",
                 "title": "Example Repository",
+                "canonical-validation": {
+                    "executable": "scripts/validate",
+                    "arguments": [],
+                    "working-directory": ".",
+                },
                 "facts": {
                     "ecosystem": "none",
                     "package-manager": "none",

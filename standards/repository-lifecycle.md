@@ -33,6 +33,28 @@ content and declared GitHub state. Restricted `content` or `github` scope is
 available only for CI, outage recovery, and diagnostics; restricted work never
 proves whole-repository standards completeness.
 
+## Canonical validation
+
+The repository manifest declares canonical validation as one executable, an
+ordered sequence of literal arguments, and an optional normalized
+repository-relative working directory. The argument sequence may be empty;
+individual arguments must be non-empty strings. The working directory defaults
+to the repository root and must not escape it, including through a symbolic
+link.
+
+Lifecycle operations execute the declaration with preserved process argument
+boundaries. They do not invoke a shell or perform quoting, variable or command
+expansion, globbing, redirects, pipelines, or other implicit interpretation.
+An unavailable executable and the exact nonzero process status are reported as
+validation failures.
+
+The declared command is the one aggregate interface that decides whether a
+change is ready for GitHub delivery. Repository-owned subordinate commands and
+CI-only evidence may coexist without becoming alternative canonical gates.
+Canonical validation is not a standards check: validation concerns the
+repository's own change readiness, while a standards check concerns conformance
+with this repository environment.
+
 ## Repository assessment
 
 A repository assessment is the complete conformance account. It owns:
@@ -79,6 +101,10 @@ an empty GitHub repository configured as `origin`, and no claim of standards
 completeness. It creates no commit, push, pull request, merge, product scaffold,
 or build manifest.
 
+Creation settles and persists the canonical-validation declaration in the
+prepared baseline, then executes that declaration before its first remote
+mutation.
+
 Every created repository selects `common` and `documentation`. An ecosystem
 profile is selectable only when it has explicit applicability and observable
 managed or assessed behavior. Creation infers one profile only when exactly
@@ -97,10 +123,12 @@ standards-complete repository.
 ## Standards adoption
 
 Standards adoption selects an exact or latest stable release, uses that
-release's own task grammar, repairs the participating repository, runs its
-canonical validation, and performs a final standards check. Success creates
-the validated adoption commit required by GitHub delivery. Failed validation
-or final assessment creates no commit that claims readiness.
+release's own task grammar, repairs the participating repository, executes its
+declared canonical validation, and performs a final standards check. A
+preceding contract without the declaration must persist a structured migration
+declaration before repair; an existing declaration cannot be overridden.
+Success creates the validated adoption commit required by GitHub delivery.
+Failed validation or final assessment creates no commit that claims readiness.
 
 Adoption does not authorize GitHub delivery. A repository becomes durably
 standards-complete only after the adoption commit reaches the default branch
@@ -110,9 +138,10 @@ and complete evidence is observed.
 
 GitHub delivery is invoked through the repository-local `$deliver-change`
 Agent Skill. It starts from a validated commit and does not edit implementation
-work. It validates the exact candidate, preserves unrelated local state, pushes
-the branch, reuses or creates a ready pull request, and gathers current CI and
-review evidence.
+work. It validates the exact candidate by executing the isolated candidate's
+declared canonical validation with literal process boundaries, preserves
+unrelated local state, pushes the branch, reuses or creates a ready pull
+request, and gathers current CI and review evidence.
 
 Delivery then presents one exact lifecycle proposal containing the pull
 request, prepared head, linked work, evidence, proposed squash merge, tracker

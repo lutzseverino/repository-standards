@@ -98,7 +98,9 @@ code in the new release:
    ```sh
    /path/to/new-release/scripts/standards adopt NEW_VERSION \
      --repository /path/to/participating-repository \
-     --validation-command 'THE REPOSITORY CANONICAL VALIDATION COMMAND'
+     --validation-executable scripts/validate \
+     [--validation-argument='LITERAL ARGUMENT' ...] \
+     [--validation-working-directory RELATIVE/DIRECTORY]
    ```
 
 4. Verify the resulting validated adoption commit with the new release's

@@ -14,8 +14,12 @@ operating this transition.
 1. Perform delivery preparation through this adapter. Record the caller's
    branch, head, index, and worktree content and treat that worktree as
    observation-only. Resolve the candidate commit, isolate it reversibly, enter
-   that worktree, prove its `HEAD` is the candidate, and run canonical validation
-   there as a hard gate; only that isolated run is candidate evidence. Failure
+   that worktree, and prove its `HEAD` is the candidate. Resolve the normalized
+   manifest contract, then execute `canonical-validation.executable` with its
+   ordered `arguments` from its repository-relative `working-directory`. Use a
+   process argument vector directly: never pass the declaration through a shell
+   or perform quoting, expansion, globbing, redirects, or pipelines. Treat the
+   result as a hard gate; only that isolated run is candidate evidence. Failure
    stops before push or pull-request mutation and returns unchanged work to
    implementation. Restore the exact caller state before stopping or reporting,
    including on failure. Push the head and reuse or create a ready pull request

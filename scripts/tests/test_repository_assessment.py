@@ -18,6 +18,7 @@ from lib.repository_assessment import (
     repair_repository,
 )
 from lib.repository_contract import (
+    CanonicalValidation,
     ContractBlocker,
     GitHubContract,
     GitHubSettings,
@@ -63,6 +64,7 @@ class RepositoryAssessmentTests(unittest.TestCase):
             required_labels=("bug",),
             dependency_updates=(),
             boundaries=(),
+            canonical_validation=CanonicalValidation("scripts/validate", ()),
             github=GitHubContract(
                 repository="owner/example",
                 default_branch="main",

@@ -194,6 +194,14 @@ def _update_release(repository: Path, version: str) -> None:
     path.write_text(updated, encoding="utf-8")
 
 
+def _write_validation_declaration(
+    repository: Path, declaration: dict[str, object]
+) -> None:
+    path, manifest = _manifest(repository)
+    manifest["canonical-validation"] = declaration
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
 def _run_phase(
     label: str,
     command: list[str] | str,
@@ -292,11 +300,9 @@ def main() -> int:
     )
     parser.add_argument("version", nargs="?", help="exact stable version to adopt")
     parser.add_argument("--repository", default=".", help="target repository")
-    parser.add_argument(
-        "--validation-command",
-        required=True,
-        help="the target repository's canonical validation command",
-    )
+    parser.add_argument("--validation-executable")
+    parser.add_argument("--validation-argument", action="append", default=[])
+    parser.add_argument("--validation-working-directory", default=".")
     parser.add_argument("--release-root", help=argparse.SUPPRESS)
     args = parser.parse_args()
     requested_repository = Path(args.repository).expanduser().resolve()
@@ -329,6 +335,28 @@ def main() -> int:
             )
         current_value = manifest.get("standards-release")
         current = _stable_version(current_value, requested=False)
+        supplied_validation = bool(
+            args.validation_executable
+            or args.validation_argument
+            or args.validation_working_directory != "."
+        )
+        if "canonical-validation" in manifest:
+            if supplied_validation:
+                raise ValueError(
+                    "canonical validation is already declared and cannot be overridden"
+                )
+            validation_migration = None
+        else:
+            if not args.validation_executable:
+                raise ValueError(
+                    "repository has no canonical-validation declaration; "
+                    "migration requires --validation-executable"
+                )
+            validation_migration = {
+                "executable": args.validation_executable,
+                "arguments": args.validation_argument,
+                "working-directory": args.validation_working_directory,
+            }
         selected_version = args.version or _latest_release()
         requested = _stable_version(selected_version, requested=True)
     except ValueError as exc:
@@ -361,6 +389,8 @@ def main() -> int:
                 ignore=shutil.ignore_patterns(".git"),
             )
             _update_release(preview, selected_version)
+            if validation_migration is not None:
+                _write_validation_declaration(preview, validation_migration)
 
             ignored_absences = _ignored_present_targets(
                 repository, _managed_absences(checkout, preview)
@@ -373,6 +403,8 @@ def main() -> int:
                 )
 
             _update_release(repository, selected_version)
+            if validation_migration is not None:
+                _write_validation_declaration(repository, validation_migration)
             _run_phase(
                 "Standards repair",
                 [_release_tool(checkout, "standards"), "repair", str(repository)],
@@ -380,9 +412,14 @@ def main() -> int:
             )
             _run_phase(
                 "Canonical validation",
-                args.validation_command,
+                [
+                    sys.executable,
+                    str(checkout / "scripts/lib/canonical_validation.py"),
+                    "--standards-root",
+                    str(checkout),
+                    str(repository),
+                ],
                 repository=repository,
-                shell=True,
             )
             _run_phase(
                 "Final standards check",
