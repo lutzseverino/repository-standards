@@ -9,6 +9,9 @@ and standards releases use semantic versioning.
 
 ### Changed
 
+- Present issue-tracker, triage-label, and domain-documentation guidance as
+  independent agent configuration without obsolete interactive setup
+  commentary.
 - Define Repository Standards as a harness-portable repository environment for
   unrelated GitHub maintainers, with explicit product-implementation,
   workflow-extension, and supported-platform boundaries.

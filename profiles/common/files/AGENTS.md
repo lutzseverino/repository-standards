@@ -42,23 +42,17 @@ Append its non-empty output verbatim to the final response. Whether its output i
 empty or non-empty, consider the notice handled and do not repeat it in later
 responses.
 
-## Agent skills
-
-The repository skill setup is complete. Use the configuration below. Run
-`setup-matt-pocock-skills` only when deliberately switching issue trackers or
-rebuilding the configuration from scratch.
-
-### Issue tracker
+## Issue tracker
 
 Issues and specifications are tracked in this repository's GitHub Issues. See
 `docs/agents/issue-tracker.md`.
 
-### Triage labels
+## Triage labels
 
 Use the canonical category and state labels. See
 `docs/agents/triage-labels.md`.
 
-### Domain docs
+## Domain documentation
 
 Read the repository-owned domain-document configuration before exploring or
 naming domain concepts. See `docs/agents/domain.md`.
