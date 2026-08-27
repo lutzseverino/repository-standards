@@ -17,6 +17,8 @@
     {"mode": "exact", "source": "files/.editorconfig", "target": ".editorconfig"},
     {"mode": "exact", "source": "files/.gitattributes", "target": ".gitattributes"},
     {"mode": "exact", "source": "files/AGENTS.md", "target": "AGENTS.md"},
+    {"mode": "exact", "source": "files/CLAUDE.md", "target": "CLAUDE.md"},
+    {"mode": "tree", "source": "files/.claude/skills", "target": ".claude/skills"},
     {"mode": "exact", "source": "files/.agents/scripts/discover-standards-release.sh", "target": ".agents/scripts/discover-standards-release.sh"},
     {"mode": "exact", "source": "files/CONTRIBUTING.md", "target": "CONTRIBUTING.md"},
     {"mode": "exact", "source": "files/docs/agents/issue-tracker.md", "target": "docs/agents/issue-tracker.md"},

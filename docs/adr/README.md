@@ -9,7 +9,7 @@ environment.
 - [Own the workflow and distribute pinned agent skills](0002-own-workflow-and-distribute-agent-skills.md):
   distinguish repository policy from upstream skill contracts and make the
   official skill bundle available in every participating repository;
-  superseded in part by ADR 0004 and ADR 0010.
+  superseded in part by ADR 0004, ADR 0010, and ADR 0013.
 - [Distribute dependency-free repository lifecycle skills](0003-distribute-dependency-free-repository-lifecycle-skills.md):
   ship family-owned adoption and repository-creation operations without
   coupling them to a planning or implementation workflow; superseded in part
@@ -41,3 +41,7 @@ environment.
 - [Declare structured canonical validation](0012-declare-structured-canonical-validation.md):
   persist one executable and literal argument sequence, execute it without a
   shell, and keep repository readiness distinct from standards conformance.
+- [Curate skills and adapt harness discovery](0013-curate-skills-and-adapt-harness-discovery.md):
+  distribute only the canonical workflow's transitive skill closure, retire
+  former managed skills explicitly, and expose canonical artifacts to Claude
+  through drift-checked pointers.

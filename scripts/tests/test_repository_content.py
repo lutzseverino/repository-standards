@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -202,10 +203,111 @@ responses.
             (repository / ".agents/scripts/discover-standards-release.sh").is_file()
         )
 
-    def test_common_profile_installs_the_official_matt_pocock_skill_bundle(self) -> None:
+    def test_common_profile_installs_the_canonical_workflow_skill_closure(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
         expected_skills = (
+            "code-review",
+            "codebase-design",
+            "domain-modeling",
+            "grill-with-docs",
+            "grilling",
+            "implement",
+            "prototype",
+            "research",
+            "setup-matt-pocock-skills",
+            "tdd",
+            "to-spec",
+            "to-tickets",
+            "triage",
+            "wayfinder",
+        )
+        expected_roots = (
+            "grill-with-docs",
+            "implement",
+            "to-spec",
+            "to-tickets",
+            "triage",
+            "wayfinder",
+        )
+        expected_dependencies = {
+            "code-review": ["setup-matt-pocock-skills"],
+            "codebase-design": [],
+            "domain-modeling": [],
+            "grill-with-docs": ["domain-modeling", "grilling"],
+            "grilling": [],
+            "implement": ["code-review", "tdd"],
+            "prototype": [],
+            "research": [],
+            "setup-matt-pocock-skills": [],
+            "tdd": ["codebase-design"],
+            "to-spec": ["setup-matt-pocock-skills"],
+            "to-tickets": ["setup-matt-pocock-skills"],
+            "triage": [
+                "domain-modeling",
+                "grilling",
+                "setup-matt-pocock-skills",
+            ],
+            "wayfinder": [
+                "domain-modeling",
+                "grilling",
+                "prototype",
+                "research",
+                "setup-matt-pocock-skills",
+            ],
+        }
+
+        output = StringIO()
+        self.assertGreaterEqual(self.apply_content(repository), 0)
+
+        bundled_skills = tuple(
+            sorted(
+                path.parent.name
+                for path in (
+                    standards_root()
+                    / "profiles/agent-skills/files/.agents/skills"
+                ).glob("*/SKILL.md")
+            )
+        )
+        self.assertEqual(bundled_skills, expected_skills)
+        for skill in expected_skills:
+            self.assertTrue(
+                (repository / f".agents/skills/{skill}/SKILL.md").is_file()
+            )
+
+        inventory = json.loads(
+            (repository / ".agents/standard-skills.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(inventory["version"], 2)
+        self.assertEqual(len(inventory["bundles"]), 1)
+        bundle = inventory["bundles"][0]
+        self.assertEqual(bundle["name"], "mattpocock-skills")
+        self.assertEqual(bundle["source"], "https://github.com/mattpocock/skills")
+        self.assertEqual(
+            bundle["revision"],
+            "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
+        )
+        self.assertEqual(bundle["upstream-manifest"], ".claude-plugin/plugin.json")
+        self.assertEqual(bundle["license"], "MIT")
+        self.assertEqual(
+            bundle["license-file"],
+            ".agents/licenses/mattpocock-skills.txt",
+        )
+        self.assertEqual(tuple(bundle["workflow-roots"]), expected_roots)
+        self.assertEqual(bundle["dependencies"], expected_dependencies)
+        self.assertEqual(tuple(sorted(bundle["skills"])), expected_skills)
+
+        closure: set[str] = set()
+        frontier = list(bundle["workflow-roots"])
+        while frontier:
+            skill = frontier.pop()
+            if skill in closure:
+                continue
+            closure.add(skill)
+            frontier.extend(bundle["dependencies"][skill])
+        self.assertEqual(closure, set(bundle["skills"]))
+
+        upstream_skills = {
             "ask-matt",
             "code-review",
             "codebase-design",
@@ -231,35 +333,28 @@ responses.
             "wayfinder",
             "wizard",
             "writing-for-agents",
+        }
+        bundled_root = (
+            standards_root() / "profiles/agent-skills/files/.agents/skills"
         )
-
-        output = StringIO()
-        self.assertGreaterEqual(self.apply_content(repository), 0)
-
-        installed_skills = tuple(
-            sorted(
-                path.parent.name
-                for path in (repository / ".agents/skills").glob("*/SKILL.md")
+        for skill in expected_skills:
+            instructions = (bundled_root / skill / "SKILL.md").read_text(
+                encoding="utf-8"
             )
-        )
-        self.assertEqual(
-            tuple(skill for skill in installed_skills if skill in expected_skills),
-            expected_skills,
-        )
-
-        inventory = json.loads(
-            (repository / ".agents/standard-skills.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(inventory["version"], 1)
-        self.assertEqual(len(inventory["bundles"]), 1)
-        bundle = inventory["bundles"][0]
-        self.assertEqual(bundle["name"], "mattpocock-skills")
-        self.assertEqual(bundle["source"], "https://github.com/mattpocock/skills")
-        self.assertEqual(
-            bundle["revision"],
-            "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
-        )
-        self.assertEqual(tuple(sorted(bundle["skills"])), expected_skills)
+            referenced_skills = {
+                candidate
+                for candidate in upstream_skills
+                if re.search(
+                    rf"/{re.escape(candidate)}(?![a-z0-9-])",
+                    instructions,
+                )
+                and candidate != skill
+            }
+            self.assertEqual(
+                referenced_skills,
+                set(expected_dependencies[skill]),
+                skill,
+            )
         license_text = (
             repository / ".agents/licenses/mattpocock-skills.txt"
         ).read_text(encoding="utf-8")
@@ -314,6 +409,52 @@ responses.
         self.assertIn("MIT License", license_text)
         self.assertIn("Copyright (c) 2026 Lutz Severino", license_text)
 
+    def test_common_profile_exposes_canonical_agent_artifacts_to_claude(self) -> None:
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        self.assertGreaterEqual(self.apply_content(repository), 0)
+
+        self.assertEqual(
+            (repository / "CLAUDE.md").read_text(encoding="utf-8"),
+            "@AGENTS.md\n",
+        )
+        workflow_inventory = json.loads(
+            (repository / ".agents/standard-skills.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        lifecycle_inventory = json.loads(
+            (repository / ".agents/repository-lifecycle-skills.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        canonical_skills = sorted(
+            workflow_inventory["bundles"][0]["skills"]
+            + lifecycle_inventory["bundle"]["skills"]
+        )
+        adapter_skills = sorted(
+            path.parent.name
+            for path in (repository / ".claude/skills").glob("*/SKILL.md")
+        )
+        self.assertEqual(adapter_skills, canonical_skills)
+
+        for name in canonical_skills:
+            canonical = (
+                repository / f".agents/skills/{name}/SKILL.md"
+            ).read_text(encoding="utf-8")
+            adapter = (
+                repository / f".claude/skills/{name}/SKILL.md"
+            ).read_text(encoding="utf-8")
+            canonical_frontmatter = canonical.split("---", 2)[1].strip()
+            adapter_frontmatter, adapter_body = adapter.split("---", 2)[1:]
+            self.assertEqual(adapter_frontmatter.strip(), canonical_frontmatter)
+            self.assertEqual(
+                adapter_body.strip(),
+                "Read and follow [the canonical Agent Skill]"
+                f"(../../../.agents/skills/{name}/SKILL.md). Resolve its relative "
+                "references from the canonical skill directory.",
+            )
+
     def test_content_inspection_reports_standard_skill_drift(self) -> None:
         temporary, repository = self.create_repository(self.base_manifest())
         self.addCleanup(temporary.cleanup)
@@ -352,6 +493,66 @@ responses.
             self.resolve_contract(repository)
         )
         self.assertEqual(reconciliation.changes, ())
+        self.assertTrue(local_skill.is_file())
+
+    def test_retired_standard_skills_are_managed_absent_without_removing_local_skills(
+        self,
+    ) -> None:
+        retired_files = {
+            ".agents/skills/ask-matt/PHASE-BOUNDARIES.md",
+            ".agents/skills/ask-matt/SKILL.md",
+            ".agents/skills/ask-matt/agents/openai.yaml",
+            ".agents/skills/diagnosing-bugs/SKILL.md",
+            ".agents/skills/diagnosing-bugs/agents/openai.yaml",
+            ".agents/skills/diagnosing-bugs/scripts/hitl-loop.template.sh",
+            ".agents/skills/grill-me/SKILL.md",
+            ".agents/skills/grill-me/agents/openai.yaml",
+            ".agents/skills/handoff/SKILL.md",
+            ".agents/skills/handoff/agents/openai.yaml",
+            ".agents/skills/improve-codebase-architecture/HTML-REPORT.md",
+            ".agents/skills/improve-codebase-architecture/SKILL.md",
+            ".agents/skills/improve-codebase-architecture/agents/openai.yaml",
+            ".agents/skills/resolving-merge-conflicts/SKILL.md",
+            ".agents/skills/resolving-merge-conflicts/agents/openai.yaml",
+            ".agents/skills/teach/GLOSSARY-FORMAT.md",
+            ".agents/skills/teach/LEARNING-RECORD-FORMAT.md",
+            ".agents/skills/teach/MISSION-FORMAT.md",
+            ".agents/skills/teach/RESOURCES-FORMAT.md",
+            ".agents/skills/teach/SKILL.md",
+            ".agents/skills/teach/agents/openai.yaml",
+            ".agents/skills/to-questionnaire/SKILL.md",
+            ".agents/skills/to-questionnaire/agents/openai.yaml",
+            ".agents/skills/wait-what/SKILL.md",
+            ".agents/skills/wait-what/agents/openai.yaml",
+            ".agents/skills/wizard/SKILL.md",
+            ".agents/skills/wizard/agents/openai.yaml",
+            ".agents/skills/wizard/template.sh",
+            ".agents/skills/writing-for-agents/SKILL-MECHANICS.md",
+            ".agents/skills/writing-for-agents/SKILL.md",
+            ".agents/skills/writing-for-agents/agents/openai.yaml",
+        }
+        profile = json.loads(
+            (standards_root() / "profiles/agent-skills/profile.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        managed_absences = {
+            item["target"]
+            for item in profile["files"]
+            if item["mode"] == "absent"
+        }
+        self.assertEqual(managed_absences, retired_files)
+
+        temporary, repository = self.create_repository(self.base_manifest())
+        self.addCleanup(temporary.cleanup)
+        for retired in retired_files:
+            self.write_file(repository, retired, "retired standard skill content\n")
+        local_skill = repository / ".agents/skills/local-only/SKILL.md"
+        self.write_file(repository, ".agents/skills/local-only/SKILL.md", "# Local\n")
+
+        self.assertGreaterEqual(self.apply_content(repository), len(retired_files))
+
+        self.assertTrue(all(not (repository / retired).exists() for retired in retired_files))
         self.assertTrue(local_skill.is_file())
 
     def test_local_gitignore_fragment_is_preserved(self) -> None:

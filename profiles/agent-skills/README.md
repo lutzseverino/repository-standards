@@ -5,7 +5,13 @@ receives the standard repository-local agent skills. This profile contains the
 pinned upstream bundle only; family-owned repository lifecycle skills use their
 own profile, inventory, and license.
 
-The initial bundle is the official 25-skill `mattpocock-skills` plugin at
-`84fdeffd12f2ee307994d1eb6feb48173b6e0502`. Additions and upgrades are
-deliberate standards changes; repositories adopt them through a standards
-release and repository repair.
+The bundle is curated from the official `mattpocock-skills` plugin at
+`84fdeffd12f2ee307994d1eb6feb48173b6e0502`. Its inventory records the canonical
+workflow roots and their dependency graph; the selected skills are exactly that
+transitive closure. Additions, removals, closure changes, and upgrades are
+deliberate standards changes that repositories receive through standards
+adoption.
+
+Skills retired from the managed bundle are declared absent file by file. This
+removes only previously managed artifacts while preserving unrelated
+repository-owned skills under `.agents/skills/`.

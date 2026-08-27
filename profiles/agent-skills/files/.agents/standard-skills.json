@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "bundles": [
     {
       "name": "mattpocock-skills",
@@ -7,32 +7,56 @@
       "revision": "84fdeffd12f2ee307994d1eb6feb48173b6e0502",
       "upstream-manifest": ".claude-plugin/plugin.json",
       "license": "MIT",
-      "skills": [
-        "ask-matt",
-        "code-review",
-        "codebase-design",
-        "diagnosing-bugs",
-        "domain-modeling",
-        "grill-me",
+      "license-file": ".agents/licenses/mattpocock-skills.txt",
+      "workflow-roots": [
         "grill-with-docs",
-        "grilling",
-        "handoff",
         "implement",
-        "improve-codebase-architecture",
-        "prototype",
-        "research",
-        "resolving-merge-conflicts",
-        "setup-matt-pocock-skills",
-        "tdd",
-        "teach",
-        "to-questionnaire",
         "to-spec",
         "to-tickets",
         "triage",
-        "wait-what",
-        "wayfinder",
-        "wizard",
-        "writing-for-agents"
+        "wayfinder"
+      ],
+      "dependencies": {
+        "code-review": ["setup-matt-pocock-skills"],
+        "codebase-design": [],
+        "domain-modeling": [],
+        "grill-with-docs": ["domain-modeling", "grilling"],
+        "grilling": [],
+        "implement": ["code-review", "tdd"],
+        "prototype": [],
+        "research": [],
+        "setup-matt-pocock-skills": [],
+        "tdd": ["codebase-design"],
+        "to-spec": ["setup-matt-pocock-skills"],
+        "to-tickets": ["setup-matt-pocock-skills"],
+        "triage": [
+          "domain-modeling",
+          "grilling",
+          "setup-matt-pocock-skills"
+        ],
+        "wayfinder": [
+          "domain-modeling",
+          "grilling",
+          "prototype",
+          "research",
+          "setup-matt-pocock-skills"
+        ]
+      },
+      "skills": [
+        "code-review",
+        "codebase-design",
+        "domain-modeling",
+        "grill-with-docs",
+        "grilling",
+        "implement",
+        "prototype",
+        "research",
+        "setup-matt-pocock-skills",
+        "tdd",
+        "to-spec",
+        "to-tickets",
+        "triage",
+        "wayfinder"
       ]
     }
   ]

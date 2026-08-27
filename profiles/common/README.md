@@ -9,6 +9,12 @@ repair, and declares retired issue-form and pull-request-policy files absent.
 Dependabot configuration is rendered from the manifest's structured
 dependency-update declarations.
 
+Canonical agent guidance remains in `AGENTS.md`, and canonical Agent Skills
+remain under `.agents/skills/`. The common profile also supplies a thin Claude
+adapter: `CLAUDE.md` imports `AGENTS.md`, while each `.claude/skills/` entry
+preserves the canonical skill's discovery metadata and points back to its
+canonical instructions. Adapter contract tests reject copied policy or drift.
+
 It intentionally does not own the product README, license, security policy,
 build manifests, main CI workflow, release workflow, domain documentation, or
 documentation indexes.
