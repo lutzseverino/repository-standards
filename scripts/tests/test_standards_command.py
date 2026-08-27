@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -100,6 +101,26 @@ class StandardsCommandTests(unittest.TestCase):
         self.assertIn("Conclusion: unverified", unverified[1])
         self.assertIn("Evidence gaps:", unverified[1])
         self.assertIn("GitHub evidence is unavailable", unverified[1])
+
+    def test_mandatory_environment_drift_prevents_a_complete_conclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory) / "repository"
+            shutil.copytree(
+                ROOT,
+                repository,
+                ignore=shutil.ignore_patterns(".git", ".opencode"),
+            )
+            (repository / ".editorconfig").write_text(
+                "unmanaged drift\n", encoding="utf-8"
+            )
+
+            status, stdout, stderr = self.run_command(
+                "check", str(repository), adapter=ConformanceGitHub()
+            )
+
+        self.assertEqual(status, 1, stderr)
+        self.assertIn("Conclusion: not-standards-complete", stdout)
+        self.assertIn(".editorconfig is drift", stdout)
 
     def test_verbose_human_output_restores_complete_evidence(self) -> None:
         status, stdout, stderr = self.run_command(

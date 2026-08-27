@@ -1,6 +1,6 @@
 {
   "name": "tauri",
-  "description": "Tauri and Rust desktop application baseline",
+  "description": "Rust and Tauri generated-path exclusions",
   "extends": [],
   "applicability": {
     "ecosystem": "rust",

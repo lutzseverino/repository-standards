@@ -104,18 +104,25 @@ paths and undeclared GitHub resources remain untouched.
 
 Every repository selects `common` and `documentation`. Additional profiles add
 observable repository-environment behavior and may provide guidance; they do
-not govern product implementation:
+not govern product implementation. Zero, one, or several selectable ecosystem
+profiles may apply to one repository, including profiles from different
+ecosystems.
 
-| Profile | Applies to |
-| --- | --- |
-| `node-npm` | standalone npm install units |
-| `vite-react` | React applications built with Vite |
-| `pnpm-workspace` | pnpm workspaces and install units |
-| `spring-boot` | Spring Boot services and platforms |
-| `paper-plugin` | Paper server plugins |
-| `node-protocol` | Node.js protocol and schema packages |
-| `tauri` | Tauri desktop applications |
-| `codex-skill` | Codex skill repositories |
+| Profile | Applies to | Managed behavior |
+| --- | --- | --- |
+| `node-npm` | standalone npm install units | Node and npm `.gitignore` exclusions |
+| `vite-react` | React applications built with Vite | Vite and frontend-test `.gitignore` exclusions |
+| `pnpm-workspace` | pnpm workspaces and install units | Node and pnpm `.gitignore` exclusions |
+| `spring-boot` | Spring Boot services and platforms | Maven and JVM `.gitignore` exclusions |
+| `paper-plugin` | Paper server plugins | Maven and Paper `.gitignore` exclusions |
+| `node-protocol` | Node.js protocol and schema packages | Protocol output `.gitignore` exclusions |
+| `tauri` | Tauri desktop applications | Rust and Tauri `.gitignore` exclusions |
+| `codex-skill` | Codex skill repositories | Skill-validation `.gitignore` exclusions |
+
+Profile READMEs and examples may offer maintainer and agent guidance. That
+material is not managed or assessed: package-manager and lockfile policy,
+product scripts, framework layout, build design, and product content remain
+repository-owned.
 
 The common profile also distributes the standard agent-skill bundle and the
 repository lifecycle adapters.

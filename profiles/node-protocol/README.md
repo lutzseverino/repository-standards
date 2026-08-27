@@ -1,13 +1,13 @@
 # Node protocol profile
 
-Declare an exact npm package-manager version, commit `package-lock.json`, and
-use `npm ci` in CI. Use Node.js 24 LTS unless a verified consumer constraint
-requires Node.js 22.
+This profile applies when `ecosystem=node`, `package-manager=npm`, and
+`project-kind=protocol`. It inherits the Node npm exclusions and composes
+protocol build and coverage exclusions into `.gitignore`.
 
-Provide one aggregate `npm run check` script covering formatting, linting,
-type-checking where applicable, tests, schema validation, and build output.
-Protocol compatibility and fixture tests are part of the gate. Do not add
-React-specific tooling to a protocol package.
+## Guidance
 
-Specifications, schemas, fixtures, package metadata, and release behavior stay
-repository-owned.
+The following guidance is advisory and is not assessed for standards
+conformance: include protocol compatibility, schema, and fixture checks in the
+repository-owned aggregate validation command. Package-manager policy,
+specifications, schemas, fixtures, package metadata, scripts, framework layout,
+and release behavior remain repository-owned.

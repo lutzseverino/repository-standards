@@ -62,14 +62,17 @@ class CreationFreshAgentTests(unittest.TestCase):
                     for index, value in enumerate(arguments)
                     if value == "--fact"
                 ]
-                if "package-manager=npm" in facts and "framework=vite-react" in facts:
-                    print(
-                        "error: multiple selectable ecosystem profiles match; "
-                        "choose explicitly: node-npm, vite-react",
-                        file=sys.stderr,
-                    )
-                    raise SystemExit(2)
                 selected = ["common", "documentation"]
+                if all(
+                    fact in facts
+                    for fact in (
+                        "ecosystem=node",
+                        "package-manager=npm",
+                        "project-kind=package",
+                        "framework=vite-react",
+                    )
+                ):
+                    selected.extend(["node-npm", "vite-react"])
                 if all(
                     fact in facts
                     for fact in (
@@ -184,21 +187,25 @@ class CreationFreshAgentTests(unittest.TestCase):
             "ecosystem" in final.lower() or "applicability" in final.lower()
         )
 
-    def test_ambiguous_profiles_are_returned_for_explicit_selection(self) -> None:
+    def test_applicable_profiles_are_composed_without_explicit_selection(self) -> None:
         destination = self.repository.parent / "web"
         result, final = self.run_fresh_agent(
             "Create private owner/web at "
             f"{destination}. Purpose: 'Serve the web.' License: MIT. It is a "
             "Vite React application using npm; pass ecosystem=node, "
-            "package-manager=npm, and framework=vite-react as facts."
+            "package-manager=npm, project-kind=package, and "
+            "framework=vite-react as facts."
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("package-manager=npm", self.invocation())
         self.assertIn("framework=vite-react", self.invocation())
-        self.assertIn("node-npm", final)
-        self.assertIn("vite-react", final)
-        self.assertIn("explicit", final.lower())
+        self.assertNotIn("--profile", self.invocation())
+        self.assertEqual(
+            self.selected_profiles(),
+            ["common", "documentation", "node-npm", "vite-react"],
+        )
+        self.assertIn("first publication", final.lower())
 
     def test_unique_profile_facts_are_forwarded_without_extra_questions(self) -> None:
         destination = self.repository.parent / "protocol"

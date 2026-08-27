@@ -1,18 +1,18 @@
 # Spring Boot profile
 
-The shared baseline is Java 21, Spring Boot 4.0.6, Maven Wrapper, and
-Spotless using Google Java Format. Lombok, MapStruct, OpenAPI generation,
-Surefire, and generated-source integration should align where used; domain
-dependencies and earned checks remain repository-specific.
+This profile applies when `ecosystem=java`, `framework=spring-boot`, and
+`project-kind=service`. Its managed behavior is limited to composing Maven and
+JVM generated-path exclusions into `.gitignore`.
 
-Run Maven through `./mvnw`, including in documentation and CI. Pin the Maven
-distribution and its checksum. The canonical local gate is normally:
+## Guidance
+
+The following guidance is advisory and is not assessed for standards
+conformance: choose a supported Java and Spring Boot combination, pin build
+tooling, and expose a repository-owned aggregate validation command such as:
 
 ```sh
 ./mvnw verify
 ```
 
-Multi-module repositories may add explicit frontend or integration jobs while
-retaining one workflow named `CI`.
-
-Declare a `maven` dependency-update entry for each independent Maven root.
+Java versions, dependencies, Maven Wrapper policy, plugins, module layout,
+scripts, workflows, and dependency-update roots remain repository-owned.

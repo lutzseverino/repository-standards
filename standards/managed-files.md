@@ -27,8 +27,10 @@ must declare that exact target `absent` to remove it deliberately.
 `.github/dependabot.yml` is the one structured managed target. It is rendered
 deterministically from `dependency-updates` because concatenated YAML fragments
 cannot safely express one shared `version` and `updates` document. Profiles may
-describe ecosystem expectations, but the manifest declares concrete install
-unit directories.
+include guidance, but guidance is not mechanically assessed. The manifest
+declares concrete install-unit directories, while package-lock choices, product
+scripts, framework layouts, and comparable implementation conventions remain
+repository-owned.
 
 `repository-owned` patterns are hard guards. Content calculation fails before
 reading or writing targets if a managed target matches one. Use forward-slash

@@ -107,9 +107,19 @@ mutation.
 
 Every created repository selects `common` and `documentation`. An ecosystem
 profile is selectable only when it has explicit applicability and observable
-managed or assessed behavior. Creation infers one profile only when exactly
-one matches settled facts; ambiguity requires an explicit choice before
-mutation.
+managed or assessed repository-environment behavior. Creation selects zero,
+one, or several selectable ecosystem profiles from settled facts; when no
+explicit profiles are supplied, it infers every match. A fact may have several
+values when one repository spans ecosystems. An unsupported ecosystem selects
+no fabricated profile. Package policy, product scripts, framework layout, and
+similar product choices remain outside conformance even when profile guidance
+discusses them.
+
+Repository-owned product paths cannot be managed by a selected profile. A
+profile ownership conflict invalidates the contract rather than overriding the
+repository declaration. Conversely, mandatory environment interfaces remain
+managed and cannot be waived while the repository claims a standards-complete
+conclusion.
 
 First publication is a separate transition. It presents one exact lifecycle
 proposal covering the initial commit, publication of `main`, default-branch

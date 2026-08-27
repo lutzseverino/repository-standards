@@ -1,6 +1,6 @@
 {
   "name": "node-protocol",
-  "description": "Node.js protocol, schema, and reference implementation baseline",
+  "description": "Protocol-package generated-path exclusions",
   "extends": ["node-npm"],
   "applicability": {
     "ecosystem": "node",
