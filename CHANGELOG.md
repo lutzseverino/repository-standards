@@ -48,6 +48,9 @@ and standards releases use semantic versioning.
 
 ### Fixed
 
+- Preserve committed product symlinks in initial-adoption previews and
+  revalidate the confirmed repository and GitHub assessment immediately before
+  mutation.
 - Accept expected default-branch and ruleset evidence that is pending first
   publication through a structured assessment field when creation verifies an
   otherwise reconciled prepared baseline.

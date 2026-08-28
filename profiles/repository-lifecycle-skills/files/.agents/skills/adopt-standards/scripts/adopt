@@ -651,6 +651,7 @@ def main() -> int:
             shutil.copytree(
                 repository,
                 preview,
+                symlinks=True,
                 ignore=shutil.ignore_patterns(".git"),
             )
             initial_contract: dict[str, object] | None = None
@@ -720,6 +721,27 @@ def main() -> int:
                         "isolated checkout; remove or unignore these paths before "
                         "adoption: "
                         + ", ".join(ignored_absences)
+                    )
+                current_assessment = _initial_assessment(checkout, preview)
+                current_status = _git(
+                    repository, "status", "--porcelain=v1", "--untracked-files=all"
+                )
+                current_head = _git(repository, "rev-parse", "HEAD")
+                if current_status.returncode != 0 or current_head.returncode != 0:
+                    raise AdoptionError(
+                        "initial adoption proposal is stale because repository state "
+                        "could not be re-observed immediately before mutation"
+                    )
+                current_payload: dict[str, object] = {
+                    **proposal_payload,
+                    "head": current_head.stdout.strip(),
+                    "assessment": current_assessment,
+                }
+                if current_status.stdout or _proposal_id(current_payload) != proposal_id:
+                    raise AdoptionError(
+                        "initial adoption proposal is stale because repository or "
+                        "GitHub state changed before mutation; review the current "
+                        "complete proposal"
                     )
                 print(
                     f"Confirmed current initial adoption proposal {proposal_id}; "

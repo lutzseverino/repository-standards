@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -226,6 +227,17 @@ class AdoptionCommandTests(unittest.TestCase):
                 manifest = json.loads(
                     (repository / ".repository-standards.json").read_text(encoding="utf-8")
                 )
+                if os.environ.get("FAKE_REQUIRE_PRESERVED_PRODUCT_SYMLINKS"):
+                    product_links = (
+                        repository / "product-link",
+                        repository / "dangling-product-link",
+                    )
+                    if not all(path.is_symlink() for path in product_links):
+                        print(
+                            "error: product symlinks were not preserved in preview",
+                            file=sys.stderr,
+                        )
+                        raise SystemExit(2)
                 if manifest.get("standards-version") != 5:
                     print("error: unsupported standards-version", file=sys.stderr)
                     raise SystemExit(2)
@@ -445,6 +457,41 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
+    def test_initial_proposal_preserves_committed_product_symlinks(self) -> None:
+        source = self.create_release_source()
+        self.prepare_unmanifested_target()
+        (self.repository / "product.txt").write_text(
+            "product content\n", encoding="utf-8"
+        )
+        (self.repository / "product-link").symlink_to("product.txt")
+        (self.repository / "dangling-product-link").symlink_to("missing-product.txt")
+        self.run_git("add", ".")
+        self.run_git("commit", "-qm", "add product symlinks")
+        original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_adopt(
+            "2.0.0",
+            "--validation-executable",
+            "./check.sh",
+            "--fact",
+            "ecosystem=unknown",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+                "FAKE_REQUIRE_PRESERVED_PRODUCT_SYMLINKS": "1",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("Initial standards adoption proposal", output)
+        self.assertFalse(
+            (self.repository / ".repository-standards.json").exists()
+        )
+        self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
     def test_exact_current_proposal_confirmation_creates_initial_adoption_commit(
         self,
     ) -> None:
@@ -548,6 +595,107 @@ class AdoptionCommandTests(unittest.TestCase):
             (self.repository / ".repository-standards.json").exists()
         )
         self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), changed_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
+    def test_initial_adoption_rechecks_confirmed_state_immediately_before_mutation(
+        self,
+    ) -> None:
+        source = self.create_release_source()
+        self.prepare_unmanifested_target()
+        (self.repository / "obsolete.txt").write_text("retired\n", encoding="utf-8")
+        self.run_git("add", "obsolete.txt")
+        self.run_git("commit", "-qm", "add obsolete environment content")
+        release_log = self.directory / "release-tools.log"
+        arguments = (
+            "2.0.0",
+            "--validation-executable",
+            "./check.sh",
+            "--fact",
+            "ecosystem=unknown",
+        )
+        environment = {
+            "REPOSITORY_STANDARDS_SOURCE": str(source),
+            "FAKE_RELEASE_LOG": str(release_log),
+        }
+        proposed = self.run_adopt(*arguments, environment=environment)
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in proposed.stdout.splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)
+        wrapper_directory = self.directory / "bin"
+        wrapper_directory.mkdir()
+        git_wrapper = wrapper_directory / "git"
+        git_wrapper.write_text(
+            textwrap.dedent(
+                """\
+                #!/usr/bin/env python3
+                import os
+                from pathlib import Path
+                import subprocess
+                import sys
+
+                arguments = sys.argv[1:]
+                marker = Path(os.environ["RACE_MARKER"])
+                real_git = os.environ["REAL_GIT"]
+                if (
+                    len(arguments) >= 3
+                    and arguments[0] == "-C"
+                    and arguments[2] == "check-ignore"
+                    and not marker.exists()
+                ):
+                    repository = Path(os.environ["RACE_REPOSITORY"])
+                    changed = repository / "changed-after-confirmation.txt"
+                    changed.write_text("new settled evidence\\n", encoding="utf-8")
+                    subprocess.run(
+                        [real_git, "-C", str(repository), "add", changed.name],
+                        check=True,
+                    )
+                    subprocess.run(
+                        [
+                            real_git,
+                            "-C",
+                            str(repository),
+                            "commit",
+                            "-qm",
+                            "change state after confirmation",
+                        ],
+                        check=True,
+                    )
+                    marker.write_text("mutated\\n", encoding="utf-8")
+                os.execv(real_git, [real_git, *arguments])
+                """
+            ),
+            encoding="utf-8",
+        )
+        git_wrapper.chmod(0o755)
+        confirmed_environment = {
+            **environment,
+            "PATH": str(wrapper_directory) + os.pathsep + os.environ["PATH"],
+            "RACE_MARKER": str(self.directory / "race-triggered"),
+            "RACE_REPOSITORY": str(self.repository),
+            "REAL_GIT": real_git or "git",
+        }
+
+        confirmed = self.run_adopt(
+            *arguments,
+            "--confirm",
+            confirmation,
+            environment=confirmed_environment,
+        )
+
+        self.assertEqual(confirmed.returncode, 2)
+        self.assertIn("proposal is stale", confirmed.stderr)
+        self.assertFalse(
+            (self.repository / ".repository-standards.json").exists()
+        )
+        self.assertEqual(
+            self.run_git("show", "-s", "--format=%s", "HEAD").stdout.strip(),
+            "change state after confirmation",
+        )
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
     def test_initial_validation_failure_retains_changes_without_readiness_commit(
