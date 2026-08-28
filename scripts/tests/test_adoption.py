@@ -163,7 +163,7 @@ class AdoptionCommandTests(unittest.TestCase):
                             sys.argv[sys.argv.index("--contract-input") + 1]
                         ).read_text(encoding="utf-8")
                     )
-                    print(json.dumps({
+                    contract = {
                         "standards-version": 5,
                         "standards-release": initialization["standards-release"],
                         "canonical-validation": initialization["canonical-validation"],
@@ -196,8 +196,28 @@ class AdoptionCommandTests(unittest.TestCase):
                         },
                         "variables": {},
                         "local-fragments": {},
-                        "repository-owned": ["README.md"],
-                    }))
+                        "repository-owned": initialization.get(
+                            "repository-owned", ["README.md"]
+                        ),
+                    }
+                    if "--retain-content-blockers" in sys.argv:
+                        conflicts = (
+                            [{
+                                "target": "managed.txt",
+                                "message": (
+                                    "managed target conflicts with repository-owned "
+                                    "pattern 'managed.txt'"
+                                ),
+                            }]
+                            if "managed.txt" in contract["repository-owned"]
+                            else []
+                        )
+                        print(json.dumps({
+                            "contract": contract,
+                            "conflicts": conflicts,
+                        }))
+                    else:
+                        print(json.dumps(contract))
                     raise SystemExit(0)
                 repository = Path(sys.argv[-1])
                 version = (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
@@ -210,6 +230,30 @@ class AdoptionCommandTests(unittest.TestCase):
                     print("error: unsupported standards-version", file=sys.stderr)
                     raise SystemExit(2)
                 if "managed.txt" in manifest.get("repository-owned", []):
+                    if (
+                        os.environ.get("FAKE_CONTRACT_CONFLICT_REPORT")
+                        and goal == "check"
+                        and "--json" in sys.argv
+                    ):
+                        print(json.dumps({
+                            "conclusion": "not-standards-complete",
+                            "scope": "repository",
+                            "lifecycle": "published",
+                            "differences": [{
+                                "subject": "repository-content",
+                                "description": (
+                                    "managed target conflicts with repository-owned "
+                                    "pattern 'managed.txt'"
+                                ),
+                            }],
+                            "evidence-gaps": [],
+                            "automatic-corrections": [],
+                            "required-maintainer-work": [{
+                                "subject": "repository-content",
+                                "action": "resolve managed.txt ownership conflict",
+                            }],
+                        }))
+                        raise SystemExit(1)
                     print(
                         "error: managed target 'managed.txt' conflicts with repository-owned pattern",
                         file=sys.stderr,
@@ -366,6 +410,41 @@ class AdoptionCommandTests(unittest.TestCase):
             ["standards check 2.0.0"],
         )
 
+    def test_initial_proposal_surfaces_ownership_conflicts_without_mutation(
+        self,
+    ) -> None:
+        source = self.create_release_source()
+        self.prepare_unmanifested_target()
+        original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_adopt(
+            "2.0.0",
+            "--validation-executable",
+            "./check.sh",
+            "--fact",
+            "ecosystem=unknown",
+            "--repository-owned",
+            "managed.txt",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+                "FAKE_CONTRACT_CONFLICT_REPORT": "1",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("Initial standards adoption proposal", output)
+        self.assertIn("Conflicts and differences:", output)
+        self.assertIn("repository-owned pattern 'managed.txt'", output)
+        self.assertIn("resolve managed.txt ownership conflict", output)
+        self.assertFalse(
+            (self.repository / ".repository-standards.json").exists()
+        )
+        self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
     def test_exact_current_proposal_confirmation_creates_initial_adoption_commit(
         self,
     ) -> None:
@@ -511,7 +590,10 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertEqual(confirmed.returncode, 2)
         self.assertIn("Canonical validation failed", confirmed.stderr)
         self.assertIn("Initial adoption retained state", confirmed.stderr)
-        self.assertIn("recovery:", confirmed.stderr)
+        self.assertIn("recovery inspection:", confirmed.stderr)
+        self.assertIn("requires a clean working tree", confirmed.stderr)
+        self.assertIn("non-readiness checkpoint commit", confirmed.stderr)
+        self.assertIn("restore the local changes", confirmed.stderr)
         self.assertIn("GitHub delivery was not performed", confirmed.stderr)
         self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
         self.assertTrue(
@@ -1034,6 +1116,9 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Conclusion: unverified", result.stdout)
         self.assertIn("Final standards check failed", result.stderr)
+        self.assertIn("Standards adoption retained state", result.stderr)
+        self.assertIn("requires a clean working tree", result.stderr)
+        self.assertIn("recovery options", result.stderr)
         self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
 

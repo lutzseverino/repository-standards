@@ -218,13 +218,14 @@ def _write_initial_manifest(repository: Path, manifest: dict[str, object]) -> No
 
 def _build_initial_contract(
     checkout: Path, input_path: Path
-) -> dict[str, object]:
+) -> tuple[dict[str, object], list[dict[str, str]]]:
     result = subprocess.run(
         [
             _release_tool(checkout, "standards"),
             "create",
             "--contract-input",
             str(input_path),
+            "--retain-content-blockers",
         ],
         check=False,
         capture_output=True,
@@ -242,9 +243,23 @@ def _build_initial_contract(
         raise AdoptionError(
             f"selected release returned an invalid initial contract: {exc}"
         ) from exc
-    if not isinstance(value, dict):
-        raise AdoptionError("selected release returned a non-object initial contract")
-    return value
+    try:
+        contract = value["contract"]
+        conflicts = value["conflicts"]
+    except (KeyError, TypeError) as exc:
+        raise AdoptionError(
+            "selected release returned an incomplete initial contract preview"
+        ) from exc
+    if not isinstance(contract, dict) or not isinstance(conflicts, list) or not all(
+        isinstance(item, dict)
+        and isinstance(item.get("target"), str)
+        and isinstance(item.get("message"), str)
+        for item in conflicts
+    ):
+        raise AdoptionError(
+            "selected release returned an invalid initial contract preview"
+        )
+    return contract, conflicts
 
 
 def _github_repository(repository: Path, supplied: str | None) -> str:
@@ -362,6 +377,7 @@ def _render_initial_proposal(
     release: str,
     repository: Path,
     contract: dict[str, object],
+    contract_conflicts: list[dict[str, str]],
     assessment: dict[str, object],
     confirmation: str,
 ) -> None:
@@ -372,7 +388,10 @@ def _render_initial_proposal(
     print(json.dumps(contract, indent=2, sort_keys=True))
     print("Managed environment and declared GitHub assessment:")
     print(json.dumps(assessment, indent=2, sort_keys=True))
-    _render_items("Conflicts and differences", assessment["differences"])
+    _render_items(
+        "Conflicts and differences",
+        [*contract_conflicts, *assessment["differences"]],
+    )
     _render_items("Evidence gaps", assessment["evidence-gaps"])
     _render_items("Automatic corrections", assessment["automatic-corrections"])
     _render_items("Required maintainer work", assessment["required-maintainer-work"])
@@ -642,7 +661,7 @@ def main() -> int:
                     json.dumps(initial_contract_input, indent=2) + "\n",
                     encoding="utf-8",
                 )
-                initial_contract = _build_initial_contract(
+                initial_contract, contract_conflicts = _build_initial_contract(
                     checkout, initialization_path
                 )
                 _write_initial_manifest(preview, initial_contract)
@@ -653,6 +672,7 @@ def main() -> int:
                     "head": head_oid,
                     "release": selected_version,
                     "contract": initial_contract,
+                    "contract-conflicts": contract_conflicts,
                     "assessment": assessment,
                 }
                 proposal_id = _proposal_id(proposal_payload)
@@ -663,6 +683,7 @@ def main() -> int:
                         release=selected_version,
                         repository=repository,
                         contract=initial_contract,
+                        contract_conflicts=contract_conflicts,
                         assessment=assessment,
                         confirmation=confirmation,
                     )
@@ -671,6 +692,16 @@ def main() -> int:
                     raise AdoptionError(
                         "initial adoption proposal is stale or was not confirmed "
                         "exactly; review the current complete proposal before mutation"
+                    )
+                if (
+                    contract_conflicts
+                    or assessment["evidence-gaps"]
+                    or assessment["required-maintainer-work"]
+                ):
+                    raise AdoptionError(
+                        "the confirmed initial adoption proposal still has conflicts, "
+                        "evidence gaps, or required maintainer work; resolve them and "
+                        "review a fresh proposal before mutation"
                     )
                 delete_targets = sorted(
                     item["target"]
@@ -757,12 +788,13 @@ def main() -> int:
             commit_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
     except (AdoptionError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
-        if initial_adoption and mutated:
+        if mutated:
             head_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
             retained = _git(
                 repository, "status", "--porcelain=v1", "--untracked-files=all"
             ).stdout
-            print("Initial adoption retained state:", file=sys.stderr)
+            transition = "Initial adoption" if initial_adoption else "Standards adoption"
+            print(f"{transition} retained state:", file=sys.stderr)
             print(f"- current commit: {head_oid}", file=sys.stderr)
             print(
                 "- partial repository changes: "
@@ -770,8 +802,20 @@ def main() -> int:
                 file=sys.stderr,
             )
             print(
-                "- recovery: resolve the reported failure, inspect the retained "
-                "changes and GitHub assessment, then rerun adopt-standards",
+                "- recovery inspection: review git status and git diff; successful "
+                "GitHub corrections remain applied and are safe to reconcile again",
+                file=sys.stderr,
+            )
+            print(
+                "- recovery boundary: adopt-standards requires a clean working tree "
+                "and cannot be rerun while these local changes remain uncommitted",
+                file=sys.stderr,
+            )
+            print(
+                "- recovery options: after resolving the reported failure, either "
+                "create an explicitly non-readiness checkpoint commit to retain the "
+                "partial work, or restore the local changes to the current commit; "
+                "then rerun adopt-standards and review its fresh proposal or repair",
                 file=sys.stderr,
             )
             print("- GitHub delivery was not performed", file=sys.stderr)

@@ -205,11 +205,17 @@ def standards_main(
 
     arguments = list(argv) if argv is not None else sys.argv[1:]
     standards_root = Path(__file__).resolve().parents[2]
-    if (
-        len(arguments) == 3
+    contract_input_arguments = (
+        len(arguments) in (3, 4)
         and arguments[0] == "create"
         and arguments[1] == "--contract-input"
-    ):
+        and (
+            len(arguments) == 3
+            or arguments[3] == "--retain-content-blockers"
+        )
+    )
+    if contract_input_arguments:
+        retain_content_blockers = len(arguments) == 4
         try:
             initialization = json.loads(
                 Path(arguments[2]).read_text(encoding="utf-8")
@@ -217,6 +223,7 @@ def standards_main(
             contract = build_initial_repository_contract(
                 initialization,
                 standards_root=standards_root,
+                retain_content_blockers=retain_content_blockers,
             )
         except (OSError, json.JSONDecodeError, ContractError) as exc:
             print(
@@ -224,7 +231,16 @@ def standards_main(
                 file=sys.stderr,
             )
             return 2
-        print(json.dumps(contract.as_mapping(), indent=2))
+        output: dict[str, Any] = contract.as_mapping()
+        if retain_content_blockers:
+            output = {
+                "contract": output,
+                "conflicts": [
+                    {"target": blocker.target, "message": blocker.message}
+                    for blocker in contract.content_blockers
+                ],
+            }
+        print(json.dumps(output, indent=2))
         return 0
 
     parser = argparse.ArgumentParser(
