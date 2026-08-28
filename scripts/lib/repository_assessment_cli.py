@@ -280,6 +280,13 @@ def standards_main(
     adopt.add_argument("--validation-executable")
     adopt.add_argument("--validation-argument", action="append", default=[])
     adopt.add_argument("--validation-working-directory", default=".")
+    adopt.add_argument("--github-repository")
+    adopt.add_argument("--title")
+    adopt.add_argument("--fact", action="append", default=[])
+    adopt.add_argument("--profile", action="append", default=[])
+    adopt.add_argument("--repository-owned", action="append", default=[])
+    adopt.add_argument("--no-ruleset", action="store_true")
+    adopt.add_argument("--confirm")
     args = parser.parse_args(arguments)
 
     if args.goal == "create":
@@ -357,6 +364,20 @@ def standards_main(
                     args.validation_working_directory,
                 )
             )
+        if args.github_repository:
+            command.extend(("--github-repository", args.github_repository))
+        if args.title:
+            command.extend(("--title", args.title))
+        for fact in args.fact:
+            command.extend(("--fact", fact))
+        for profile in args.profile:
+            command.extend(("--profile", profile))
+        for pattern in args.repository_owned:
+            command.extend(("--repository-owned", pattern))
+        if args.no_ruleset:
+            command.append("--no-ruleset")
+        if args.confirm:
+            command.extend(("--confirm", args.confirm))
         if args.version:
             command.append(args.version)
         result = subprocess.run(

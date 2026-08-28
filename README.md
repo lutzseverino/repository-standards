@@ -43,6 +43,16 @@ operation to that release. The resulting repository installs its own
 release-pinned skills; the user-scoped bootstrap does not become its standards
 source.
 
+In an existing committed repository with no standards manifest,
+`$adopt-standards` infers settled repository facts and asks only for unresolved
+applicability, ownership, GitHub, or canonical-validation decisions. Its first
+call is read-only: it presents the exact release, complete proposed contract,
+managed environment and GitHub assessment, conflicts, corrections, and
+maintainer work. Adoption begins only after the maintainer reviews that current
+proposal and supplies its exact confirmation. Success creates a validated
+adoption commit; pushing, opening a pull request, and merging remain part of
+the separate GitHub-delivery transition.
+
 Creation writes only the repository environment and documentation, including
 the repository-owned canonical-validation declaration. It leaves product
 implementation untouched and stops at an uncommitted prepared creation

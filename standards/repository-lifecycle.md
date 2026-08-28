@@ -154,13 +154,32 @@ standards-complete repository.
 
 ## Standards adoption
 
-Standards adoption selects an exact or latest stable release, uses that
-release's own task grammar, repairs the participating repository, executes its
-declared canonical validation, and performs a final standards check. A
-preceding contract without the declaration must persist a structured migration
-declaration before repair; an existing declaration cannot be overridden.
-Success creates the validated adoption commit required by GitHub delivery.
-Failed validation or final assessment creates no commit that claims readiness.
+Standards adoption is the single entry point for initial adoption and later
+upgrades. Manifest absence routes a clean, committed existing repository to
+initial adoption; maintainers do not hand-author bootstrap manifests or local
+skills. Manifest presence routes to the selected release's upgrade behavior.
+
+Initial adoption reuses unambiguous committed repository evidence and collects
+only genuinely unresolved applicability, ownership, GitHub, validation, or
+other contract facts. Before mutation it presents one complete proposal bound
+to the observed repository and assessment state. The proposal identifies the
+exact selected release, profiles, managed repository environment, declared
+GitHub state, ownership boundaries, canonical validation, conflicts, automatic
+corrections, and required maintainer work. Mutation requires the proposal's
+exact deliberate confirmation. Re-observation that changes the proposal
+invalidates an earlier confirmation and requires fresh review.
+
+After confirmation, initial adoption creates the manifest, installs the
+release-pinned local standard skills and harness adapters, applies safe
+repository and declared GitHub corrections, executes canonical validation, and
+performs a final standards assessment. Later upgrades use the same exact or
+latest stable release selection, repair, validation, assessment, and commit
+boundary. A preceding contract without canonical validation must persist a
+structured migration declaration before repair; an existing declaration cannot
+be overridden. Success creates the validated adoption commit required by
+GitHub delivery. Failed validation or final assessment creates no commit that
+claims readiness; successful partial work remains in place with an actionable
+recovery report.
 
 Adoption does not authorize GitHub delivery. A repository becomes durably
 standards-complete only after the adoption commit reaches the default branch

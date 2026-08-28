@@ -615,6 +615,232 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             "chore: publish initial repository",
         )
 
+    def test_clean_room_bootstrap_adopts_a_committed_unmanifested_repository(
+        self,
+    ) -> None:
+        release = self.create_source_release()
+        gh, github_state = self.create_fake_gh()
+        state = json.loads(github_state.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "created": True,
+                "repository": {
+                    "full_name": "owner/example",
+                    "default_branch": "main",
+                    "delete_branch_on_merge": False,
+                    "allow_squash_merge": True,
+                    "allow_merge_commit": True,
+                    "allow_rebase_merge": True,
+                    "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
+                    "squash_merge_commit_message": "COMMIT_MESSAGES",
+                    "has_issues": True,
+                    "has_projects": True,
+                    "has_wiki": False,
+                    "permissions": {"admin": True, "push": True},
+                },
+                "branches": [{"name": "main"}],
+            }
+        )
+        github_state.write_text(json.dumps(state), encoding="utf-8")
+        user_skills, environment = self.install_bootstrap()
+        environment.update(
+            {
+                "REPOSITORY_STANDARDS_LATEST_RELEASE": "6.0.0",
+                "REPOSITORY_STANDARDS_CHECKOUT": str(release),
+                "REPOSITORY_STANDARDS_GH": str(gh),
+                "FAKE_GITHUB_STATE": str(github_state),
+            }
+        )
+        selected = subprocess.run(
+            [
+                "python3",
+                str(user_skills / "adopt-standards/scripts/select-release"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
+        self.assertEqual(
+            selected.stdout.splitlines()[0],
+            "Selected standards release: 6.0.0",
+        )
+        selected_skill = Path(
+            next(
+                line.removeprefix("Selected skill: ")
+                for line in selected.stdout.splitlines()
+                if line.startswith("Selected skill: ")
+            )
+        )
+
+        repository = self.directory / "existing"
+        (repository / "docs").mkdir(parents=True)
+        (repository / "README.md").write_text(
+            '<div align="center">\n  <h1>existing</h1>\n</div>\n\n'
+            "See the [documentation](docs/README.md).\n",
+            encoding="utf-8",
+        )
+        (repository / "docs/README.md").write_text(
+            "# Documentation\n\nExisting project documentation.\n",
+            encoding="utf-8",
+        )
+        (repository / "product.txt").write_text(
+            "repository-owned product content\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "init", "-q", "-b", "main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "config", "user.name", "Test User"],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "config",
+                "user.email",
+                "test@example.com",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/owner/example.git",
+            ],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(repository), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(repository), "commit", "-qm", "existing project"],
+            check=True,
+        )
+        original_head = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        validation_program = (
+            "from pathlib import Path; "
+            "assert Path('product.txt').read_text() == "
+            "'repository-owned product content\\n'; "
+            "assert Path('.agents/skills/adopt-standards/SKILL.md').is_file()"
+        )
+        adapter = selected_skill.parent / "scripts/adopt"
+        arguments = [
+            "python3",
+            str(adapter),
+            "--repository",
+            str(repository),
+            "--validation-executable",
+            "python3",
+            "--validation-argument=-c",
+            f"--validation-argument={validation_program}",
+            "--fact",
+            "ecosystem=unsupported",
+            "--title",
+            "existing",
+            "6.0.0",
+        ]
+        proposal = subprocess.run(
+            arguments,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(proposal.returncode, 0, proposal.stdout + proposal.stderr)
+        self.assertIn("Initial standards adoption proposal", proposal.stdout)
+        self.assertIn("Selected exact release: 6.0.0", proposal.stdout)
+        self.assertFalse(
+            (repository / ".repository-standards.json").exists()
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            original_head,
+        )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in proposal.stdout.splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        adopted = subprocess.run(
+            [*arguments, "--confirm", confirmation],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(adopted.returncode, 0, adopted.stdout + adopted.stderr)
+        self.assertIn("validated adoption commit", adopted.stdout)
+        self.assertIn("GitHub delivery remains a separate", adopted.stdout)
+        self.assertEqual(
+            (repository / "product.txt").read_text(encoding="utf-8"),
+            "repository-owned product content\n",
+        )
+        manifest = json.loads(
+            (repository / ".repository-standards.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["standards-release"], "6.0.0")
+        self.assertTrue(
+            (repository / ".agents/skills/adopt-standards/SKILL.md").is_file()
+        )
+        self.assertTrue(
+            (repository / ".agents/standard-skills.json").is_file()
+        )
+        self.assertTrue(
+            (repository / ".claude/skills/adopt-standards/SKILL.md").is_file()
+        )
+        self.assertNotEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            original_head,
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "status", "--porcelain=v1"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout,
+            "",
+        )
+        assessed = subprocess.run(
+            [
+                str(release / "scripts/standards"),
+                "check",
+                "--json",
+                str(repository),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(assessed.returncode, 0, assessed.stdout + assessed.stderr)
+        self.assertEqual(
+            json.loads(assessed.stdout)["conclusion"], "standards-complete"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

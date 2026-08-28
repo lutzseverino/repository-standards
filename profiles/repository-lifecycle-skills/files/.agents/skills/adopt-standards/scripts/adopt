@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -37,15 +38,7 @@ def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def _manifest(repository: Path) -> tuple[Path, dict[str, object]]:
-    candidates = [
-        repository / name
-        for name in (
-            ".repository-standards.json",
-            ".repository-standards.yml",
-            ".repository-standards.yaml",
-        )
-        if (repository / name).is_file()
-    ]
+    candidates = _manifest_candidates(repository)
     if not candidates:
         raise ValueError("no repository standards manifest found")
     if len(candidates) > 1:
@@ -65,6 +58,18 @@ def _manifest(repository: Path) -> tuple[Path, dict[str, object]]:
     if not isinstance(value, dict):
         raise ValueError("repository standards manifest must contain an object")
     return path, value
+
+
+def _manifest_candidates(repository: Path) -> list[Path]:
+    return [
+        repository / name
+        for name in (
+            ".repository-standards.json",
+            ".repository-standards.yml",
+            ".repository-standards.yaml",
+        )
+        if (repository / name).is_file()
+    ]
 
 
 def _stable_version(value: object, *, requested: bool) -> tuple[int, int, int]:
@@ -202,6 +207,179 @@ def _write_validation_declaration(
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+def _write_initial_manifest(repository: Path, manifest: dict[str, object]) -> None:
+    path = repository / ".repository-standards.json"
+    if path.exists() or path.is_symlink():
+        raise AdoptionError(
+            "initial adoption cannot replace an existing repository standards manifest"
+        )
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _build_initial_contract(
+    checkout: Path, input_path: Path
+) -> dict[str, object]:
+    result = subprocess.run(
+        [
+            _release_tool(checkout, "standards"),
+            "create",
+            "--contract-input",
+            str(input_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    if result.returncode != 0:
+        raise AdoptionError(
+            "cannot build initial repository contract: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AdoptionError(
+            f"selected release returned an invalid initial contract: {exc}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise AdoptionError("selected release returned a non-object initial contract")
+    return value
+
+
+def _github_repository(repository: Path, supplied: str | None) -> str:
+    if supplied:
+        candidate = supplied
+    else:
+        origin = _git(repository, "remote", "get-url", "origin")
+        if origin.returncode != 0:
+            raise ValueError(
+                "initial adoption cannot infer the GitHub repository; "
+                "supply --github-repository owner/name"
+            )
+        url = origin.stdout.strip()
+        patterns = (
+            r"^https://github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$",
+            r"^git@github\.com:([^/\s]+/[^/\s]+?)(?:\.git)?/?$",
+            r"^ssh://git@github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$",
+        )
+        match = next(
+            (match for pattern in patterns if (match := re.fullmatch(pattern, url))),
+            None,
+        )
+        if match is None:
+            raise ValueError(
+                "initial adoption cannot infer a GitHub owner/name from origin; "
+                "supply --github-repository owner/name"
+            )
+        candidate = match.group(1)
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", candidate):
+        raise ValueError("GitHub repository must be an explicit owner/name")
+    return candidate
+
+
+def _facts(declarations: list[str]) -> dict[str, str | list[str]]:
+    collected: dict[str, list[str]] = {}
+    for declaration in declarations:
+        if "=" not in declaration:
+            raise ValueError(f"fact must use NAME=VALUE: {declaration!r}")
+        name, value = declaration.split("=", 1)
+        values = collected.setdefault(name, [])
+        if not name or not value or value in values:
+            raise ValueError(
+                f"fact values must be unique and non-empty: {declaration!r}"
+            )
+        values.append(value)
+    return {
+        name: values[0] if len(values) == 1 else values
+        for name, values in collected.items()
+    }
+
+
+def _initial_assessment(checkout: Path, preview: Path) -> dict[str, object]:
+    result = subprocess.run(
+        [
+            _release_tool(checkout, "standards"),
+            "check",
+            "--json",
+            str(preview),
+        ],
+        cwd=preview,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in (0, 1, 2):
+        raise AdoptionError(
+            "cannot assess the initial adoption proposal: "
+            + (result.stderr.strip() or result.stdout.strip())
+        )
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AdoptionError(
+            "selected release returned an invalid initial adoption assessment"
+        ) from exc
+    required = {
+        "differences",
+        "evidence-gaps",
+        "automatic-corrections",
+        "required-maintainer-work",
+    }
+    if not isinstance(value, dict) or not required.issubset(value):
+        raise AdoptionError(
+            "selected release returned an incomplete initial adoption assessment"
+        )
+    return value
+
+
+def _proposal_id(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def _render_items(title: str, values: object) -> None:
+    print(f"{title}:")
+    if not isinstance(values, list) or not values:
+        print("- none")
+        return
+    for value in values:
+        if isinstance(value, dict):
+            description = value.get("description") or value.get("action")
+            subject = value.get("subject")
+            if description:
+                prefix = f"[{subject}] " if subject else ""
+                print(f"- {prefix}{description}")
+                continue
+        print(f"- {json.dumps(value, sort_keys=True)}")
+
+
+def _render_initial_proposal(
+    *,
+    proposal_id: str,
+    release: str,
+    repository: Path,
+    contract: dict[str, object],
+    assessment: dict[str, object],
+    confirmation: str,
+) -> None:
+    print(f"Initial standards adoption proposal {proposal_id}")
+    print(f"Selected exact release: {release}")
+    print(f"Target repository: {repository}")
+    print("Complete repository contract:")
+    print(json.dumps(contract, indent=2, sort_keys=True))
+    print("Managed environment and declared GitHub assessment:")
+    print(json.dumps(assessment, indent=2, sort_keys=True))
+    _render_items("Conflicts and differences", assessment["differences"])
+    _render_items("Evidence gaps", assessment["evidence-gaps"])
+    _render_items("Automatic corrections", assessment["automatic-corrections"])
+    _render_items("Required maintainer work", assessment["required-maintainer-work"])
+    print(f"Exact confirmation required: {confirmation}")
+    print("No repository or GitHub mutation was performed.")
+
+
 def _run_phase(
     label: str,
     command: list[str] | str,
@@ -303,6 +481,13 @@ def main() -> int:
     parser.add_argument("--validation-executable")
     parser.add_argument("--validation-argument", action="append", default=[])
     parser.add_argument("--validation-working-directory", default=".")
+    parser.add_argument("--github-repository")
+    parser.add_argument("--title")
+    parser.add_argument("--fact", action="append", default=[])
+    parser.add_argument("--profile", action="append", default=[])
+    parser.add_argument("--repository-owned", action="append", default=[])
+    parser.add_argument("--no-ruleset", action="store_true")
+    parser.add_argument("--confirm")
     parser.add_argument("--release-root", help=argparse.SUPPRESS)
     args = parser.parse_args()
     requested_repository = Path(args.repository).expanduser().resolve()
@@ -326,43 +511,103 @@ def main() -> int:
             print(f"- {path}", file=sys.stderr)
         return 2
     try:
-        _, manifest = _manifest(repository)
-        protocol = manifest.get("standards-version")
-        if protocol != SUPPORTED_STANDARDS_VERSION:
+        candidates = _manifest_candidates(repository)
+        if len(candidates) > 1:
             raise ValueError(
-                f"incompatible standards-version {protocol!r}; adoption runner "
-                f"requires {SUPPORTED_STANDARDS_VERSION}"
+                "multiple repository standards manifests found: "
+                + ", ".join(path.name for path in candidates)
             )
-        current_value = manifest.get("standards-release")
-        current = _stable_version(current_value, requested=False)
-        supplied_validation = bool(
-            args.validation_executable
-            or args.validation_argument
-            or args.validation_working_directory != "."
-        )
-        if "canonical-validation" in manifest:
-            if supplied_validation:
+        initial_adoption = not candidates
+        current_value: object | None = None
+        current: tuple[int, int, int] | None = None
+        validation_migration: dict[str, object] | None = None
+        initial_contract_input: dict[str, object] | None = None
+        if initial_adoption:
+            head = _git(repository, "rev-parse", "--verify", "HEAD")
+            if head.returncode != 0:
                 raise ValueError(
-                    "canonical validation is already declared and cannot be overridden"
+                    "initial adoption requires an existing committed repository"
                 )
-            validation_migration = None
-        else:
             if not args.validation_executable:
                 raise ValueError(
-                    "repository has no canonical-validation declaration; "
-                    "migration requires --validation-executable"
+                    "initial adoption requires --validation-executable"
                 )
-            validation_migration = {
-                "executable": args.validation_executable,
-                "arguments": args.validation_argument,
-                "working-directory": args.validation_working_directory,
+            if len(args.profile) != len(set(args.profile)):
+                raise ValueError("explicit profiles must not contain duplicates")
+            github_repository = _github_repository(repository, args.github_repository)
+            initial_contract_input = {
+                "repository": github_repository,
+                "title": args.title or repository.name,
+                "facts": _facts(args.fact),
+                "canonical-validation": {
+                    "executable": args.validation_executable,
+                    "arguments": args.validation_argument,
+                    "working-directory": args.validation_working_directory,
+                },
             }
+            if args.profile:
+                initial_contract_input["profiles"] = args.profile
+            if args.repository_owned:
+                if len(args.repository_owned) != len(set(args.repository_owned)):
+                    raise ValueError(
+                        "repository-owned declarations must not contain duplicates"
+                    )
+                initial_contract_input["repository-owned"] = args.repository_owned
+            if args.no_ruleset:
+                initial_contract_input["github"] = {"ruleset": None}
+        else:
+            initial_only = bool(
+                args.github_repository
+                or args.title
+                or args.fact
+                or args.profile
+                or args.repository_owned
+                or args.no_ruleset
+                or args.confirm
+            )
+            if initial_only:
+                raise ValueError(
+                    "initial-adoption facts and confirmation cannot override an "
+                    "existing repository contract"
+                )
+            _, manifest = _manifest(repository)
+            protocol = manifest.get("standards-version")
+            if protocol != SUPPORTED_STANDARDS_VERSION:
+                raise ValueError(
+                    f"incompatible standards-version {protocol!r}; adoption runner "
+                    f"requires {SUPPORTED_STANDARDS_VERSION}"
+                )
+            current_value = manifest.get("standards-release")
+            current = _stable_version(current_value, requested=False)
+            supplied_validation = bool(
+                args.validation_executable
+                or args.validation_argument
+                or args.validation_working_directory != "."
+            )
+            if "canonical-validation" in manifest:
+                if supplied_validation:
+                    raise ValueError(
+                        "canonical validation is already declared and cannot be overridden"
+                    )
+            else:
+                if not args.validation_executable:
+                    raise ValueError(
+                        "repository has no canonical-validation declaration; "
+                        "migration requires --validation-executable"
+                    )
+                validation_migration = {
+                    "executable": args.validation_executable,
+                    "arguments": args.validation_argument,
+                    "working-directory": args.validation_working_directory,
+                }
         selected_version = args.version or _latest_release()
         requested = _stable_version(selected_version, requested=True)
+        if initial_contract_input is not None:
+            initial_contract_input["standards-release"] = selected_version
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if requested < current:
+    if current is not None and requested < current:
         print(
             f"error: standards downgrade rejected: {current_value} -> {selected_version}",
             file=sys.stderr,
@@ -370,6 +615,7 @@ def main() -> int:
         return 2
     if args.version is None:
         print(f"Resolved latest stable standards release: {selected_version}")
+    mutated = False
     try:
         with tempfile.TemporaryDirectory(prefix="repository-standards-adoption-") as directory:
             temporary_root = Path(directory)
@@ -388,23 +634,87 @@ def main() -> int:
                 preview,
                 ignore=shutil.ignore_patterns(".git"),
             )
-            _update_release(preview, selected_version)
-            if validation_migration is not None:
-                _write_validation_declaration(preview, validation_migration)
-
-            ignored_absences = _ignored_present_targets(
-                repository, _managed_absences(checkout, preview)
-            )
-            if ignored_absences:
-                raise AdoptionError(
-                    "ignored managed absences cannot be previewed from the isolated "
-                    "checkout; remove or unignore these paths before adoption: "
-                    + ", ".join(ignored_absences)
+            initial_contract: dict[str, object] | None = None
+            if initial_adoption:
+                assert initial_contract_input is not None
+                initialization_path = temporary_root / "initial-adoption.json"
+                initialization_path.write_text(
+                    json.dumps(initial_contract_input, indent=2) + "\n",
+                    encoding="utf-8",
                 )
+                initial_contract = _build_initial_contract(
+                    checkout, initialization_path
+                )
+                _write_initial_manifest(preview, initial_contract)
+                assessment = _initial_assessment(checkout, preview)
+                head_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
+                proposal_payload: dict[str, object] = {
+                    "repository": str(repository),
+                    "head": head_oid,
+                    "release": selected_version,
+                    "contract": initial_contract,
+                    "assessment": assessment,
+                }
+                proposal_id = _proposal_id(proposal_payload)
+                confirmation = f"Adopt initial standards proposal {proposal_id}"
+                if args.confirm is None:
+                    _render_initial_proposal(
+                        proposal_id=proposal_id,
+                        release=selected_version,
+                        repository=repository,
+                        contract=initial_contract,
+                        assessment=assessment,
+                        confirmation=confirmation,
+                    )
+                    return 0
+                if args.confirm != confirmation:
+                    raise AdoptionError(
+                        "initial adoption proposal is stale or was not confirmed "
+                        "exactly; review the current complete proposal before mutation"
+                    )
+                delete_targets = sorted(
+                    item["target"]
+                    for item in assessment["automatic-corrections"]
+                    if isinstance(item, dict)
+                    and item.get("kind") == "delete"
+                    and isinstance(item.get("target"), str)
+                    and item["target"]
+                )
+                ignored_absences = _ignored_present_targets(
+                    repository, delete_targets
+                )
+                if ignored_absences:
+                    raise AdoptionError(
+                        "ignored managed absences cannot be previewed from the "
+                        "isolated checkout; remove or unignore these paths before "
+                        "adoption: "
+                        + ", ".join(ignored_absences)
+                    )
+                print(
+                    f"Confirmed current initial adoption proposal {proposal_id}; "
+                    f"selected exact release: {selected_version}."
+                )
+                _write_initial_manifest(repository, initial_contract)
+                mutated = True
+            else:
+                _update_release(preview, selected_version)
+                if validation_migration is not None:
+                    _write_validation_declaration(preview, validation_migration)
 
-            _update_release(repository, selected_version)
-            if validation_migration is not None:
-                _write_validation_declaration(repository, validation_migration)
+                ignored_absences = _ignored_present_targets(
+                    repository, _managed_absences(checkout, preview)
+                )
+                if ignored_absences:
+                    raise AdoptionError(
+                        "ignored managed absences cannot be previewed from the isolated "
+                        "checkout; remove or unignore these paths before adoption: "
+                        + ", ".join(ignored_absences)
+                    )
+
+                _update_release(repository, selected_version)
+                mutated = True
+                if validation_migration is not None:
+                    _write_validation_declaration(repository, validation_migration)
             _run_phase(
                 "Standards repair",
                 [_release_tool(checkout, "standards"), "repair", str(repository)],
@@ -447,8 +757,32 @@ def main() -> int:
             commit_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
     except (AdoptionError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        if initial_adoption and mutated:
+            head_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
+            retained = _git(
+                repository, "status", "--porcelain=v1", "--untracked-files=all"
+            ).stdout
+            print("Initial adoption retained state:", file=sys.stderr)
+            print(f"- current commit: {head_oid}", file=sys.stderr)
+            print(
+                "- partial repository changes: "
+                + ("retained and uncommitted" if retained else "none observed"),
+                file=sys.stderr,
+            )
+            print(
+                "- recovery: resolve the reported failure, inspect the retained "
+                "changes and GitHub assessment, then rerun adopt-standards",
+                file=sys.stderr,
+            )
+            print("- GitHub delivery was not performed", file=sys.stderr)
         return 2
-    if requested == current:
+    if initial_adoption:
+        print(
+            f"\nPrepared initial standards adoption for {selected_version}; "
+            f"validated adoption commit: {commit_oid}."
+        )
+        print("GitHub delivery remains a separate lifecycle transition.")
+    elif requested == current:
         print(
             f"\nReconciled standards release {selected_version}; "
             f"validated adoption commit: {commit_oid}."
