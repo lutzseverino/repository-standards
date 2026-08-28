@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SKILL_SOURCE = (
+BOOTSTRAP_SKILL_SOURCE = ROOT / "bootstrap/create-repository"
+RELEASE_SKILL_SOURCE = (
     ROOT
     / "profiles/repository-lifecycle-skills/files/.agents/skills"
     / "create-repository"
@@ -28,8 +29,11 @@ class CreationFreshAgentTests(unittest.TestCase):
         self.repository = Path(self.temporary.name).resolve() / "harness"
         self.repository.mkdir()
         skill = self.repository / ".agents/skills/create-repository"
-        shutil.copytree(SKILL_SOURCE, skill)
-        runner = skill / "scripts/create"
+        shutil.copytree(BOOTSTRAP_SKILL_SOURCE, skill)
+        self.release = Path(self.temporary.name).resolve() / "release"
+        release_skill = self.release / ".agents/skills/create-repository"
+        shutil.copytree(RELEASE_SKILL_SOURCE, release_skill)
+        runner = release_skill / "scripts/create"
         runner.write_text(
             textwrap.dedent(
                 """\
@@ -95,6 +99,46 @@ class CreationFreshAgentTests(unittest.TestCase):
             encoding="utf-8",
         )
         runner.chmod(0o755)
+        (self.release / "VERSION").write_text("6.0.0\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(self.release), "init", "-q", "-b", "main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.release), "config", "user.name", "Test User"],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.release),
+                "config",
+                "user.email",
+                "test@example.com",
+            ],
+            check=True,
+        )
+        subprocess.run(["git", "-C", str(self.release), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.release), "commit", "-qm", "release fixture"],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "tag.gpgSign=false",
+                "-C",
+                str(self.release),
+                "tag",
+                "-a",
+                "v6.0.0",
+                "-m",
+                "release 6.0.0",
+            ],
+            check=True,
+        )
         (self.repository / "AGENTS.md").write_text(
             "# Agent guidance\n\nRespond in English. The canonical validation "
             "command for new repository baselines is `true`.\n",
@@ -107,6 +151,13 @@ class CreationFreshAgentTests(unittest.TestCase):
 
     def run_fresh_agent(self, prompt: str) -> tuple[subprocess.CompletedProcess[str], str]:
         final_message = self.repository / ".agent-final.txt"
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "REPOSITORY_STANDARDS_LATEST_RELEASE": "6.0.0",
+                "REPOSITORY_STANDARDS_CHECKOUT": str(self.release),
+            }
+        )
         result = subprocess.run(
             [
                 "codex",
@@ -127,6 +178,7 @@ class CreationFreshAgentTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=180,
+            env=environment,
         )
         final = (
             final_message.read_text(encoding="utf-8")

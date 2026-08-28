@@ -75,6 +75,7 @@ class RepositoryObserver(Protocol):
 class AssessmentEntry:
     subject: str
     description: str
+    pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -294,7 +295,13 @@ def _calculate_assessment(
                             )
                         for difference in reconciliation.differences:
                             for finding in difference.findings:
-                                differences.append(AssessmentEntry("github", finding))
+                                differences.append(
+                                    AssessmentEntry(
+                                        "github",
+                                        finding,
+                                        pending=difference.pending,
+                                    )
+                                )
                             for blocker in difference.blockers:
                                 remote_blockers.append(
                                     AssessmentEntry("github", blocker)

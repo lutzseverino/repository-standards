@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+SKILL_NAME = Path(__file__).resolve().parents[1].name
+
+
+class BootstrapError(Exception):
+    pass
+
+
+def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repository), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _latest_release() -> str:
+    overridden = os.environ.get("REPOSITORY_STANDARDS_LATEST_RELEASE")
+    if overridden:
+        return overridden
+    request = urllib.request.Request(
+        "https://github.com/lutzseverino/repository-standards/releases/latest",
+        method="HEAD",
+        headers={"User-Agent": f"repository-standards-{SKILL_NAME}-bootstrap"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            final_url = response.geturl()
+    except (OSError, urllib.error.URLError) as exc:
+        raise BootstrapError(
+            f"cannot resolve latest stable GitHub Release: {exc}"
+        ) from exc
+    match = re.search(r"/releases/tag/v([^/?#]+)$", final_url)
+    if not match:
+        raise BootstrapError(
+            f"latest GitHub Release did not resolve to a stable tag: {final_url}"
+        )
+    return match.group(1)
+
+
+def _stable_version(value: str) -> str:
+    if not STABLE_VERSION.fullmatch(value):
+        raise BootstrapError(
+            f"standards release must be an exact stable semantic version: {value!r}"
+        )
+    return value
+
+
+def _checkout(version: str) -> Path:
+    reusable = os.environ.get("REPOSITORY_STANDARDS_CHECKOUT")
+    if reusable:
+        checkout = Path(reusable).expanduser().resolve()
+    else:
+        source = os.environ.get(
+            "REPOSITORY_STANDARDS_SOURCE",
+            "https://github.com/lutzseverino/repository-standards.git",
+        )
+        checkout = Path(
+            tempfile.mkdtemp(prefix=f"repository-standards-v{version}-")
+        ).resolve() / "release"
+        cloned = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                f"v{version}",
+                source,
+                str(checkout),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if cloned.returncode != 0:
+            raise BootstrapError(
+                f"cannot obtain immutable standards release v{version}: "
+                f"{cloned.stderr.strip() or cloned.stdout.strip()}"
+            )
+
+    exact_tag = _git(checkout, "describe", "--tags", "--exact-match", "HEAD")
+    if exact_tag.returncode != 0 or exact_tag.stdout.strip() != f"v{version}":
+        actual = exact_tag.stdout.strip() or "no exact tag"
+        raise BootstrapError(
+            f"standards checkout is not proven at exact tag v{version}: {actual}"
+        )
+    status = _git(checkout, "status", "--porcelain=v1", "--untracked-files=all")
+    if status.returncode != 0:
+        raise BootstrapError(
+            "cannot inspect immutable release checkout: "
+            + (status.stderr.strip() or status.stdout.strip())
+        )
+    if status.stdout.strip():
+        dirty = ", ".join(line[3:] for line in status.stdout.splitlines() if line)
+        raise BootstrapError(
+            f"immutable release checkout must be clean; dirty paths: {dirty}"
+        )
+    try:
+        declared = (checkout / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise BootstrapError(f"cannot read release VERSION: {exc}") from exc
+    if declared != version:
+        raise BootstrapError(
+            f"release tag v{version} declares incompatible VERSION {declared!r}"
+        )
+    skill = checkout / f".agents/skills/{SKILL_NAME}/SKILL.md"
+    if not skill.is_file():
+        raise BootstrapError(
+            f"release v{version} does not provide the {SKILL_NAME} skill"
+        )
+    return checkout
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=f"Select an immutable release for {SKILL_NAME}"
+    )
+    parser.add_argument("version", nargs="?", help="exact stable release")
+    args = parser.parse_args()
+    try:
+        version = _stable_version(args.version or _latest_release())
+        checkout = _checkout(version)
+    except (BootstrapError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"Selected standards release: {version}")
+    print(f"Release checkout: {checkout}")
+    print(f"Selected skill: {checkout}/.agents/skills/{SKILL_NAME}/SKILL.md")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

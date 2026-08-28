@@ -12,6 +12,28 @@ The environment is opinionated and harness-portable so unrelated maintainers
 can deliberately adopt it without becoming part of an author-owned repository
 family.
 
+## Public bootstrap
+
+Before a participating repository exists, an established Agent Skills
+installer installs only the thin user-scoped `create-repository` and
+`adopt-standards` skills from the public bootstrap source. The bootstrap layer
+contains release selection and delegation, not the current repository contract
+or lifecycle implementation.
+
+Each invocation selects one exact immutable standards release. An explicit
+exact stable semantic version selects that release; omission resolves the
+latest stable GitHub Release. The bootstrap verifies the matching clean tag and
+`VERSION` and discloses the exact selection before repository or GitHub
+mutation. The selected release's canonical skill then owns fact collection,
+preflight, proposals, mutation, validation, assessment, and recovery.
+
+Creation or adoption installs the selected release's release-pinned local
+workflow and lifecycle skills. Later participating-repository behavior never
+depends on mutable user-scoped policy. Creation produces repository-environment
+and documentation content without product scaffolding and ends at a prepared
+creation baseline; first publication remains a separate transition owned by
+the selected release.
+
 ## Lifecycle interfaces
 
 Lifecycle vocabulary names repository operations without promising that one

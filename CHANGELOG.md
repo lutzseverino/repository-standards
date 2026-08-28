@@ -7,6 +7,16 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Install only thin `create-repository` and `adopt-standards` bootstrap skills
+  at user scope through the open Agent Skills installer, then resolve and
+  disclose one immutable stable release before delegating creation or adoption
+  to its release-owned skill.
+- Prove the clean-room creation journey from isolated bootstrap installation
+  through structured canonical validation, prepared creation, separate first
+  publication, and the selected release's standards-complete assessment.
+
 ### Changed
 
 - Compose zero, one, or several applicable ecosystem profiles during initial
@@ -27,6 +37,12 @@ and standards releases use semantic versioning.
 - Persist canonical validation as one executable, ordered literal arguments,
   and a safe repository-relative working directory; execute it without shell
   interpretation across creation, adoption, and delivery.
+
+### Fixed
+
+- Accept expected default-branch and ruleset evidence that is pending first
+  publication through a structured assessment field when creation verifies an
+  otherwise reconciled prepared baseline.
 
 ### Removed
 

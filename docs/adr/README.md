@@ -48,3 +48,6 @@ environment.
 - [Compose product-neutral ecosystem profiles](0014-compose-product-neutral-ecosystem-profiles.md):
   select every applicable ecosystem profile while keeping product
   implementation and guidance outside mechanical conformance.
+- [Bootstrap through thin user-scoped skills](0015-bootstrap-through-thin-user-scoped-skills.md):
+  install only the two public entry skills globally, select one immutable
+  release, and delegate lifecycle behavior to its release-pinned environment.
