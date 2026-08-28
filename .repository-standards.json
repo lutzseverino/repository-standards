@@ -59,6 +59,7 @@
     "docs/agents/domain.md",
     "docs/adr/**",
     "standards/**",
+    "bootstrap/**",
     "profiles/**",
     "schema/**",
     "examples/**",

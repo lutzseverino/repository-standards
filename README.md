@@ -24,9 +24,32 @@ interfaces today.
 
 ## Quick start
 
-Python 3.11 or later and an authenticated GitHub CLI are required for commands
-that inspect or change declared GitHub state. Linux, macOS, and WSL are
-supported. Native Windows is unsupported future work.
+Node.js with `npx` is required for bootstrap installation. Python 3.11 or later
+and an authenticated GitHub CLI are required for commands that inspect or
+change declared GitHub state. Linux, macOS, and WSL are supported.
+Native Windows is unsupported future work.
+
+Before a participating repository exists, install only the two thin bootstrap
+skills at user scope with the open Agent Skills installer:
+
+```sh
+npx skills add https://github.com/lutzseverino/repository-standards/tree/main/bootstrap --skill create-repository --skill adopt-standards --global
+```
+
+Invoke `$create-repository` to create a prepared creation baseline, or
+`$adopt-standards` to enter an existing repository. Each bootstrap skill first
+selects and discloses one exact immutable standards release, then delegates the
+operation to that release. The resulting repository installs its own
+release-pinned skills; the user-scoped bootstrap does not become its standards
+source.
+
+Creation writes only the repository environment and documentation, including
+the repository-owned canonical-validation declaration. It leaves product
+implementation untouched and stops at an uncommitted prepared creation
+baseline. Enter the new repository and invoke its release-pinned
+`$publish-repository` skill for the separately confirmed first publication;
+that operation finishes by reporting the selected release's
+`standards-complete` assessment.
 
 ```sh
 scripts/standards --help

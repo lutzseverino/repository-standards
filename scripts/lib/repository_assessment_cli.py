@@ -50,7 +50,14 @@ def assessment_mapping(assessment: RepositoryAssessment) -> dict[str, Any]:
             assessment.lifecycle.value if assessment.lifecycle is not None else None
         ),
         "satisfied-requirements": _entries(assessment.satisfied_requirements),
-        "differences": _entries(assessment.differences),
+        "differences": [
+            {
+                "subject": difference.subject,
+                "description": difference.description,
+                "pending": difference.pending,
+            }
+            for difference in assessment.differences
+        ],
         "evidence-gaps": _entries(assessment.evidence_gaps),
         "automatic-corrections": [
             {

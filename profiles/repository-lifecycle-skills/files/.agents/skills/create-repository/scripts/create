@@ -622,7 +622,12 @@ def _observe_prepared_github_state(
         for item in maintainer_work
         if isinstance(item, dict)
     )
-    if differences or evidence_gaps or corrections:
+    unexpected_differences = [
+        item
+        for item in differences
+        if not isinstance(item, dict) or item.get("pending") is not True
+    ]
+    if unexpected_differences or evidence_gaps or corrections:
         return PreparedGitHubState("re-observed with applicable drift", findings)
     if any(
         isinstance(item, dict) and "first publication" in str(item.get("action"))
