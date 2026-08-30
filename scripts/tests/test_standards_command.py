@@ -203,6 +203,57 @@ class StandardsCommandTests(unittest.TestCase):
             contract["canonical-validation"]["executable"], "scripts/validate"
         )
 
+    def test_initial_adoption_preview_retains_contract_ownership_conflicts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "adoption.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "standards-release": (ROOT / "VERSION")
+                        .read_text(encoding="utf-8")
+                        .strip(),
+                        "repository": "owner/example",
+                        "title": "Example",
+                        "canonical-validation": {
+                            "executable": "scripts/validate",
+                            "arguments": [],
+                            "working-directory": ".",
+                        },
+                        "facts": {"ecosystem": "unsupported"},
+                        "repository-owned": [".editorconfig"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            status, stdout, stderr = self.run_command(
+                "create",
+                "--contract-input",
+                str(input_path),
+                "--retain-content-blockers",
+                adapter=ConformanceGitHub(),
+            )
+
+        self.assertEqual(status, 0, stderr)
+        preview = json.loads(stdout)
+        self.assertEqual(
+            preview["contract"]["repository-owned"], [".editorconfig"]
+        )
+        self.assertEqual(
+            preview["conflicts"],
+            [
+                {
+                    "target": ".editorconfig",
+                    "message": (
+                        "managed target conflicts with repository-owned "
+                        "pattern '.editorconfig'"
+                    ),
+                }
+            ],
+        )
+
     def test_check_is_read_only_and_restricted_check_is_unverified(self) -> None:
         adapter = ConformanceGitHub(drift=True)
 

@@ -237,6 +237,7 @@ class InitialRepositoryContract:
     variables: tuple[tuple[str, Any], ...]
     local_fragments: tuple[tuple[str, tuple[str, ...]], ...]
     repository_owned: tuple[str, ...]
+    content_blockers: tuple[ContractBlocker, ...] = ()
 
     def as_mapping(self) -> dict[str, Any]:
         """Return the normalized JSON manifest written by initialization."""
@@ -413,6 +414,7 @@ def build_initial_repository_contract(
     initialization: Mapping[str, Any],
     *,
     standards_root: Path,
+    retain_content_blockers: bool = False,
 ) -> InitialRepositoryContract:
     """Build and validate one initial contract from explicit repository facts."""
 
@@ -538,7 +540,9 @@ def build_initial_repository_contract(
                     placeholder.parent.mkdir(parents=True, exist_ok=True)
                     placeholder.touch(exist_ok=True)
             resolved = resolve_repository_contract(
-                preview, standards_root=standards_root
+                preview,
+                standards_root=standards_root,
+                retain_content_blockers=retain_content_blockers,
             )
     except (OSError, repository_content.StandardsError) as exc:
         raise ContractError(f"cannot validate initial repository contract: {exc}") from exc
@@ -556,6 +560,7 @@ def build_initial_repository_contract(
         ),
         local_fragments=resolved.local_fragments,
         repository_owned=resolved.repository_owned,
+        content_blockers=resolved.content_blockers,
     )
 
 

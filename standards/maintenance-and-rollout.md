@@ -69,11 +69,17 @@ on `main` and publish a new version; never retarget the existing tag.
 
 ## Adopt a compatible release
 
-Invoke `adopt-standards VERSION` in a participating repository for an exact
-stable release, or omit `VERSION` to select the latest stable GitHub Release.
-The adapter requires a clean Git tree, obtains an isolated checkout of the
-selected tag, invokes that release's `standards adopt` goal, and creates the
-validated adoption commit. GitHub delivery remains separate.
+Invoke `adopt-standards VERSION` in an existing repository for an exact stable
+release, or omit `VERSION` to select the latest stable GitHub Release. Manifest
+absence starts initial adoption; manifest presence starts an upgrade. The
+adapter requires a clean, committed Git tree, obtains an isolated checkout of
+the selected tag, and executes that release's adoption behavior.
+
+Initial adoption first renders a complete proposal and performs no mutation.
+Only the exact confirmation from the current proposal authorizes manifest
+creation, safe repository-environment and declared GitHub corrections,
+canonical validation, final assessment, and the validated adoption commit.
+GitHub delivery remains separate.
 
 Repository-owned conflicts and manifest migrations remain explicit. Failed
 validation or final assessment leaves applied changes uncommitted for

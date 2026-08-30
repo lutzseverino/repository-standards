@@ -16,6 +16,10 @@ and standards releases use semantic versioning.
 - Prove the clean-room creation journey from isolated bootstrap installation
   through structured canonical validation, prepared creation, separate first
   publication, and the selected release's standards-complete assessment.
+- Bootstrap initial adoption of a clean, committed repository without a
+  standards manifest through a complete state-bound proposal, exact
+  confirmation, release-pinned local environment installation, validation,
+  final assessment, and a validated adoption commit.
 
 ### Changed
 
@@ -37,9 +41,16 @@ and standards releases use semantic versioning.
 - Persist canonical validation as one executable, ordered literal arguments,
   and a safe repository-relative working directory; execute it without shell
   interpretation across creation, adoption, and delivery.
+- Route `adopt-standards` by manifest presence so initial adoption reuses
+  settled repository evidence and collects only unresolved contract facts,
+  while retaining the existing manifest-upgrade path and separate GitHub
+  delivery boundary.
 
 ### Fixed
 
+- Preserve committed product symlinks in initial-adoption previews and
+  revalidate the confirmed repository and GitHub assessment immediately before
+  mutation.
 - Accept expected default-branch and ruleset evidence that is pending first
   publication through a structured assessment field when creation verifies an
   otherwise reconciled prepared baseline.

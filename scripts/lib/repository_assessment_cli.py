@@ -205,11 +205,17 @@ def standards_main(
 
     arguments = list(argv) if argv is not None else sys.argv[1:]
     standards_root = Path(__file__).resolve().parents[2]
-    if (
-        len(arguments) == 3
+    contract_input_arguments = (
+        len(arguments) in (3, 4)
         and arguments[0] == "create"
         and arguments[1] == "--contract-input"
-    ):
+        and (
+            len(arguments) == 3
+            or arguments[3] == "--retain-content-blockers"
+        )
+    )
+    if contract_input_arguments:
+        retain_content_blockers = len(arguments) == 4
         try:
             initialization = json.loads(
                 Path(arguments[2]).read_text(encoding="utf-8")
@@ -217,6 +223,7 @@ def standards_main(
             contract = build_initial_repository_contract(
                 initialization,
                 standards_root=standards_root,
+                retain_content_blockers=retain_content_blockers,
             )
         except (OSError, json.JSONDecodeError, ContractError) as exc:
             print(
@@ -224,7 +231,16 @@ def standards_main(
                 file=sys.stderr,
             )
             return 2
-        print(json.dumps(contract.as_mapping(), indent=2))
+        output: dict[str, Any] = contract.as_mapping()
+        if retain_content_blockers:
+            output = {
+                "contract": output,
+                "conflicts": [
+                    {"target": blocker.target, "message": blocker.message}
+                    for blocker in contract.content_blockers
+                ],
+            }
+        print(json.dumps(output, indent=2))
         return 0
 
     parser = argparse.ArgumentParser(
@@ -280,6 +296,13 @@ def standards_main(
     adopt.add_argument("--validation-executable")
     adopt.add_argument("--validation-argument", action="append", default=[])
     adopt.add_argument("--validation-working-directory", default=".")
+    adopt.add_argument("--github-repository")
+    adopt.add_argument("--title")
+    adopt.add_argument("--fact", action="append", default=[])
+    adopt.add_argument("--profile", action="append", default=[])
+    adopt.add_argument("--repository-owned", action="append", default=[])
+    adopt.add_argument("--no-ruleset", action="store_true")
+    adopt.add_argument("--confirm")
     args = parser.parse_args(arguments)
 
     if args.goal == "create":
@@ -357,6 +380,20 @@ def standards_main(
                     args.validation_working_directory,
                 )
             )
+        if args.github_repository:
+            command.extend(("--github-repository", args.github_repository))
+        if args.title:
+            command.extend(("--title", args.title))
+        for fact in args.fact:
+            command.extend(("--fact", fact))
+        for profile in args.profile:
+            command.extend(("--profile", profile))
+        for pattern in args.repository_owned:
+            command.extend(("--repository-owned", pattern))
+        if args.no_ruleset:
+            command.append("--no-ruleset")
+        if args.confirm:
+            command.extend(("--confirm", args.confirm))
         if args.version:
             command.append(args.version)
         result = subprocess.run(
