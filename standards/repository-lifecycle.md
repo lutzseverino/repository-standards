@@ -174,12 +174,18 @@ release-pinned local standard skills and harness adapters, applies safe
 repository and declared GitHub corrections, executes canonical validation, and
 performs a final standards assessment. Later upgrades use the same exact or
 latest stable release selection, repair, validation, assessment, and commit
-boundary. A preceding contract without canonical validation must persist a
-structured migration declaration before repair; an existing declaration cannot
-be overridden. Success creates the validated adoption commit required by
-GitHub delivery. Failed validation or final assessment creates no commit that
-claims readiness; successful partial work remains in place with an actionable
-recovery report.
+boundary. Before mutation, an upgrade presents the current and selected manifest
+declarations and the selected release's normalized whole-repository assessment,
+including managed skill inventory, harness-adapter, retirement,
+lifecycle-interface, ownership, preservation, and declared GitHub changes.
+Together they describe the complete current-to-selected contract change. Exact
+confirmation is bound to the current repository and assessment state. A
+preceding contract without canonical validation must persist a structured
+migration declaration before repair; an existing declaration cannot be
+overridden. Success creates the validated adoption commit required by GitHub
+delivery. Failed validation or final assessment creates no commit that claims
+readiness; successful partial work remains in place with an actionable recovery
+report.
 
 Adoption does not authorize GitHub delivery. A repository becomes durably
 standards-complete only after the adoption commit reaches the default branch

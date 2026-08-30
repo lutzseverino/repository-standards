@@ -53,6 +53,13 @@ proposal and supplies its exact confirmation. Success creates a validated
 adoption commit; pushing, opening a pull request, and merging remain part of
 the separate GitHub-delivery transition.
 
+When the manifest is already present, the same entry point proposes an upgrade.
+It shows the current and selected manifest declarations together with the
+selected release's complete normalized repository assessment, including skill
+and harness changes, managed retirements, conflicts, corrections, and
+maintainer work. The upgrade also stops for exact confirmation before applying
+repair, canonical validation, final assessment, and its single adoption commit.
+
 Creation writes only the repository environment and documentation, including
 the repository-owned canonical-validation declaration. It leaves product
 implementation untouched and stops at an uncommitted prepared creation

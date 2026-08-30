@@ -54,20 +54,28 @@ operating this transition.
      [SAME INITIAL ARGUMENTS ...] \
      --confirm 'EXACT CONFIRMATION FROM CURRENT PROPOSAL' [VERSION]
 
-   # Upgrade of a current manifest.
+   # Upgrade: first produce the complete proposal without mutation.
    python3 .agents/skills/adopt-standards/scripts/adopt [VERSION]
 
-   # Migration only, when canonical-validation is absent:
+   # After reviewing that exact upgrade proposal, confirm it exactly.
+   python3 .agents/skills/adopt-standards/scripts/adopt \
+     --confirm 'EXACT CONFIRMATION FROM CURRENT PROPOSAL' [VERSION]
+
+   # Migration proposal, when canonical-validation is absent:
    python3 .agents/skills/adopt-standards/scripts/adopt \
      --validation-executable scripts/validate \
      [--validation-argument='LITERAL ARGUMENT' ...] \
      [--validation-working-directory RELATIVE/DIRECTORY] [VERSION]
    ```
 
-5. Stop after rendering an initial-adoption proposal. Surface its selected
-   exact release, complete repository contract, managed environment, declared
-   GitHub state, ownership boundaries, canonical validation, conflicts,
-   automatic corrections, required maintainer work, and exact confirmation.
+5. Stop after rendering an initial-adoption or upgrade proposal. Surface its
+   selected exact release, complete proposed manifest declaration and normalized
+   assessment, managed environment,
+   declared GitHub state, ownership boundaries, canonical validation,
+   conflicts, automatic corrections, required maintainer work, and exact
+   confirmation. An upgrade also shows the current manifest declaration, and
+   its assessment must cover the standard skill inventory, harness adapters,
+   managed retirements, and lifecycle interfaces.
    Do not treat the original adoption request or a proposal identifier as
    confirmation. Resume mutation only after the maintainer deliberately
    supplies the exact confirmation from the current proposal. A stale
