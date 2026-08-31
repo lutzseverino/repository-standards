@@ -20,6 +20,10 @@ and standards releases use semantic versioning.
   standards manifest through a complete state-bound proposal, exact
   confirmation, release-pinned local environment installation, validation,
   final assessment, and a validated adoption commit.
+- Exercise creation, initial adoption, and upgrade as clean-room consumer
+  journeys through the documented public bootstrap installation, add macOS and
+  fresh Claude-adapter evidence, and retain a controlled live rehearsal plus
+  scheduled observation of the separate demonstration repository.
 
 ### Changed
 

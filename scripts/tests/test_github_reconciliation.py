@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -11,6 +14,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from lib.github_reconciliation import (
     GitHubAdapter,
+    GitHubCliAdapter,
     GitHubSnapshot,
     GitHubLifecycle,
     apply_github_reconciliation,
@@ -234,6 +238,66 @@ class GitHubReconciliationTests(unittest.TestCase):
             ),
             adapter.requests,
         )
+
+    @patch("lib.github_reconciliation.shutil.which", return_value="/usr/bin/gh")
+    @patch("lib.github_reconciliation.subprocess.run")
+    def test_cli_adapter_uses_graphql_when_rest_omits_merge_settings(
+        self,
+        run: unittest.mock.Mock,
+        _which: unittest.mock.Mock,
+    ) -> None:
+        def completed(stdout: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(stdout), stderr=""
+            )
+
+        def respond(command: list[str], **_kwargs: object):
+            endpoint = command[2]
+            if endpoint == "repos/owner/example":
+                return completed(
+                    {
+                        "default_branch": "main",
+                        "delete_branch_on_merge": None,
+                        "allow_squash_merge": None,
+                        "allow_merge_commit": None,
+                        "allow_rebase_merge": None,
+                        "squash_merge_commit_title": None,
+                        "squash_merge_commit_message": None,
+                        "has_issues": True,
+                        "has_projects": False,
+                        "has_wiki": False,
+                    }
+                )
+            if endpoint == "graphql":
+                return completed(
+                    {
+                        "data": {
+                            "repository": {
+                                "deleteBranchOnMerge": True,
+                                "mergeCommitAllowed": False,
+                                "rebaseMergeAllowed": False,
+                                "squashMergeAllowed": True,
+                                "squashMergeCommitTitle": "PR_TITLE",
+                                "squashMergeCommitMessage": "PR_BODY",
+                            }
+                        }
+                    }
+                )
+            if endpoint.endswith("/branches?per_page=100&page=1"):
+                return completed([{"name": "main"}])
+            return completed([])
+
+        run.side_effect = respond
+
+        snapshot = GitHubCliAdapter().observe(self.contract())
+
+        self.assertEqual(snapshot.repository["delete_branch_on_merge"], True)
+        self.assertEqual(snapshot.repository["allow_squash_merge"], True)
+        self.assertEqual(snapshot.repository["allow_merge_commit"], False)
+        self.assertEqual(snapshot.repository["allow_rebase_merge"], False)
+        self.assertEqual(snapshot.repository["squash_merge_commit_title"], "PR_TITLE")
+        self.assertEqual(snapshot.repository["squash_merge_commit_message"], "PR_BODY")
+        self.assertTrue(any(call.args[0][2] == "graphql" for call in run.call_args_list))
 
     def test_adapter_retains_undeclared_rulesets_when_none_is_managed(self) -> None:
         class FakeAdapter(GitHubAdapter):

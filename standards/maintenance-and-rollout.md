@@ -137,3 +137,10 @@ Add a repository to that list only after its incompatible adoption lands. It
 does not announce newer releases. The standards source is the development-time
 exception: while changes are under `Unreleased`, its scheduled job uses current
 `main` against the current source checkout.
+
+Configure its `STANDARDS_CHECK_TOKEN` Actions secret with a fine-grained token
+limited to every repository in the matrix. The token needs Contents read,
+Issues read, and Administration write permission so the assessment can observe
+branches, labels, repository settings, rulesets, and ruleset bypass actors. The
+automatic `GITHUB_TOKEN` does not provide the complete Administration evidence
+required for a `standards-complete` conclusion.

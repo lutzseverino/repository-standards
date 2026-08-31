@@ -18,6 +18,9 @@ public repository environment.
   and changelog policy.
 - [Maintenance and rollout](../standards/maintenance-and-rollout.md): standards
   publication and deliberate adoption.
+- [Consumer acceptance](consumer-acceptance.md): clean-room journeys,
+  supported-platform evidence, fresh-agent interpretation, live rehearsal, and
+  demonstration-repository observation.
 
 ## Templates
 
