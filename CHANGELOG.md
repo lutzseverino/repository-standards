@@ -27,6 +27,9 @@ and standards releases use semantic versioning.
 
 ### Changed
 
+- Simplify creation, adoption, and consumer-acceptance tests around shared
+  lifecycle support for isolated environments, executable substitutes, and
+  immutable release fixtures without changing their public journey coverage.
 - Compose zero, one, or several applicable ecosystem profiles during initial
   contract selection, reject guidance-only profiles, and keep profile
   conformance limited to observable repository-environment behavior rather
