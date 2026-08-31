@@ -66,6 +66,20 @@ class ConsumerRehearsalTests(unittest.TestCase):
             import sys
             from pathlib import Path
 
+            forbidden = {
+                "REPOSITORY_STANDARDS_SOURCE",
+                "GIT_CONFIG_COUNT",
+                "GIT_CONFIG_KEY_0",
+                "GIT_CONFIG_VALUE_0",
+                "GIT_CONFIG_PARAMETERS",
+            }
+            inherited = forbidden.intersection(os.environ)
+            if inherited:
+                print(
+                    "inherited source override: " + ", ".join(sorted(inherited)),
+                    file=sys.stderr,
+                )
+                raise SystemExit(2)
             with Path(os.environ["REHEARSAL_CALL_LOG"]).open(
                 "a", encoding="utf-8"
             ) as log:
@@ -123,6 +137,13 @@ class ConsumerRehearsalTests(unittest.TestCase):
                 "REHEARSAL_CALL_LOG": str(self.log),
                 "REHEARSAL_RELEASE": str(self.release),
                 "REHEARSAL_DEMO": str(self.demo),
+                "REPOSITORY_STANDARDS_SOURCE": str(self.release),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "url.file:///fixture/.insteadOf",
+                "GIT_CONFIG_VALUE_0": "https://github.com/",
+                "GIT_CONFIG_PARAMETERS": (
+                    "'url.file:///fixture/.insteadOf'='https://github.com/'"
+                ),
             }
         )
 

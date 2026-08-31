@@ -50,6 +50,12 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
 
         self.assertIn("lutzseverino/repository-standards-demo", workflow)
+        self.assertIn(
+            "python3 ../adopted-standards/profiles/common/files/.github/"
+            + "scripts/"
+            + "check-workflows.py",
+            workflow,
+        )
         self.assertIn("deterministic consumer journeys remain required", acceptance)
 
     def test_stable_tag_publishes_matching_changelog_notes(self) -> None:

@@ -65,8 +65,12 @@ def rehearse(version: str, repository: str) -> None:
             "REPOSITORY_STANDARDS_CHECKOUT",
             "REPOSITORY_STANDARDS_GH",
             "REPOSITORY_STANDARDS_LATEST_RELEASE",
+            "REPOSITORY_STANDARDS_SOURCE",
         ):
             environment.pop(name, None)
+        for name in tuple(environment):
+            if name == "GIT_CONFIG" or name.startswith("GIT_CONFIG_"):
+                environment.pop(name)
         environment.update(
             {
                 "HOME": str(user_home),
@@ -76,6 +80,8 @@ def rehearse(version: str, repository: str) -> None:
                 "npm_config_cache": str(workspace / "npm-cache"),
                 "npm_config_update_notifier": "false",
                 "GH_TOKEN": github_token,
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_CONFIG_NOSYSTEM": "1",
             }
         )
         _run(

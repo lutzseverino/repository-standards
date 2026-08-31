@@ -62,7 +62,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: adopted-standards/scripts/standards check target
-      - name: Validate target workflows
+      - name: Validate target workflows from repository source
+        if: matrix.repository == github.repository
         run: |
           cd target
           python3 ../profiles/common/files/.github/scripts/check-workflows.py
+      - name: Validate target workflows from adopted standards
+        if: matrix.repository != github.repository
+        run: |
+          cd target
+          python3 ../adopted-standards/profiles/common/files/.github/scripts/check-workflows.py
