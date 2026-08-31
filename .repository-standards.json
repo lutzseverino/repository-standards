@@ -56,6 +56,7 @@
     "VERSION",
     "CONTEXT.md",
     "docs/README.md",
+    "docs/consumer-acceptance.md",
     "docs/agents/domain.md",
     "docs/adr/**",
     "standards/**",

@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Rehearse public bootstrap installation and live repository assessment."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+PUBLIC_BOOTSTRAP_SOURCE = (
+    "https://github.com/lutzseverino/repository-standards/tree/main/bootstrap"
+)
+INSTALLER_VERSION = "1.5.23"
+STABLE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+GITHUB_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def _selected_value(output: str, label: str) -> str:
+    prefix = f"{label}: "
+    values = [line.removeprefix(prefix) for line in output.splitlines() if line.startswith(prefix)]
+    if len(values) != 1 or not values[0]:
+        raise RuntimeError(f"release resolver did not report one {label.lower()}")
+    return values[0]
+
+
+def _run(arguments: list[str], *, environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        arguments,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+
+def rehearse(version: str, repository: str) -> None:
+    if not STABLE_VERSION.fullmatch(version):
+        raise ValueError("release must be an exact stable semantic version")
+    if not GITHUB_REPOSITORY.fullmatch(repository):
+        raise ValueError("repository must use OWNER/NAME form")
+
+    host_environment = os.environ.copy()
+    github_token = host_environment.get("GH_TOKEN") or host_environment.get(
+        "GITHUB_TOKEN"
+    )
+    if not github_token:
+        authenticated = _run(
+            ["gh", "auth", "token"], environment=host_environment
+        )
+        github_token = authenticated.stdout.strip()
+    if not github_token:
+        raise RuntimeError("GitHub authentication did not provide a token")
+
+    with tempfile.TemporaryDirectory(prefix="repository-standards-rehearsal-") as raw:
+        workspace = Path(raw).resolve()
+        user_home = workspace / "user-home"
+        user_home.mkdir()
+        environment = os.environ.copy()
+        for name in (
+            "REPOSITORY_STANDARDS_CHECKOUT",
+            "REPOSITORY_STANDARDS_GH",
+            "REPOSITORY_STANDARDS_LATEST_RELEASE",
+        ):
+            environment.pop(name, None)
+        environment.update(
+            {
+                "HOME": str(user_home),
+                "XDG_CONFIG_HOME": str(user_home / ".config"),
+                "XDG_CACHE_HOME": str(user_home / ".cache"),
+                "XDG_STATE_HOME": str(user_home / ".local/state"),
+                "npm_config_cache": str(workspace / "npm-cache"),
+                "npm_config_update_notifier": "false",
+                "GH_TOKEN": github_token,
+            }
+        )
+        _run(
+            [
+                "npx",
+                "--yes",
+                f"skills@{INSTALLER_VERSION}",
+                "add",
+                PUBLIC_BOOTSTRAP_SOURCE,
+                "--skill",
+                "create-repository",
+                "--skill",
+                "adopt-standards",
+                "--global",
+                "--agent",
+                "universal",
+                "--yes",
+                "--copy",
+            ],
+            environment=environment,
+        )
+        resolver = (
+            user_home / ".agents/skills/adopt-standards/scripts/select-release"
+        )
+        selected = _run(
+            [sys.executable, str(resolver), version], environment=environment
+        )
+        selected_version = _selected_value(
+            selected.stdout, "Selected standards release"
+        )
+        if selected_version != version:
+            raise RuntimeError(
+                f"selected {selected_version}, expected immutable release {version}"
+            )
+        release = Path(_selected_value(selected.stdout, "Release checkout"))
+
+        target = workspace / "target"
+        _run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                f"https://github.com/{repository}.git",
+                str(target),
+            ],
+            environment=environment,
+        )
+        manifest = json.loads(
+            (target / ".repository-standards.json").read_text(encoding="utf-8")
+        )
+        if manifest.get("standards-release") != version:
+            raise RuntimeError(
+                f"{repository} selects {manifest.get('standards-release')!r}, "
+                f"not {version}"
+            )
+        assessed = _run(
+            [str(release / "scripts/standards"), "check", str(target)],
+            environment=environment,
+        )
+        print(f"Selected immutable release: {version}")
+        print(assessed.stdout, end="")
+        print(f"Live public-contract rehearsal passed: {repository}")
+
+
+def main(arguments: list[str]) -> int:
+    if len(arguments) != 2:
+        print(
+            "usage: scripts/rehearse-public-contract VERSION OWNER/REPOSITORY",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        rehearse(arguments[0], arguments[1])
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"public-contract rehearsal failed: {error}", file=sys.stderr)
+        if isinstance(error, subprocess.CalledProcessError):
+            if error.stdout:
+                print(error.stdout, file=sys.stderr, end="")
+            if error.stderr:
+                print(error.stderr, file=sys.stderr, end="")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

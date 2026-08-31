@@ -22,6 +22,36 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("scripts/changelog validate", canonical_check)
         self.assertIn("scripts/standards check --scope content --json", canonical_check)
 
+    def test_supported_platform_acceptance_is_exercised_without_native_windows(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        acceptance = (ROOT / "docs/consumer-acceptance.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("runs-on: ubuntu-24.04", workflow)
+        self.assertIn("runs-on: macos-15", workflow)
+        self.assertIn("scripts/tests/test_bootstrap_creation.py", workflow)
+        self.assertNotIn("windows-", workflow.casefold())
+        for platform in ("Linux", "macOS", "WSL", "Native Windows"):
+            self.assertIn(platform, acceptance)
+
+    def test_scheduled_assessment_keeps_demonstration_evidence_observable(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/standards-check.yml").read_text(
+            encoding="utf-8"
+        )
+        acceptance = (ROOT / "docs/consumer-acceptance.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("lutzseverino/repository-standards-demo", workflow)
+        self.assertIn("deterministic consumer journeys remain required", acceptance)
+
     def test_stable_tag_publishes_matching_changelog_notes(self) -> None:
         workflow = (ROOT / ".github/workflows/release.yml").read_text(
             encoding="utf-8"

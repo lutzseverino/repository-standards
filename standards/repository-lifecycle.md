@@ -231,4 +231,9 @@ instead of guessing conformance.
 
 The public lifecycle interfaces support Linux, macOS, and WSL. Native Windows
 is unsupported future work; portable-looking commands do not imply current
-native Windows support.
+native Windows support. Linux runs the complete canonical validation and
+consumer journeys in required CI. A macOS runner repeats the public consumer
+journeys. WSL uses the tested Linux process and filesystem contract from its
+Linux environment; no native-Windows path or command behavior is inferred from
+that support. The maintained evidence and live-rehearsal procedure are recorded
+in [Consumer acceptance](../docs/consumer-acceptance.md).

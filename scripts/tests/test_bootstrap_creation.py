@@ -14,6 +14,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP_SOURCE = ROOT / "bootstrap"
+PUBLIC_BOOTSTRAP_SOURCE = (
+    "https://github.com/lutzseverino/repository-standards/tree/main/bootstrap"
+)
 CREATE_RESOLVER = BOOTSTRAP_SOURCE / "create-repository/scripts/select-release"
 ADOPT_RESOLVER = BOOTSTRAP_SOURCE / "adopt-standards/scripts/select-release"
 INSTALLER_VERSION = "1.5.23"
@@ -199,7 +202,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
         executable.chmod(0o755)
         return executable, state
 
-    def install_bootstrap(self) -> tuple[Path, dict[str, str]]:
+    def install_bootstrap(self, public_source_fixture: Path) -> tuple[Path, dict[str, str]]:
         user_home = self.directory / "user-home"
         user_home.mkdir()
         environment = os.environ.copy()
@@ -207,9 +210,19 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             {
                 "HOME": str(user_home),
                 "XDG_CONFIG_HOME": str(user_home / ".config"),
+                "XDG_CACHE_HOME": str(user_home / ".cache"),
                 "XDG_STATE_HOME": str(user_home / ".local/state"),
                 "npm_config_cache": str(self.directory / "npm-cache"),
                 "npm_config_update_notifier": "false",
+                "GIT_CONFIG_COUNT": "2",
+                "GIT_CONFIG_KEY_0": (
+                    f"url.{public_source_fixture.as_uri()}/.insteadOf"
+                ),
+                "GIT_CONFIG_VALUE_0": (
+                    "https://github.com/lutzseverino/repository-standards.git"
+                ),
+                "GIT_CONFIG_KEY_1": "protocol.file.allow",
+                "GIT_CONFIG_VALUE_1": "always",
             }
         )
         installed = subprocess.run(
@@ -218,7 +231,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
                 "--yes",
                 f"skills@{INSTALLER_VERSION}",
                 "add",
-                str(BOOTSTRAP_SOURCE),
+                PUBLIC_BOOTSTRAP_SOURCE,
                 "--skill",
                 "create-repository",
                 "--skill",
@@ -420,7 +433,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
     ) -> None:
         release = self.create_source_release()
         gh, github_state = self.create_fake_gh()
-        user_skills, environment = self.install_bootstrap()
+        user_skills, environment = self.install_bootstrap(release)
         self.assertEqual(
             sorted(path.name for path in user_skills.iterdir()),
             ["adopt-standards", "create-repository"],
@@ -644,7 +657,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             }
         )
         github_state.write_text(json.dumps(state), encoding="utf-8")
-        user_skills, environment = self.install_bootstrap()
+        user_skills, environment = self.install_bootstrap(release)
         environment.update(
             {
                 "REPOSITORY_STANDARDS_LATEST_RELEASE": "6.0.0",
@@ -1040,7 +1053,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             text=True,
         ).stdout.strip()
 
-        user_skills, bootstrap_environment = self.install_bootstrap()
+        user_skills, bootstrap_environment = self.install_bootstrap(selected_release)
         bootstrap_environment.update(environment)
         bootstrap_environment.update(
             {
