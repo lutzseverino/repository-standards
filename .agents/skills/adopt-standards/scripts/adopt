@@ -312,40 +312,9 @@ def _facts(declarations: list[str]) -> dict[str, str | list[str]]:
 
 
 def _initial_assessment(checkout: Path, preview: Path) -> dict[str, object]:
-    result = subprocess.run(
-        [
-            _release_tool(checkout, "standards"),
-            "check",
-            "--json",
-            str(preview),
-        ],
-        cwd=preview,
-        check=False,
-        capture_output=True,
-        text=True,
+    return _repository_assessment(
+        checkout, preview, transition="initial adoption"
     )
-    if result.returncode not in (0, 1, 2):
-        raise AdoptionError(
-            "cannot assess the initial adoption proposal: "
-            + (result.stderr.strip() or result.stdout.strip())
-        )
-    try:
-        value = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise AdoptionError(
-            "selected release returned an invalid initial adoption assessment"
-        ) from exc
-    required = {
-        "differences",
-        "evidence-gaps",
-        "automatic-corrections",
-        "required-maintainer-work",
-    }
-    if not isinstance(value, dict) or not required.issubset(value):
-        raise AdoptionError(
-            "selected release returned an incomplete initial adoption assessment"
-        )
-    return value
 
 
 def _proposal_id(payload: dict[str, object]) -> str:
@@ -371,6 +340,36 @@ def _render_items(title: str, values: object) -> None:
         print(f"- {json.dumps(value, sort_keys=True)}")
 
 
+def _render_proposal_context(
+    title: str, *, release: str, repository: Path
+) -> None:
+    print(title)
+    print(f"Selected exact release: {release}")
+    print(f"Target repository: {repository}")
+
+
+def _render_proposal_assessment(
+    heading: str,
+    assessment: dict[str, object],
+    *,
+    conflicts: list[dict[str, str]] | None = None,
+) -> None:
+    print(heading)
+    print(json.dumps(assessment, indent=2, sort_keys=True))
+    _render_items(
+        "Conflicts and differences",
+        [*(conflicts or []), *assessment["differences"]],
+    )
+    _render_items("Evidence gaps", assessment["evidence-gaps"])
+    _render_items("Automatic corrections", assessment["automatic-corrections"])
+    _render_items("Required maintainer work", assessment["required-maintainer-work"])
+
+
+def _render_confirmation_boundary(confirmation: str) -> None:
+    print(f"Exact confirmation required: {confirmation}")
+    print("No repository or GitHub mutation was performed.")
+
+
 def _render_initial_proposal(
     *,
     proposal_id: str,
@@ -381,22 +380,44 @@ def _render_initial_proposal(
     assessment: dict[str, object],
     confirmation: str,
 ) -> None:
-    print(f"Initial standards adoption proposal {proposal_id}")
-    print(f"Selected exact release: {release}")
-    print(f"Target repository: {repository}")
+    _render_proposal_context(
+        f"Initial standards adoption proposal {proposal_id}",
+        release=release,
+        repository=repository,
+    )
     print("Complete repository contract:")
     print(json.dumps(contract, indent=2, sort_keys=True))
-    print("Managed environment and declared GitHub assessment:")
-    print(json.dumps(assessment, indent=2, sort_keys=True))
-    _render_items(
-        "Conflicts and differences",
-        [*contract_conflicts, *assessment["differences"]],
+    _render_proposal_assessment(
+        "Managed environment and declared GitHub assessment:",
+        assessment,
+        conflicts=contract_conflicts,
     )
-    _render_items("Evidence gaps", assessment["evidence-gaps"])
-    _render_items("Automatic corrections", assessment["automatic-corrections"])
-    _render_items("Required maintainer work", assessment["required-maintainer-work"])
-    print(f"Exact confirmation required: {confirmation}")
-    print("No repository or GitHub mutation was performed.")
+    _render_confirmation_boundary(confirmation)
+
+
+def _render_upgrade_proposal(
+    *,
+    proposal_id: str,
+    release: str,
+    repository: Path,
+    current_manifest: dict[str, object],
+    selected_manifest: dict[str, object],
+    assessment: dict[str, object],
+    confirmation: str,
+) -> None:
+    _render_proposal_context(
+        f"Standards upgrade proposal {proposal_id}",
+        release=release,
+        repository=repository,
+    )
+    print("Current manifest declaration:")
+    print(json.dumps(current_manifest, indent=2, sort_keys=True))
+    print("Selected manifest declaration:")
+    print(json.dumps(selected_manifest, indent=2, sort_keys=True))
+    _render_proposal_assessment(
+        "Selected release change assessment:", assessment
+    )
+    _render_confirmation_boundary(confirmation)
 
 
 def _run_phase(
@@ -432,13 +453,13 @@ def _release_tool(checkout: Path, name: str) -> str:
     return str(tool)
 
 
-def _managed_absences(checkout: Path, preview: Path) -> list[str]:
+def _repository_assessment(
+    checkout: Path, preview: Path, *, transition: str
+) -> dict[str, object]:
     result = subprocess.run(
         [
             _release_tool(checkout, "standards"),
             "check",
-            "--scope",
-            "content",
             "--json",
             str(preview),
         ],
@@ -447,31 +468,41 @@ def _managed_absences(checkout: Path, preview: Path) -> list[str]:
         capture_output=True,
         text=True,
     )
-    print("\n== Standards adoption assessment ==")
-    if result.stdout:
-        print(result.stdout, end="")
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
     if result.returncode not in (0, 1, 2):
         raise AdoptionError(
-            "cannot assess the adoption preview: "
+            f"cannot assess the {transition} proposal: "
             + (result.stderr.strip() or result.stdout.strip())
         )
     try:
         report = json.loads(result.stdout)
-        corrections = report["automatic-corrections"]
-        return sorted(
-            item["target"]
-            for item in corrections
-            if isinstance(item, dict)
-            and item.get("kind") == "delete"
-            and isinstance(item.get("target"), str)
-            and item["target"]
-        )
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        required = {
+            "differences",
+            "evidence-gaps",
+            "automatic-corrections",
+            "required-maintainer-work",
+        }
+        if not isinstance(report, dict) or not required.issubset(report):
+            raise TypeError("incomplete assessment")
+        if not all(isinstance(report[field], list) for field in required):
+            raise TypeError("invalid assessment sections")
+        return report
+    except (json.JSONDecodeError, TypeError) as exc:
         raise AdoptionError(
-            "release standards check returned an invalid assessment"
+            f"selected release returned an invalid {transition} assessment"
         ) from exc
+
+
+def _managed_absence_targets(assessment: dict[str, object]) -> list[str]:
+    corrections = assessment["automatic-corrections"]
+    assert isinstance(corrections, list)
+    return sorted(
+        item["target"]
+        for item in corrections
+        if isinstance(item, dict)
+        and item.get("kind") == "delete"
+        and isinstance(item.get("target"), str)
+        and item["target"]
+    )
 
 
 def _ignored_present_targets(repository: Path, targets: list[str]) -> list[str]:
@@ -541,6 +572,7 @@ def main() -> int:
         current: tuple[int, int, int] | None = None
         validation_migration: dict[str, object] | None = None
         initial_contract_input: dict[str, object] | None = None
+        current_manifest: dict[str, object] | None = None
         if initial_adoption:
             head = _git(repository, "rev-parse", "--verify", "HEAD")
             if head.returncode != 0:
@@ -582,7 +614,6 @@ def main() -> int:
                 or args.profile
                 or args.repository_owned
                 or args.no_ruleset
-                or args.confirm
             )
             if initial_only:
                 raise ValueError(
@@ -590,6 +621,7 @@ def main() -> int:
                     "existing repository contract"
                 )
             _, manifest = _manifest(repository)
+            current_manifest = manifest
             protocol = manifest.get("standards-version")
             if protocol != SUPPORTED_STANDARDS_VERSION:
                 raise ValueError(
@@ -750,19 +782,97 @@ def main() -> int:
                 _write_initial_manifest(repository, initial_contract)
                 mutated = True
             else:
+                assert current_manifest is not None
                 _update_release(preview, selected_version)
                 if validation_migration is not None:
                     _write_validation_declaration(preview, validation_migration)
-
+                _, selected_manifest = _manifest(preview)
+                assessment = _repository_assessment(
+                    checkout, preview, transition="standards upgrade"
+                )
                 ignored_absences = _ignored_present_targets(
-                    repository, _managed_absences(checkout, preview)
+                    repository, _managed_absence_targets(assessment)
                 )
                 if ignored_absences:
-                    raise AdoptionError(
-                        "ignored managed absences cannot be previewed from the isolated "
-                        "checkout; remove or unignore these paths before adoption: "
-                        + ", ".join(ignored_absences)
+                    assessment["differences"].append(
+                        {
+                            "subject": "repository-content",
+                            "description": (
+                                "ignored managed absences cannot be safely removed: "
+                                + ", ".join(ignored_absences)
+                            ),
+                        }
                     )
+                    assessment["required-maintainer-work"].append(
+                        {
+                            "subject": "repository-content",
+                            "action": (
+                                "remove or unignore managed absences before adoption: "
+                                + ", ".join(ignored_absences)
+                            ),
+                        }
+                    )
+
+                head_oid = _git(repository, "rev-parse", "HEAD").stdout.strip()
+                proposal_payload = {
+                    "repository": str(repository),
+                    "head": head_oid,
+                    "release": selected_version,
+                    "current-manifest": current_manifest,
+                    "selected-manifest": selected_manifest,
+                    "assessment": assessment,
+                }
+                proposal_id = _proposal_id(proposal_payload)
+                confirmation = f"Adopt standards upgrade proposal {proposal_id}"
+                if args.confirm is None:
+                    _render_upgrade_proposal(
+                        proposal_id=proposal_id,
+                        release=selected_version,
+                        repository=repository,
+                        current_manifest=current_manifest,
+                        selected_manifest=selected_manifest,
+                        assessment=assessment,
+                        confirmation=confirmation,
+                    )
+                    return 0
+                if args.confirm != confirmation:
+                    raise AdoptionError(
+                        "standards upgrade proposal is stale or was not confirmed "
+                        "exactly; review the current complete proposal before mutation"
+                    )
+                if assessment["evidence-gaps"] or assessment["required-maintainer-work"]:
+                    raise AdoptionError(
+                        "the confirmed standards upgrade proposal still has evidence "
+                        "gaps or required maintainer work; resolve them and review a "
+                        "fresh proposal before mutation"
+                    )
+                current_assessment = _repository_assessment(
+                    checkout, preview, transition="standards upgrade"
+                )
+                current_status = _git(
+                    repository, "status", "--porcelain=v1", "--untracked-files=all"
+                )
+                current_head = _git(repository, "rev-parse", "HEAD")
+                if current_status.returncode != 0 or current_head.returncode != 0:
+                    raise AdoptionError(
+                        "standards upgrade proposal is stale because repository state "
+                        "could not be re-observed immediately before mutation"
+                    )
+                current_payload = {
+                    **proposal_payload,
+                    "head": current_head.stdout.strip(),
+                    "assessment": current_assessment,
+                }
+                if current_status.stdout or _proposal_id(current_payload) != proposal_id:
+                    raise AdoptionError(
+                        "standards upgrade proposal is stale because repository or "
+                        "GitHub state changed before mutation; review the current "
+                        "complete proposal"
+                    )
+                print(
+                    f"Confirmed current standards upgrade proposal {proposal_id}; "
+                    f"selected exact release: {selected_version}."
+                )
 
                 _update_release(repository, selected_version)
                 mutated = True
@@ -847,7 +957,6 @@ def main() -> int:
             f"\nPrepared initial standards adoption for {selected_version}; "
             f"validated adoption commit: {commit_oid}."
         )
-        print("GitHub delivery remains a separate lifecycle transition.")
     elif requested == current:
         print(
             f"\nReconciled standards release {selected_version}; "
@@ -858,6 +967,7 @@ def main() -> int:
             f"\nPrepared standards adoption {current_value} -> {selected_version}; "
             f"validated adoption commit: {commit_oid}."
         )
+    print("GitHub delivery remains a separate lifecycle transition.")
     return 0
 
 

@@ -132,6 +132,30 @@ class AdoptionCommandTests(unittest.TestCase):
             text=True,
         )
 
+    def run_confirmed_upgrade(
+        self,
+        *arguments: str,
+        environment: dict[str, str],
+        through_standards: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], subprocess.CompletedProcess[str]]:
+        runner = self.run_standards_adopt if through_standards else self.run_adopt
+        proposed = runner(*arguments, environment=environment)
+        self.assertEqual(
+            proposed.returncode, 0, proposed.stdout + proposed.stderr
+        )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in proposed.stdout.splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        confirmed = runner(
+            *arguments,
+            "--confirm",
+            confirmation,
+            environment=environment,
+        )
+        return proposed, confirmed
+
     def create_release_source(self, version: str = "2.0.0") -> Path:
         source = self.directory / f"standards-{version}"
         source.mkdir()
@@ -832,12 +856,101 @@ class AdoptionCommandTests(unittest.TestCase):
                 self.assertIn(message, output)
         self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
 
+    def test_manifest_upgrade_presents_the_complete_change_before_mutation(
+        self,
+    ) -> None:
+        source = self.create_release_source()
+        self.prepare_target_for_adoption()
+        original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
+        original_manifest = (
+            self.repository / ".repository-standards.json"
+        ).read_text(encoding="utf-8")
+        release_log = self.directory / "release-tools.log"
+
+        result = self.run_adopt(
+            "2.0.0",
+            environment={
+                "REPOSITORY_STANDARDS_SOURCE": str(source),
+                "FAKE_RELEASE_LOG": str(release_log),
+            },
+        )
+
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("Standards upgrade proposal", output)
+        self.assertIn("Current manifest declaration:", output)
+        self.assertIn("Selected manifest declaration:", output)
+        self.assertIn("Selected release change assessment:", output)
+        self.assertIn('"standards-release": "1.0.0"', output)
+        self.assertIn('"standards-release": "2.0.0"', output)
+        self.assertIn("WRITE managed.txt", output)
+        self.assertIn("DELETE obsolete.txt", output)
+        self.assertRegex(
+            output,
+            r"Exact confirmation required: Adopt standards upgrade proposal "
+            r"[0-9a-f]{16}",
+        )
+        self.assertIn("No repository or GitHub mutation was performed.", output)
+        self.assertEqual(
+            (self.repository / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            ),
+            original_manifest,
+        )
+        self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), original_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+        self.assertEqual(
+            release_log.read_text(encoding="utf-8").splitlines(),
+            ["standards check 2.0.0"],
+        )
+
+    def test_upgrade_rejects_confirmation_after_repository_state_changes(
+        self,
+    ) -> None:
+        source = self.create_release_source()
+        self.prepare_target_for_adoption()
+        release_log = self.directory / "release-tools.log"
+        environment = {
+            "REPOSITORY_STANDARDS_SOURCE": str(source),
+            "FAKE_RELEASE_LOG": str(release_log),
+        }
+        proposed = self.run_adopt("2.0.0", environment=environment)
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in proposed.stdout.splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        (self.repository / "maintainer-note.txt").write_text(
+            "changed after proposal\n", encoding="utf-8"
+        )
+        self.run_git("add", "maintainer-note.txt")
+        self.run_git("commit", "-qm", "change proposal state")
+        changed_head = self.run_git("rev-parse", "HEAD").stdout.strip()
+
+        confirmed = self.run_adopt(
+            "2.0.0",
+            "--confirm",
+            confirmation,
+            environment=environment,
+        )
+
+        self.assertEqual(confirmed.returncode, 2)
+        self.assertIn("proposal is stale", confirmed.stderr)
+        manifest = json.loads(
+            (self.repository / ".repository-standards.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["standards-release"], "1.0.0")
+        self.assertEqual(self.run_git("rev-parse", "HEAD").stdout.strip(), changed_head)
+        self.assertEqual(self.run_git("status", "--porcelain=v1").stdout, "")
+
     def test_same_release_reconciles_and_runs_every_completion_check(self) -> None:
         source = self.create_release_source("1.0.0")
         self.prepare_target_for_adoption()
         release_log = self.directory / "release-tools.log"
 
-        result = self.run_adopt(
+        _, result = self.run_confirmed_upgrade(
             "1.0.0",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
@@ -857,6 +970,8 @@ class AdoptionCommandTests(unittest.TestCase):
             release_log.read_text(encoding="utf-8").splitlines(),
             [
                 "standards check 1.0.0",
+                "standards check 1.0.0",
+                "standards check 1.0.0",
                 "standards repair 1.0.0",
                 "standards check 1.0.0",
             ],
@@ -870,7 +985,7 @@ class AdoptionCommandTests(unittest.TestCase):
         original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
         release_log = self.directory / "release-tools.log"
 
-        result = self.run_adopt(
+        proposed, result = self.run_confirmed_upgrade(
             "2.0.0",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
@@ -880,6 +995,7 @@ class AdoptionCommandTests(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
+        self.assertIn("Standards upgrade proposal", proposed.stdout)
         self.assertIn("Assessment before repair", output)
         self.assertIn("Prepared standards adoption 1.0.0 -> 2.0.0", output)
         manifest = json.loads(
@@ -903,6 +1019,8 @@ class AdoptionCommandTests(unittest.TestCase):
             release_log.read_text(encoding="utf-8").splitlines(),
             [
                 "standards check 2.0.0",
+                "standards check 2.0.0",
+                "standards check 2.0.0",
                 "standards repair 2.0.0",
                 "standards check 2.0.0",
             ],
@@ -913,12 +1031,13 @@ class AdoptionCommandTests(unittest.TestCase):
         self.prepare_target_for_adoption()
         release_log = self.directory / "release-tools.log"
 
-        result = self.run_standards_adopt(
+        _, result = self.run_confirmed_upgrade(
             "2.0.0",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
+            through_standards=True,
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1016,7 +1135,7 @@ class AdoptionCommandTests(unittest.TestCase):
         source = self.create_release_source("5.0.0")
         self.prepare_target_for_adoption()
         release_log = self.directory / "release-tools.log"
-        result = self.run_standards_adopt(
+        _, result = self.run_confirmed_upgrade(
             "5.0.0",
             "--validation-executable",
             "./check.sh",
@@ -1026,6 +1145,7 @@ class AdoptionCommandTests(unittest.TestCase):
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
             },
+            through_standards=True,
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1060,7 +1180,8 @@ class AdoptionCommandTests(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("Resolved latest stable standards release: 2.0.0", output)
-        self.assertIn("Prepared standards adoption 1.0.0 -> 2.0.0", output)
+        self.assertIn("Standards upgrade proposal", output)
+        self.assertIn('"standards-release": "2.0.0"', output)
 
     def test_missing_release_tag_is_rejected_without_target_changes(self) -> None:
         source = self.create_release_source()
@@ -1151,7 +1272,9 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertIn("incompatible standards-version 99", result.stderr)
         self.assertNotIn("already adopts", result.stdout)
 
-    def test_repository_owned_conflict_fails_during_preview_before_writes(self) -> None:
+    def test_upgrade_proposal_reports_repository_owned_conflicts_before_writes(
+        self,
+    ) -> None:
         source = self.create_release_source()
         manifest_path = self.repository / ".repository-standards.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1166,11 +1289,14 @@ class AdoptionCommandTests(unittest.TestCase):
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
                 "FAKE_RELEASE_LOG": str(release_log),
+                "FAKE_CONTRACT_CONFLICT_REPORT": "1",
             },
         )
 
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("conflicts with repository-owned pattern", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Standards upgrade proposal", result.stdout)
+        self.assertIn("conflicts with repository-owned pattern", result.stdout)
+        self.assertIn("resolve managed.txt ownership conflict", result.stdout)
         self.assertEqual(
             release_log.read_text(encoding="utf-8").splitlines(),
             ["standards check 2.0.0"],
@@ -1204,9 +1330,11 @@ class AdoptionCommandTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("ignored managed absences cannot be previewed", result.stderr)
-        self.assertIn("obsolete.txt", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Standards upgrade proposal", result.stdout)
+        self.assertIn("ignored managed absences cannot be safely removed", result.stdout)
+        self.assertIn("remove or unignore managed absences", result.stdout)
+        self.assertIn("obsolete.txt", result.stdout)
         self.assertTrue(obsolete.exists())
         self.assertFalse((self.repository / "managed.txt").exists())
         self.assertEqual(
@@ -1227,7 +1355,7 @@ class AdoptionCommandTests(unittest.TestCase):
         release_log = self.directory / "release-tools.log"
         original_head = self.run_git("rev-parse", "HEAD").stdout.strip()
 
-        result = self.run_adopt(
+        _, result = self.run_confirmed_upgrade(
             "2.0.0",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),
@@ -1242,7 +1370,12 @@ class AdoptionCommandTests(unittest.TestCase):
         self.assertNotEqual(self.run_git("status", "--porcelain=v1").stdout, "")
         self.assertEqual(
             release_log.read_text(encoding="utf-8").splitlines(),
-            ["standards check 2.0.0", "standards repair 2.0.0"],
+            [
+                "standards check 2.0.0",
+                "standards check 2.0.0",
+                "standards check 2.0.0",
+                "standards repair 2.0.0",
+            ],
         )
 
     def test_final_standards_check_failure_leaves_applied_changes_uncommitted(
@@ -1252,7 +1385,7 @@ class AdoptionCommandTests(unittest.TestCase):
         self.prepare_target_for_adoption()
         release_log = self.directory / "release-tools.log"
 
-        result = self.run_adopt(
+        _, result = self.run_confirmed_upgrade(
             "2.0.0",
             environment={
                 "REPOSITORY_STANDARDS_SOURCE": str(source),

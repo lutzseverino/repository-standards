@@ -75,11 +75,15 @@ absence starts initial adoption; manifest presence starts an upgrade. The
 adapter requires a clean, committed Git tree, obtains an isolated checkout of
 the selected tag, and executes that release's adoption behavior.
 
-Initial adoption first renders a complete proposal and performs no mutation.
-Only the exact confirmation from the current proposal authorizes manifest
-creation, safe repository-environment and declared GitHub corrections,
-canonical validation, final assessment, and the validated adoption commit.
-GitHub delivery remains separate.
+Initial adoption and upgrades first render a complete proposal and perform no
+mutation. An upgrade shows the current and selected manifest declarations plus
+the selected release's normalized whole-repository assessment, including
+validation migration, managed skills, harness adapters, retirements, lifecycle
+interfaces, ownership conflicts, preservation evidence, and declared GitHub
+changes. Only the exact confirmation from the current proposal authorizes
+manifest migration, safe repository-environment and declared GitHub
+corrections, canonical validation, final assessment, and the validated adoption
+commit. GitHub delivery remains separate.
 
 Repository-owned conflicts and manifest migrations remain explicit. Failed
 validation or final assessment leaves applied changes uncommitted for

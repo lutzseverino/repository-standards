@@ -69,6 +69,8 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
                 f"release {version}",
             ],
             check=True,
+            capture_output=True,
+            text=True,
         )
         return release
 
@@ -839,6 +841,374 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
         self.assertEqual(assessed.returncode, 0, assessed.stdout + assessed.stderr)
         self.assertEqual(
             json.loads(assessed.stdout)["conclusion"], "standards-complete"
+        )
+
+    def test_clean_room_bootstrap_upgrades_the_preceding_stable_release(
+        self,
+    ) -> None:
+        selected_release = self.create_source_release()
+        preceding_release = self.directory / "preceding-release"
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--branch",
+                "v5.0.0",
+                "--single-branch",
+                str(ROOT),
+                str(preceding_release),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        gh, github_state = self.create_fake_gh()
+        state = json.loads(github_state.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "created": True,
+                "repository": {
+                    "full_name": "owner/example",
+                    "default_branch": "main",
+                    "delete_branch_on_merge": True,
+                    "allow_squash_merge": True,
+                    "allow_merge_commit": False,
+                    "allow_rebase_merge": False,
+                    "squash_merge_commit_title": "PR_TITLE",
+                    "squash_merge_commit_message": "PR_BODY",
+                    "has_issues": True,
+                    "has_projects": False,
+                    "has_wiki": False,
+                    "permissions": {"admin": True, "push": True},
+                },
+                "labels": [
+                    "bug",
+                    "enhancement",
+                    "needs-triage",
+                    "needs-info",
+                    "ready-for-agent",
+                    "ready-for-human",
+                    "wontfix",
+                ],
+                "branches": [{"name": "main"}],
+            }
+        )
+        github_state.write_text(json.dumps(state), encoding="utf-8")
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "REPOSITORY_STANDARDS_GH": str(gh),
+                "FAKE_GITHUB_STATE": str(github_state),
+            }
+        )
+
+        repository = self.directory / "upgrade-example"
+        (repository / "docs").mkdir(parents=True)
+        (repository / ".agents/skills/custom").mkdir(parents=True)
+        (repository / "README.md").write_text(
+            '<div align="center">\n  <h1>upgrade-example</h1>\n</div>\n\n'
+            "See the [documentation](docs/README.md).\n",
+            encoding="utf-8",
+        )
+        (repository / "docs/README.md").write_text(
+            "# Documentation\n\nExisting project documentation.\n",
+            encoding="utf-8",
+        )
+        (repository / "product.txt").write_text(
+            "repository-owned product content\n", encoding="utf-8"
+        )
+        (repository / ".agents/skills/custom/SKILL.md").write_text(
+            "---\nname: custom\ndescription: repository-owned capability\n---\n",
+            encoding="utf-8",
+        )
+        manifest = {
+            "standards-version": 5,
+            "standards-release": "5.0.0",
+            "profiles": ["common", "documentation"],
+            "boundaries": [
+                {
+                    "path": ".",
+                    "type": "repository",
+                    "title": "upgrade-example",
+                }
+            ],
+            "dependency-updates": [
+                {
+                    "ecosystem": "github-actions",
+                    "directory": "/",
+                    "schedule": "weekly",
+                }
+            ],
+            "github": {
+                "repository": "owner/example",
+                "default-branch": "main",
+                "settings": {
+                    "delete-branch-on-merge": True,
+                    "allow-squash-merge": True,
+                    "allow-merge-commit": False,
+                    "allow-rebase-merge": False,
+                    "squash-merge-commit-title": "PR_TITLE",
+                    "squash-merge-commit-message": "PR_BODY",
+                },
+                "features": {
+                    "issues": True,
+                    "projects": False,
+                    "wiki": False,
+                },
+                "ruleset": None,
+            },
+            "variables": {},
+            "local-fragments": {},
+            "repository-owned": [
+                "README.md",
+                "docs/README.md",
+                "product.txt",
+            ],
+        }
+        (repository / ".repository-standards.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "init", "-q", "-b", "main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repository), "config", "user.name", "Test User"],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "config",
+                "user.email",
+                "test@example.com",
+            ],
+            check=True,
+        )
+        prepared = subprocess.run(
+            [
+                str(preceding_release / "scripts/standards"),
+                "repair",
+                str(repository),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
+        subprocess.run(["git", "-C", str(repository), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "commit",
+                "-qm",
+                "adopt preceding stable standards",
+            ],
+            check=True,
+        )
+        preceding_check = subprocess.run(
+            [
+                str(preceding_release / "scripts/standards"),
+                "check",
+                "--json",
+                str(repository),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(
+            preceding_check.returncode,
+            0,
+            preceding_check.stdout + preceding_check.stderr,
+        )
+        self.assertEqual(
+            json.loads(preceding_check.stdout)["conclusion"],
+            "standards-complete",
+        )
+        original_head = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        user_skills, bootstrap_environment = self.install_bootstrap()
+        bootstrap_environment.update(environment)
+        bootstrap_environment.update(
+            {
+                "REPOSITORY_STANDARDS_LATEST_RELEASE": "6.0.0",
+                "REPOSITORY_STANDARDS_CHECKOUT": str(selected_release),
+            }
+        )
+        selected = subprocess.run(
+            [
+                "python3",
+                str(user_skills / "adopt-standards/scripts/select-release"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=bootstrap_environment,
+        )
+        self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
+        selected_skill = Path(
+            next(
+                line.removeprefix("Selected skill: ")
+                for line in selected.stdout.splitlines()
+                if line.startswith("Selected skill: ")
+            )
+        )
+        validation_program = (
+            "from pathlib import Path; "
+            "assert Path('product.txt').read_text() == "
+            "'repository-owned product content\\n'; "
+            "assert Path('.agents/skills/custom/SKILL.md').is_file(); "
+            "assert not Path('.agents/skills/ask-matt/SKILL.md').exists(); "
+            "assert Path('.claude/skills/adopt-standards/SKILL.md').is_file()"
+        )
+        arguments = [
+            "python3",
+            str(selected_skill.parent / "scripts/adopt"),
+            "--repository",
+            str(repository),
+            "--validation-executable",
+            "python3",
+            "--validation-argument=-c",
+            f"--validation-argument={validation_program}",
+            "6.0.0",
+        ]
+        proposal = subprocess.run(
+            arguments,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=bootstrap_environment,
+        )
+        self.assertEqual(proposal.returncode, 0, proposal.stdout + proposal.stderr)
+        self.assertIn("Standards upgrade proposal", proposal.stdout)
+        self.assertIn('"standards-release": "5.0.0"', proposal.stdout)
+        self.assertIn('"standards-release": "6.0.0"', proposal.stdout)
+        self.assertIn('"evidence-gaps": []', proposal.stdout)
+        self.assertIn('"required-maintainer-work": []', proposal.stdout)
+        for migrated_surface in (
+            "canonical-validation",
+            ".agents/standard-skills.json",
+            ".claude/skills/adopt-standards/SKILL.md",
+            ".agents/skills/ask-matt/SKILL.md",
+            ".agents/skills/adopt-standards/SKILL.md",
+        ):
+            self.assertIn(migrated_surface, proposal.stdout)
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            original_head,
+        )
+        confirmation = next(
+            line.removeprefix("Exact confirmation required: ")
+            for line in proposal.stdout.splitlines()
+            if line.startswith("Exact confirmation required: ")
+        )
+        upgraded = subprocess.run(
+            [*arguments, "--confirm", confirmation],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=bootstrap_environment,
+        )
+        self.assertEqual(upgraded.returncode, 0, upgraded.stdout + upgraded.stderr)
+        self.assertIn("validated adoption commit", upgraded.stdout)
+        self.assertIn("GitHub delivery remains a separate", upgraded.stdout)
+        upgraded_manifest = json.loads(
+            (repository / ".repository-standards.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(upgraded_manifest["standards-version"], 5)
+        self.assertEqual(upgraded_manifest["standards-release"], "6.0.0")
+        self.assertEqual(
+            upgraded_manifest["canonical-validation"],
+            {
+                "executable": "python3",
+                "arguments": ["-c", validation_program],
+                "working-directory": ".",
+            },
+        )
+        self.assertTrue(
+            (repository / ".agents/skills/custom/SKILL.md").is_file()
+        )
+        self.assertFalse(
+            (repository / ".agents/skills/ask-matt/SKILL.md").exists()
+        )
+        self.assertTrue(
+            (repository / ".claude/skills/adopt-standards/SKILL.md").is_file()
+        )
+        current_inventory = json.loads(
+            (repository / ".agents/standard-skills.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            set(current_inventory["bundles"][0]["skills"]),
+            {
+                "code-review",
+                "codebase-design",
+                "domain-modeling",
+                "grill-with-docs",
+                "grilling",
+                "implement",
+                "prototype",
+                "research",
+                "setup-matt-pocock-skills",
+                "tdd",
+                "to-spec",
+                "to-tickets",
+                "triage",
+                "wayfinder",
+            },
+        )
+        assessed = subprocess.run(
+            [
+                str(selected_release / "scripts/standards"),
+                "check",
+                "--json",
+                str(repository),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=bootstrap_environment,
+        )
+        self.assertEqual(assessed.returncode, 0, assessed.stdout + assessed.stderr)
+        self.assertEqual(
+            json.loads(assessed.stdout)["conclusion"], "standards-complete"
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "status", "--porcelain=v1"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout,
+            "",
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(repository), "rev-list", "--count", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+            "2",
         )
 
 

@@ -43,8 +43,9 @@ and standards releases use semantic versioning.
   interpretation across creation, adoption, and delivery.
 - Route `adopt-standards` by manifest presence so initial adoption reuses
   settled repository evidence and collects only unresolved contract facts,
-  while retaining the existing manifest-upgrade path and separate GitHub
-  delivery boundary.
+  while upgrades now present current and selected manifest declarations plus a
+  normalized whole-repository assessment of the complete contract change for
+  exact confirmation before mutation.
 
 ### Fixed
 
@@ -59,6 +60,15 @@ and standards releases use semantic versioning.
 
 - Remove the non-operational `standards deliver` stub and present GitHub
   delivery through the repository-local `deliver-change` Agent Skill.
+
+### Migration
+
+- Upgrade repositories pinned to `5.0.0` through the same `adopt-standards`
+  entry point, migrating the structured canonical-validation declaration,
+  curated standard skill inventory, harness adapters, retired managed skills,
+  and changed lifecycle surface in one forward-tested adoption commit. The
+  manifest remains at `standards-version: 5`; no alias or permanent
+  compatibility wrapper is retained.
 
 ## [5.0.0] - 2026-08-25
 
