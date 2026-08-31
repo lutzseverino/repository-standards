@@ -27,6 +27,21 @@ FEATURES_MAPPING = {
     "projects": "has_projects",
     "wiki": "has_wiki",
 }
+GRAPHQL_SETTINGS_MAPPING = {
+    "delete_branch_on_merge": "deleteBranchOnMerge",
+    "allow_squash_merge": "squashMergeAllowed",
+    "allow_merge_commit": "mergeCommitAllowed",
+    "allow_rebase_merge": "rebaseMergeAllowed",
+    "squash_merge_commit_title": "squashMergeCommitTitle",
+    "squash_merge_commit_message": "squashMergeCommitMessage",
+}
+REPOSITORY_SETTINGS_QUERY = (
+    "query($owner:String!,$name:String!){"
+    "repository(owner:$owner,name:$name){"
+    "deleteBranchOnMerge mergeCommitAllowed rebaseMergeAllowed "
+    "squashMergeAllowed squashMergeCommitTitle squashMergeCommitMessage"
+    "}}"
+)
 
 
 class NormalizedGitHubContract(Protocol):
@@ -159,6 +174,12 @@ class GitHubAdapter:
                 return results
             page += 1
 
+    def _observe_repository(self, repository_name: str) -> dict[str, Any]:
+        repository = self.request("GET", f"repos/{repository_name}")
+        if not isinstance(repository, dict):
+            raise StandardsError("GitHub repository API must return an object")
+        return dict(repository)
+
     def observe(
         self,
         contract: GitHubRepositoryContract,
@@ -169,9 +190,7 @@ class GitHubAdapter:
 
         github = contract.github.as_mapping()
         endpoint = f"repos/{github['repository']}"
-        repository = self.request("GET", endpoint)
-        if not isinstance(repository, dict):
-            raise StandardsError("GitHub repository API must return an object")
+        repository = self._observe_repository(github["repository"])
 
         labels = self._collect_pages(f"{endpoint}/labels")
         label_names = frozenset(
@@ -248,19 +267,16 @@ class GitHubCliAdapter(GitHubAdapter):
     def __init__(self, executable: str | None = None) -> None:
         self.executable = executable or os.environ.get("REPOSITORY_STANDARDS_GH", "gh")
 
-    def request(
+    def _run_json(
         self,
-        method: str,
-        endpoint: str,
-        payload: dict[str, Any] | None = None,
+        command: list[str],
+        *,
+        request_input: str | None,
+        failure_context: str,
+        permission: str,
     ) -> Any:
         if shutil.which(self.executable) is None:
             raise StandardsError("GitHub corrections require the GitHub CLI: gh")
-        command = [self.executable, "api", endpoint]
-        request_input: str | None = None
-        if method != "GET":
-            command.extend(["--method", method, "--input", "-"])
-            request_input = json.dumps(payload or {})
         result = subprocess.run(
             command,
             input=request_input,
@@ -284,23 +300,88 @@ class GitHubCliAdapter(GitHubAdapter):
                     "unauthorized",
                 )
             ):
-                permission = "read" if method == "GET" else "write"
                 guidance = (
                     "; authenticate with `gh auth login` using a token with "
                     f"Issues ({permission}) and Administration ({permission}) "
                     "permission for the repository"
                 )
-            raise StandardsError(
-                f"GitHub API {method} failed for {endpoint}: {message}{guidance}"
-            )
+            raise StandardsError(f"{failure_context}: {message}{guidance}")
         if not result.stdout.strip():
             return None
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError as exc:
+            raise StandardsError(f"{failure_context}: invalid JSON") from exc
+
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        payload: dict[str, Any] | None = None,
+    ) -> Any:
+        command = [self.executable, "api", endpoint]
+        request_input: str | None = None
+        if method != "GET":
+            command.extend(["--method", method, "--input", "-"])
+            request_input = json.dumps(payload or {})
+        return self._run_json(
+            command,
+            request_input=request_input,
+            failure_context=f"GitHub API {method} failed for {endpoint}",
+            permission="read" if method == "GET" else "write",
+        )
+
+    def _observe_repository(self, repository_name: str) -> dict[str, Any]:
+        repository = super()._observe_repository(repository_name)
+        if all(
+            repository.get(field) is not None
+            for field in GRAPHQL_SETTINGS_MAPPING
+        ):
+            return repository
+
+        owner, name = repository_name.split("/", 1)
+        response = self._run_json(
+            [
+                self.executable,
+                "api",
+                "graphql",
+                "-f",
+                f"query={REPOSITORY_SETTINGS_QUERY}",
+                "-F",
+                f"owner={owner}",
+                "-F",
+                f"name={name}",
+            ],
+            request_input=None,
+            failure_context=(
+                f"GitHub GraphQL repository settings query failed for "
+                f"{repository_name}"
+            ),
+            permission="read",
+        )
+        graphql_repository = (
+            response.get("data", {}).get("repository")
+            if isinstance(response, dict)
+            else None
+        )
+        if not isinstance(graphql_repository, dict):
             raise StandardsError(
-                f"GitHub API returned invalid JSON for {method} {endpoint}"
-            ) from exc
+                "GitHub GraphQL repository settings query must return an object"
+            )
+        if any(
+            graphql_repository.get(field) is None
+            for field in GRAPHQL_SETTINGS_MAPPING.values()
+        ):
+            raise StandardsError(
+                "GitHub GraphQL repository settings are not completely observable"
+            )
+        return {
+            **repository,
+            **{
+                rest_field: graphql_repository[graphql_field]
+                for rest_field, graphql_field in GRAPHQL_SETTINGS_MAPPING.items()
+            },
+        }
 
 
 def _rule_by_type(ruleset: dict[str, Any], rule_type: str) -> dict[str, Any] | None:
