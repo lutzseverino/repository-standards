@@ -47,6 +47,13 @@ jobs:
               squash_merge_commit_message
             } | tojson)"
           '
+          OWNER="${TARGET_REPOSITORY%%/*}"
+          NAME="${TARGET_REPOSITORY#*/}"
+          gh api graphql \
+            -f 'query=query($owner:String!,$name:String!){repository(owner:$owner,name:$name){deleteBranchOnMerge mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed squashMergeCommitTitle squashMergeCommitMessage}}' \
+            -F owner="${OWNER}" \
+            -F name="${NAME}" \
+            --jq '"[DEBUG-token-observation] graphql_merge_settings=\(.data.repository | tojson)"'
       - name: Check out standards tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out target repository
