@@ -2,29 +2,27 @@ from __future__ import annotations
 
 import os
 import subprocess
-import tempfile
-import textwrap
-import unittest
 from pathlib import Path
+
+from scripts.tests.lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class ConsumerRehearsalTests(unittest.TestCase):
+class ConsumerRehearsalTests(LifecycleTestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name).resolve()
+        super().setUp()
+        self.directory = self.workspace
         self.bin = self.directory / "bin"
         self.bin.mkdir()
         self.log = self.directory / "calls.log"
         self.release = self.directory / "release"
         standards = self.release / "scripts/standards"
         standards.parent.mkdir(parents=True)
-        standards.write_text(
-            textwrap.dedent(
-                """\
+        self.write_executable(
+            "release/scripts/standards",
+            """\
                 #!/usr/bin/env python3
                 import os
                 import sys
@@ -38,28 +36,19 @@ class ConsumerRehearsalTests(unittest.TestCase):
                 ) as log:
                     log.write("standards " + " ".join(sys.argv[1:]) + "\\n")
                 print("Conclusion: standards-complete")
-                """
-            ),
-            encoding="utf-8",
+                """,
         )
-        standards.chmod(0o755)
         self.demo = self.directory / "demo-source"
         self.demo.mkdir()
         (self.demo / ".repository-standards.json").write_text(
             '{"standards-release": "6.0.0"}\n', encoding="utf-8"
         )
 
-    def write_executable(self, name: str, content: str) -> Path:
-        executable = self.bin / name
-        executable.write_text(textwrap.dedent(content), encoding="utf-8")
-        executable.chmod(0o755)
-        return executable
-
     def test_public_installation_selects_release_and_assesses_live_target(
         self,
     ) -> None:
         self.write_executable(
-            "npx",
+            "bin/npx",
             """\
             #!/usr/bin/env python3
             import os
@@ -102,7 +91,7 @@ class ConsumerRehearsalTests(unittest.TestCase):
             """,
         )
         self.write_executable(
-            "gh",
+            "bin/gh",
             """\
             #!/usr/bin/env python3
             import sys
@@ -113,7 +102,7 @@ class ConsumerRehearsalTests(unittest.TestCase):
             """,
         )
         self.write_executable(
-            "git",
+            "bin/git",
             """\
             #!/usr/bin/env python3
             import os
@@ -130,10 +119,8 @@ class ConsumerRehearsalTests(unittest.TestCase):
             shutil.copytree(os.environ["REHEARSAL_DEMO"], sys.argv[-1])
             """,
         )
-        environment = os.environ.copy()
-        environment.update(
+        environment = self.isolated_environment(
             {
-                "PATH": str(self.bin) + os.pathsep + environment["PATH"],
                 "REHEARSAL_CALL_LOG": str(self.log),
                 "REHEARSAL_RELEASE": str(self.release),
                 "REHEARSAL_DEMO": str(self.demo),
@@ -144,19 +131,17 @@ class ConsumerRehearsalTests(unittest.TestCase):
                 "GIT_CONFIG_PARAMETERS": (
                     "'url.file:///fixture/.insteadOf'='https://github.com/'"
                 ),
-            }
+            },
+            executable_directory=self.bin,
         )
 
-        result = subprocess.run(
+        result = self.invoke_lifecycle(
             [
                 str(ROOT / "scripts/rehearse-public-contract"),
                 "6.0.0",
                 "owner/repository-standards-demo",
             ],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=environment,
+            environment=environment,
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -178,4 +163,6 @@ class ConsumerRehearsalTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    import unittest
+
     unittest.main()

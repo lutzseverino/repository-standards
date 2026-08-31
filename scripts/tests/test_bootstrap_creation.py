@@ -6,10 +6,10 @@ import re
 import shlex
 import shutil
 import subprocess
-import tempfile
 import textwrap
-import unittest
 from pathlib import Path
+
+from scripts.tests.lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,11 +22,10 @@ ADOPT_RESOLVER = BOOTSTRAP_SOURCE / "adopt-standards/scripts/select-release"
 INSTALLER_VERSION = "1.5.23"
 
 
-class BootstrapCreationJourneyTests(unittest.TestCase):
+class BootstrapCreationJourneyTests(LifecycleTestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name).resolve()
+        super().setUp()
+        self.directory = self.workspace
 
     def create_release(self, version: str = "6.0.0") -> Path:
         release = self.directory / "release"
@@ -38,44 +37,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
                 encoding="utf-8",
             )
         (release / "VERSION").write_text(version + "\n", encoding="utf-8")
-        return self.seal_release_fixture(release, version)
-
-    def seal_release_fixture(self, release: Path, version: str) -> Path:
-        subprocess.run(
-            ["git", "-C", str(release), "init", "-q", "-b", "main"],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(release), "config", "user.name", "Test User"],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(release), "config", "user.email", "test@example.com"],
-            check=True,
-        )
-        subprocess.run(["git", "-C", str(release), "add", "."], check=True)
-        subprocess.run(
-            ["git", "-C", str(release), "commit", "-qm", "release fixture"],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "tag.gpgSign=false",
-                "-C",
-                str(release),
-                "tag",
-                "-a",
-                f"v{version}",
-                "-m",
-                f"release {version}",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return release
+        return self.seal_release(release, version)
 
     def create_source_release(self, version: str = "6.0.0") -> Path:
         release = self.directory / "source-release"
@@ -85,7 +47,7 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"),
         )
         (release / "VERSION").write_text(version + "\n", encoding="utf-8")
-        return self.seal_release_fixture(release, version)
+        return self.seal_release(release, version)
 
     def create_fake_gh(self) -> tuple[Path, Path]:
         state = self.directory / "github.json"
@@ -101,10 +63,9 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        executable = self.directory / "gh"
-        executable.write_text(
-            textwrap.dedent(
-                """\
+        executable = self.write_executable(
+            "gh",
+            """\
                 #!/usr/bin/env python3
                 import json
                 import os
@@ -195,18 +156,14 @@ class BootstrapCreationJourneyTests(unittest.TestCase):
                     raise SystemExit(0)
                 print(f"unexpected gh api invocation: {arguments}", file=sys.stderr)
                 raise SystemExit(2)
-                """
-            ),
-            encoding="utf-8",
+                """,
         )
-        executable.chmod(0o755)
         return executable, state
 
     def install_bootstrap(self, public_source_fixture: Path) -> tuple[Path, dict[str, str]]:
         user_home = self.directory / "user-home"
         user_home.mkdir()
-        environment = os.environ.copy()
-        environment.update(
+        environment = self.isolated_environment(
             {
                 "HOME": str(user_home),
                 "XDG_CONFIG_HOME": str(user_home / ".config"),

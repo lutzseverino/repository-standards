@@ -5,10 +5,11 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+
+from scripts.tests.lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,15 +21,12 @@ INSTALLER_VERSION = "1.5.23"
     os.environ.get("RUN_FRESH_AGENT_TESTS") == "1" and shutil.which("codex"),
     "set RUN_FRESH_AGENT_TESTS=1 with Codex authentication to run fresh-agent tests",
 )
-class AdoptionFreshAgentTests(unittest.TestCase):
+class AdoptionFreshAgentTests(LifecycleTestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.workspace = Path(self.temporary.name).resolve()
+        super().setUp()
         self.repository = self.workspace / "repository"
         self.repository.mkdir()
-        install_environment = os.environ.copy()
-        install_environment.update(
+        install_environment = self.isolated_environment(
             {
                 "npm_config_cache": str(self.workspace / "npm-cache"),
                 "npm_config_update_notifier": "false",
@@ -118,45 +116,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.gh.chmod(0o755)
-        subprocess.run(
-            ["git", "-C", str(self.release), "init", "-q", "-b", "main"],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(self.release), "config", "user.name", "Test User"],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self.release),
-                "config",
-                "user.email",
-                "test@example.com",
-            ],
-            check=True,
-        )
-        subprocess.run(["git", "-C", str(self.release), "add", "."], check=True)
-        subprocess.run(
-            ["git", "-C", str(self.release), "commit", "-qm", "release fixture"],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "tag.gpgSign=false",
-                "-C",
-                str(self.release),
-                "tag",
-                "-a",
-                "v6.0.0",
-                "-m",
-                "release 6.0.0",
-            ],
-            check=True,
-        )
+        self.seal_release(self.release, "6.0.0")
         (self.repository / "docs").mkdir()
         (self.repository / "README.md").write_text(
             '<div align="center">\n  <h1>example</h1>\n</div>\n\n'
@@ -249,7 +209,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
         )
 
     def git(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        return self.invoke_lifecycle(
             ["git", "-C", str(self.repository), *arguments],
             check=True,
             capture_output=True,
@@ -258,8 +218,7 @@ class AdoptionFreshAgentTests(unittest.TestCase):
 
     def run_fresh_agent(self, prompt: str) -> subprocess.CompletedProcess[str]:
         final_message = self.workspace / ".agent-final.txt"
-        environment = os.environ.copy()
-        environment.update(
+        environment = self.isolated_environment(
             {
                 "REPOSITORY_STANDARDS_LATEST_RELEASE": "6.0.0",
                 "REPOSITORY_STANDARDS_CHECKOUT": str(self.release),
@@ -282,11 +241,8 @@ class AdoptionFreshAgentTests(unittest.TestCase):
                 str(self.workspace),
                 prompt,
             ],
-            check=False,
-            capture_output=True,
-            text=True,
             timeout=180,
-            env=environment,
+            environment=environment,
         )
 
     def final_message(self) -> str:

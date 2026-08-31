@@ -3,14 +3,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 import textwrap
-import unittest
 from pathlib import Path
 
 from scripts.tests.canonical_validation_fixture import (
     write_fake_canonical_validation,
 )
+from scripts.tests.lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,11 +20,10 @@ CREATE = (
 )
 
 
-class RepositoryCreationCommandTests(unittest.TestCase):
+class RepositoryCreationCommandTests(LifecycleTestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name).resolve()
+        super().setUp()
+        self.directory = self.workspace
         self.destination = self.directory / "example"
         self.log = self.directory / "operations.log"
         self.github_state = self.directory / "github.json"
@@ -259,36 +257,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             path = scripts / name
             path.write_text(textwrap.dedent(source), encoding="utf-8")
             path.chmod(0o755)
-        subprocess.run(["git", "-C", str(release), "init", "-q", "-b", "main"], check=True)
-        subprocess.run(
-            ["git", "-C", str(release), "config", "user.name", "Test User"],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(release), "config", "user.email", "test@example.com"],
-            check=True,
-        )
-        subprocess.run(["git", "-C", str(release), "add", "."], check=True)
-        subprocess.run(
-            ["git", "-C", str(release), "commit", "-qm", "release fixture"],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "tag.gpgSign=false",
-                "-C",
-                str(release),
-                "tag",
-                "-a",
-                "v4.0.0",
-                "-m",
-                "release 4.0.0",
-            ],
-            check=True,
-        )
-        return release
+        return self.seal_release(release, "4.0.0")
 
     def create_fake_gh(self) -> Path:
         gh = self.directory / "gh"
@@ -413,8 +382,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
         extra_environment: dict[str, str] | None = None,
         use_reusable_checkout: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        environment.update(
+        environment = self.isolated_environment(
             {
                 "REPOSITORY_STANDARDS_SOURCE": str(self.release),
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
@@ -429,7 +397,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
             environment.pop("REPOSITORY_STANDARDS_CHECKOUT", None)
         if extra_environment:
             environment.update(extra_environment)
-        return subprocess.run(
+        return self.invoke_lifecycle(
             [
                 "python3",
                 str(CREATE),
@@ -457,15 +425,11 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 *arguments,
             ],
             cwd=self.directory,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
+            environment=environment,
         )
 
     def run_standards_create(self) -> subprocess.CompletedProcess[str]:
-        environment = os.environ.copy()
-        environment.update(
+        environment = self.isolated_environment(
             {
                 "REPOSITORY_STANDARDS_CHECKOUT": str(self.release),
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
@@ -474,7 +438,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "FAKE_VALIDATION_OBSERVATION": str(self.validation_observation),
             }
         )
-        return subprocess.run(
+        return self.invoke_lifecycle(
             [
                 str(ROOT / "scripts/standards"),
                 "create",
@@ -505,10 +469,7 @@ class RepositoryCreationCommandTests(unittest.TestCase):
                 "project-kind=application",
             ],
             cwd=self.directory,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
+            environment=environment,
         )
 
     def test_success_validates_locally_before_creating_an_empty_remote(self) -> None:
@@ -1210,4 +1171,6 @@ class RepositoryCreationCommandTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    import unittest
+
     unittest.main()
