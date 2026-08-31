@@ -50,11 +50,19 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
 
         self.assertIn("lutzseverino/repository-standards-demo", workflow)
+        self.assertIn("GH_TOKEN: ${{ secrets.STANDARDS_CHECK_TOKEN }}", workflow)
+        self.assertNotIn("GH_TOKEN: ${{ github.token }}", workflow)
         self.assertIn(
             "python3 ../adopted-standards/profiles/common/files/.github/"
             + "scripts/"
             + "check-workflows.py",
             workflow,
+        )
+        self.assertIn(
+            "`STANDARDS_CHECK_TOKEN` Actions secret",
+            (ROOT / "standards/maintenance-and-rollout.md").read_text(
+                encoding="utf-8"
+            ),
         )
         self.assertIn("deterministic consumer journeys remain required", acceptance)
 

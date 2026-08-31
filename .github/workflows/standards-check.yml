@@ -16,6 +16,8 @@ jobs:
   repository:
     name: Standards Check / ${{ matrix.repository }}
     runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.STANDARDS_CHECK_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +25,12 @@ jobs:
           - lutzseverino/repository-standards
           - lutzseverino/repository-standards-demo
     steps:
+      - name: Require standards assessment token
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::STANDARDS_CHECK_TOKEN is required for complete GitHub observation"
+            exit 1
+          fi
       - name: Check out standards tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out target repository
@@ -54,13 +62,9 @@ jobs:
           path: adopted-standards
       - name: Check repository standards source
         if: matrix.repository == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: scripts/standards check target
       - name: Check adopted standards
         if: matrix.repository != github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: adopted-standards/scripts/standards check target
       - name: Validate target workflows from repository source
         if: matrix.repository == github.repository
