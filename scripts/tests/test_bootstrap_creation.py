@@ -9,7 +9,10 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from scripts.tests.lifecycle_support import LifecycleTestCase
+if __package__:
+    from .lifecycle_support import LifecycleTestCase
+else:
+    from lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1183,4 +1186,6 @@ class BootstrapCreationJourneyTests(LifecycleTestCase):
 
 
 if __name__ == "__main__":
+    import unittest
+
     unittest.main()

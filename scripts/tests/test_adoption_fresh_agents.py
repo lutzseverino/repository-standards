@@ -9,7 +9,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from scripts.tests.lifecycle_support import LifecycleTestCase
+if __package__:
+    from .lifecycle_support import LifecycleTestCase
+else:
+    from lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -209,7 +212,7 @@ class AdoptionFreshAgentTests(LifecycleTestCase):
         )
 
     def git(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        return self.invoke_lifecycle(
+        return subprocess.run(
             ["git", "-C", str(self.repository), *arguments],
             check=True,
             capture_output=True,
@@ -225,7 +228,7 @@ class AdoptionFreshAgentTests(LifecycleTestCase):
                 "REPOSITORY_STANDARDS_GH": str(self.gh),
             }
         )
-        return subprocess.run(
+        return self.invoke_lifecycle(
             [
                 "codex",
                 "exec",

@@ -9,7 +9,10 @@ from pathlib import Path
 from scripts.tests.canonical_validation_fixture import (
     write_fake_canonical_validation,
 )
-from scripts.tests.lifecycle_support import LifecycleTestCase
+if __package__:
+    from .lifecycle_support import LifecycleTestCase
+else:
+    from lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]

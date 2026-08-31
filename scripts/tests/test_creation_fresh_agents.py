@@ -7,7 +7,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from scripts.tests.lifecycle_support import LifecycleTestCase
+if __package__:
+    from .lifecycle_support import LifecycleTestCase
+else:
+    from lifecycle_support import LifecycleTestCase
 
 
 ROOT = Path(__file__).resolve().parents[2]
