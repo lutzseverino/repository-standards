@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Provide stable repository observations to current and released checkers."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+
+from lib.github_reconciliation import GitHubCliAdapter
+
+
+REPOSITORY_ENDPOINT = re.compile(r"repos/([^/]+)/([^/?]+)")
+
+
+def main(arguments: list[str]) -> int:
+    executable = os.environ.get("REPOSITORY_STANDARDS_REAL_GH", "gh")
+    if len(arguments) == 2 and arguments[0] == "api":
+        match = REPOSITORY_ENDPOINT.fullmatch(arguments[1])
+        if match is not None:
+            repository = f"{match.group(1)}/{match.group(2)}"
+            observed = GitHubCliAdapter(executable).observe_repository(repository)
+            print(json.dumps(observed))
+            return 0
+
+    os.execvp(executable, [executable, *arguments])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

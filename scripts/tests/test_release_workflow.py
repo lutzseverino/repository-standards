@@ -53,6 +53,12 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("GH_TOKEN: ${{ secrets.STANDARDS_CHECK_TOKEN }}", workflow)
         self.assertNotIn("GH_TOKEN: ${{ github.token }}", workflow)
         self.assertIn(
+            "REPOSITORY_STANDARDS_GH: "
+            "${{ github.workspace }}/scripts/github-api",
+            workflow,
+        )
+        self.assertTrue((ROOT / "scripts/github-api").is_file())
+        self.assertIn(
             "python3 ../adopted-standards/profiles/common/files/.github/"
             + "scripts/"
             + "check-workflows.py",

@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.STANDARDS_CHECK_TOKEN }}
+      REPOSITORY_STANDARDS_GH: ${{ github.workspace }}/scripts/github-api
     strategy:
       fail-fast: false
       matrix:

@@ -174,7 +174,7 @@ class GitHubAdapter:
                 return results
             page += 1
 
-    def _observe_repository(self, repository_name: str) -> dict[str, Any]:
+    def observe_repository(self, repository_name: str) -> dict[str, Any]:
         repository = self.request("GET", f"repos/{repository_name}")
         if not isinstance(repository, dict):
             raise StandardsError("GitHub repository API must return an object")
@@ -190,7 +190,7 @@ class GitHubAdapter:
 
         github = contract.github.as_mapping()
         endpoint = f"repos/{github['repository']}"
-        repository = self._observe_repository(github["repository"])
+        repository = self.observe_repository(github["repository"])
 
         labels = self._collect_pages(f"{endpoint}/labels")
         label_names = frozenset(
@@ -331,8 +331,8 @@ class GitHubCliAdapter(GitHubAdapter):
             permission="read" if method == "GET" else "write",
         )
 
-    def _observe_repository(self, repository_name: str) -> dict[str, Any]:
-        repository = super()._observe_repository(repository_name)
+    def observe_repository(self, repository_name: str) -> dict[str, Any]:
+        repository = super().observe_repository(repository_name)
         if all(
             repository.get(field) is not None
             for field in GRAPHQL_SETTINGS_MAPPING
