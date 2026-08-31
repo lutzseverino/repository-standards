@@ -31,6 +31,22 @@ jobs:
             echo "::error::STANDARDS_CHECK_TOKEN is required for complete GitHub observation"
             exit 1
           fi
+      - name: Inspect standards assessment token
+        env:
+          TARGET_REPOSITORY: ${{ matrix.repository }}
+        run: |
+          echo "[DEBUG-token-observation] identity=$(gh api user --jq .login)"
+          gh api "repos/${TARGET_REPOSITORY}" --jq '
+            "[DEBUG-token-observation] repository_permissions=\(.permissions | tojson)",
+            "[DEBUG-token-observation] merge_settings=\({
+              delete_branch_on_merge,
+              allow_squash_merge,
+              allow_merge_commit,
+              allow_rebase_merge,
+              squash_merge_commit_title,
+              squash_merge_commit_message
+            } | tojson)"
+          '
       - name: Check out standards tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out target repository
