@@ -51,3 +51,6 @@ environment.
 - [Bootstrap through thin user-scoped skills](0015-bootstrap-through-thin-user-scoped-skills.md):
   install only the two public entry skills globally, select one immutable
   release, and delegate lifecycle behavior to its release-pinned environment.
+- [Separate the capability platform from policy packs](0016-separate-capability-platform-from-policy-packs.md):
+  provide shared safe repository operations independently of declarative,
+  selectable, authorable, and forkable policy.

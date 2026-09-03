@@ -4,6 +4,9 @@ Durable findings from the throwaway resolver prototype required by
 [issue #69](https://github.com/lutzseverino/repository-standards/issues/69).
 These findings constrain the production resolution and explanation work; they
 do not make the prototype implementation or its filenames part of the product.
+They refine the accepted separation of capability platform and policy system
+recorded in
+[ADR 0016](adr/0016-separate-capability-platform-from-policy-packs.md).
 
 ## Question and verdict
 
@@ -27,7 +30,7 @@ of package selection order. This preserves the current supported `.gitignore`
 composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/3bbc655423fbd4057a58217d05bd38a94e9efe6e/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/123620547ff539737728552764175fccd5cb4eee/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
 
@@ -61,6 +64,8 @@ The guided failure and migration cases demonstrate:
   `compatibility.capability.unsupported`;
 - changing an acquired policy document without changing the lock fails with
   `lock.content.tampered` before an effective contract is returned;
+- changing duplicated lock metadata without changing the content-hashed
+  manifest fails with `lock.metadata.mismatch` before either claim is used;
 - every resolved fact identifies its sole owner, selected/default/local origin,
   source declaration, and evidence digest;
 - the exact `5.0.0` declaration is sufficient to start migration, but its
@@ -129,7 +134,7 @@ explanation also names the pack declaration that permitted it.
 
 ### Package envelope and kind-specific payloads
 
-Every package has one common closed envelope:
+Every package has one common, content-hashed closed envelope:
 
 - kind, publisher, name, and semantic version;
 - supported capability-platform range;
@@ -138,8 +143,10 @@ Every package has one common closed envelope:
 - references to included content and policy documents.
 
 The immutable locked identity is the complete coordinate, including kind,
-publisher, name, and exact version. Source and publisher remain separately
-visible trust roots so a change to either can require renewed confirmation.
+publisher, name, and exact version. The manifest is authoritative for declared
+publisher, source, license, compatibility, and capability requirements. Source
+and publisher remain separately visible trust roots so a change to either can
+require renewed confirmation.
 
 Each kind then has a distinct closed payload:
 
@@ -168,12 +175,17 @@ The lock contains:
 The locally acquired package set contains the closed package manifest and the
 content bytes described by each lock entry. Resolution verifies selection,
 identity, configuration freshness, complete path inventory, individual content
-digests, and aggregate package digest before interpreting any contribution.
-Extra, missing, or changed content is an integrity failure.
+digests, aggregate package digest, and exact parity between every duplicated
+lock field and its content-hashed manifest declaration before interpreting any
+contribution. Extra, missing, changed, or contradictory content is an integrity
+failure.
 
-The lock is the authority for ordinary offline resolution; the acquired
-manifest cannot silently replace its identity, provenance, compatibility, or
-license claims.
+The lock is the acquisition authority for ordinary offline resolution: it
+selects the complete immutable coordinate and exact source revision and pins
+the manifest and content digests. Publisher, source, license, and compatibility
+are copied into it for inspectability, not as a second policy authority. A copy
+that differs from the verified manifest fails with `lock.metadata.mismatch`;
+the resolver never chooses one claim over the other.
 
 ### Ownership index
 
@@ -249,7 +261,8 @@ The production resolver should perform phases in this order:
 
 1. validate every closed input shape and selection cardinality;
 2. prove that the lock matches the pinned platform and configuration;
-3. verify selected identities, acquired content, and package digests;
+3. verify selected identities, acquired content, package digests, and exact
+   lock/manifest metadata parity;
 4. validate package/platform and required-capability compatibility;
 5. validate workflow capability closure and cycles;
 6. validate declared extension points and typed local choices;
@@ -282,7 +295,7 @@ families:
 | --- | --- |
 | Selection | `selection.policy-pack.count`, `selection.workflow-policy.count` |
 | Lock | `lock.platform.stale`, `lock.configuration.stale`, `lock.selection.missing` |
-| Integrity | `lock.identity.mismatch`, `lock.content.missing`, `lock.content.tampered` |
+| Integrity | `lock.identity.mismatch`, `lock.metadata.mismatch`, `lock.content.missing`, `lock.content.tampered` |
 | Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported` |
 | Capability closure | `capability.missing`, `capability.cycle` |
 | Local choice | `choice.undeclared`, `choice.type.invalid` |

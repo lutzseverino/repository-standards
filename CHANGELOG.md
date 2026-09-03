@@ -31,6 +31,9 @@ and standards releases use semantic versioning.
 
 ### Changed
 
+- Separate the shared capability platform from selectable declarative policy
+  packs, workflows, profiles, and repository-local choices, superseding the
+  assumption that one workflow and its skill closure are universal.
 - Simplify creation, adoption, and consumer-acceptance tests around shared
   lifecycle support for isolated environments, executable substitutes, and
   immutable release fixtures without changing their public journey coverage.
