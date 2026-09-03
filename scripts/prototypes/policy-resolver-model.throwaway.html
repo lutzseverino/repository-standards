@@ -336,17 +336,18 @@
         return `sha256:${result}`;
       }
 
-      const identityKey = identity => `${identity.kind}:${identity.name}@${identity.version}`;
-      const id = (kind, name, version = "6.0.0") => ({kind, name, version});
+      const DEFAULT_PUBLISHER = "github.com/lutzseverino";
+      const identityKey = identity => `${identity.kind}:${identity.publisher}/${identity.name}@${identity.version}`;
+      const id = (kind, name, version = "6.0.0") => ({kind, publisher: DEFAULT_PUBLISHER, name, version});
 
       const PACKAGE_METADATA = {
-        publisher: "github.com/lutzseverino",
         source: {
           type: "git",
           uri: "https://github.com/lutzseverino/repository-standards",
           revision: "1111111111111111111111111111111111111111"
         },
-        license: "MIT"
+        license: "MIT",
+        selectionConstraints: {requires: [], conflicts: []}
       };
 
       const PLATFORM = {
@@ -383,14 +384,12 @@
               {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "environment/CONTRIBUTING.md"}},
               {key: "github.required-labels", value: ["bug", "enhancement", "ready-for-agent", "ready-for-human"]},
               {key: "github.ruleset", value: {name: "Protect main", merge: "squash", forcePush: false}},
-              {key: "github.features.projects", value: false, extension: "github.features.projects"},
-              {key: "canonical-validation.arguments", value: [], extension: "canonical-validation.arguments"}
+              {key: "github.features.projects", value: false, extension: "github.features.projects"}
             ],
             extensionPoints: [
-              {key: "github.features.projects", type: "boolean"},
-              {key: "canonical-validation.arguments", type: "string-list"}
+              {key: "github.features.projects", type: "boolean"}
             ],
-            policyDocuments: [{path: "policy/repository-lifecycle.md", purpose: "repository lifecycle"}]
+            policyDocuments: [{subject: "repository-lifecycle", path: "policy/repository-lifecycle.md", purpose: "repository lifecycle"}]
           },
           files: {
             "environment/AGENTS.md": "Compatibility agent guidance\n",
@@ -410,14 +409,12 @@
               {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-base", fragmentId: "base", order: 0}},
               {key: "github.required-labels", value: ["bug", "enhancement"]},
               {key: "github.ruleset", value: null},
-              {key: "github.features.projects", value: false, extension: "github.features.projects"},
-              {key: "canonical-validation.arguments", value: [], extension: "canonical-validation.arguments"}
+              {key: "github.features.projects", value: false, extension: "github.features.projects"}
             ],
             extensionPoints: [
-              {key: "github.features.projects", type: "boolean"},
-              {key: "canonical-validation.arguments", type: "string-list"}
+              {key: "github.features.projects", type: "boolean"}
             ],
-            policyDocuments: [{path: "policy/lightweight-lifecycle.md", purpose: "repository lifecycle"}]
+            policyDocuments: [{subject: "repository-lifecycle", path: "policy/lightweight-lifecycle.md", purpose: "repository lifecycle"}]
           },
           files: {
             "environment/AGENTS.md": "Minimal agent guidance\n",
@@ -435,7 +432,7 @@
               {key: "workflow.process", value: ["grill-with-docs", "specify", "ticket", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
             ],
-            policyDocuments: [{path: "policy/contributing.md", purpose: "ordinary change workflow"}]
+            policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/contributing.md", purpose: "ordinary change workflow"}]
           },
           files: {"policy/contributing.md": "Planning-oriented workflow policy\n"}
         },
@@ -449,7 +446,7 @@
               {key: "workflow.process", value: ["issue", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
             ],
-            policyDocuments: [{path: "policy/contributing.md", purpose: "ordinary change workflow"}]
+            policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/contributing.md", purpose: "ordinary change workflow"}]
           },
           files: {"policy/contributing.md": "Issue-directed workflow policy\n"}
         },
@@ -477,7 +474,7 @@
               {key: "managed:.github/dependabot.yml", value: {mode: "exact", source: "environment/dependabot.yml"}},
               {key: "dependency-update:npm:/", value: {ecosystem: "npm", directory: "/", schedule: "weekly"}}
             ],
-            policyDocuments: [{path: "policy/node-npm.md", purpose: "npm repository environment"}]
+            policyDocuments: [{subject: "ecosystem.node-npm", path: "policy/node-npm.md", purpose: "npm repository environment"}]
           },
           files: {
             "environment/gitignore-node": "node_modules/\n",
@@ -496,7 +493,7 @@
               {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-vite", fragmentId: "vite-react", order: 30}},
               {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/ci.yml"}}
             ],
-            policyDocuments: [{path: "policy/vite-react.md", purpose: "Vite React repository environment"}]
+            policyDocuments: [{subject: "ecosystem.vite-react", path: "policy/vite-react.md", purpose: "Vite React repository environment"}]
           },
           files: {
             "environment/gitignore-vite": "dist/\n",
@@ -510,6 +507,10 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
+            selectionConstraints: {
+              requires: [{kind: "policy-pack", publisher: DEFAULT_PUBLISHER, name: "minimal", versionRange: ">=6.0.0 <7.0.0"}],
+              conflicts: []
+            },
             applicability: {ecosystem: "node", framework: "vite-react"},
             contributions: [
               {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/strict-ci.yml"}}
@@ -517,6 +518,18 @@
             policyDocuments: []
           },
           files: {"environment/strict-ci.yml": "name: Strict CI\non: [push]\n"}
+        },
+        {
+          manifest: {
+            identity: id("ecosystem-profile", "policy-guidance-conflict"),
+            ...PACKAGE_METADATA,
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve"],
+            applicability: {ecosystem: "node"},
+            contributions: [],
+            policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/competing-workflow.md", purpose: "competing workflow guidance"}]
+          },
+          files: {"policy/competing-workflow.md": "Competing workflow policy\n"}
         }
       ];
 
@@ -553,7 +566,6 @@
           const integrity = packageDigest(pkg);
           return {
             identity,
-            publisher: pkg.manifest.publisher,
             source: clone(pkg.manifest.source),
             license: pkg.manifest.license,
             platformRange: pkg.manifest.platformRange,
@@ -570,10 +582,11 @@
         };
       }
 
-      const repositoryFacts = suffix => [
+      const repositoryFacts = (suffix, validationArguments = []) => [
         {key: "github.repository", value: `example/${suffix}`},
         {key: "repository.boundaries", value: [{path: ".", type: "repository", title: suffix}]},
-        {key: "repository.owned-paths", value: ["README.md", "src/**"]}
+        {key: "repository.owned-paths", value: ["README.md", "src/**"]},
+        {key: "canonical-validation", value: {executable: "scripts/validate", arguments: validationArguments, workingDirectory: "."}}
       ];
 
       const fixtureDefinitions = {
@@ -581,8 +594,8 @@
           name: "Compatibility pack + planning workflow · zero profiles",
           policyPack: id("policy-pack", "compatibility"),
           workflowPolicy: id("workflow-policy", "planning-oriented"),
-          localChoices: [{key: "canonical-validation.arguments", value: ["--strict"]}],
-          repositoryFacts: repositoryFacts("compat-planning-zero")
+          localChoices: [{key: "github.features.projects", value: true}],
+          repositoryFacts: repositoryFacts("compat-planning-zero", ["--strict"])
         },
         "compat-issue-one": {
           name: "Compatibility pack + issue-directed workflow · one profile",
@@ -599,8 +612,8 @@
           workflowPolicy: id("workflow-policy", "planning-oriented"),
           ecosystemProfiles: [id("ecosystem-profile", "node-npm"), id("ecosystem-profile", "vite-react")],
           applicabilityFacts: {ecosystem: "node", packageManager: "npm", projectKind: "package", framework: "vite-react"},
-          localChoices: [{key: "canonical-validation.arguments", value: ["--all"]}],
-          repositoryFacts: repositoryFacts("minimal-planning-several")
+          localChoices: [{key: "github.features.projects", value: true}],
+          repositoryFacts: repositoryFacts("minimal-planning-several", ["--all"])
         },
         "minimal-issue-zero": {
           name: "Minimal pack + issue-directed workflow · zero profiles",
@@ -622,6 +635,13 @@
       function supportsRange(release, range) {
         const major = Number(release.split(".")[0]);
         return range === `>=${major}.0.0 <${major + 1}.0.0`;
+      }
+
+      function matchesPackageConstraint(identity, constraint) {
+        return identity.kind === constraint.kind
+          && identity.publisher === constraint.publisher
+          && identity.name === constraint.name
+          && supportsRange(identity.version, constraint.versionRange);
       }
 
       function validateChoice(type, value) {
@@ -709,7 +729,7 @@
             diagnostics.push(diagnostic("lock.identity.mismatch", key, `The acquired manifest claims a different identity than lock entry ${key}.`));
             return;
           }
-          const mismatchedMetadata = ["publisher", "source", "license", "platformRange"]
+          const mismatchedMetadata = ["source", "license", "platformRange"]
             .find(field => stable(entry[field]) !== stable(acquired.manifest[field]));
           if (mismatchedMetadata) {
             diagnostics.push(diagnostic(
@@ -746,6 +766,33 @@
             return;
           }
           verified.push({key, entry, acquired});
+        });
+
+        verified.forEach(({key, acquired}) => {
+          const constraints = acquired.manifest.selectionConstraints;
+          (constraints.requires || []).forEach((constraint, index) => {
+            if (!selected.some(identity => matchesPackageConstraint(identity, constraint))) {
+              diagnostics.push(diagnostic(
+                "compatibility.package.required",
+                key,
+                `${key} requires a selected ${constraint.kind}:${constraint.publisher}/${constraint.name} package in ${constraint.versionRange}.`,
+                [key, `/selectionConstraints/requires/${index}`],
+                "Select a compatible package combination."
+              ));
+            }
+          });
+          (constraints.conflicts || []).forEach((constraint, index) => {
+            const conflicts = selected.filter(identity => matchesPackageConstraint(identity, constraint)).map(identityKey);
+            if (conflicts.length) {
+              diagnostics.push(diagnostic(
+                "compatibility.package.conflict",
+                key,
+                `${key} conflicts with selected package ${conflicts.join(", ")}.`,
+                [key, ...conflicts, `/selectionConstraints/conflicts/${index}`],
+                "Select a package combination without the declared conflict."
+              ));
+            }
+          });
         });
 
         verified
@@ -915,11 +962,36 @@
           }
         });
 
+        const policyDocuments = verified.flatMap(({key, entry, acquired}) =>
+          (acquired.manifest.policyDocuments || []).map((document, index) => ({
+            ...document,
+            owner: key,
+            packageDigest: entry.digest,
+            declaration: `/policyDocuments/${index}`
+          }))
+        );
+        const documentsBySubject = new Map();
+        policyDocuments.forEach(document => {
+          if (!documentsBySubject.has(document.subject)) documentsBySubject.set(document.subject, []);
+          documentsBySubject.get(document.subject).push(document);
+        });
+        documentsBySubject.forEach((documents, subject) => {
+          if (documents.length > 1) {
+            diagnostics.push(diagnostic(
+              "policy.subject.duplicate",
+              subject,
+              `Policy subject ${subject} has ${documents.length} authoritative documents.`,
+              documents.map(document => `${document.owner}:${document.declaration}`),
+              "Select packages with disjoint policy subjects or consolidate authority in one document."
+            ));
+          }
+        });
+
         if (diagnostics.length) return {ok: false, diagnostics, contract: null, explanation: null};
 
         const packages = verified.map(({key, entry}) => ({
           identity: key,
-          publisher: entry.publisher,
+          publisher: entry.identity.publisher,
           source: entry.source,
           license: entry.license,
           digest: entry.digest,
@@ -935,13 +1007,6 @@
               .sort((left, right) => left.value.order - right.value.order)
               .map(fact => ({address: fact.key, owner: fact.owner, source: fact.value.source, order: fact.value.order}))
           }));
-        const policyDocuments = verified.flatMap(({key, entry, acquired}) =>
-          (acquired.manifest.policyDocuments || []).map(document => ({
-            ...document,
-            owner: key,
-            packageDigest: entry.digest
-          }))
-        );
         const compatibility = packages.map(pkg => ({identity: pkg.identity, requested: pkg.platformRange, selectedPlatform: request.platform.release, status: "compatible"}));
         const contract = {
           modelVersion: 1,
@@ -974,6 +1039,7 @@
       const V5_INPUT = {
         "standards-version": 5,
         "standards-release": "5.0.0",
+        "canonical-validation": {executable: "scripts/validate", arguments: [], "working-directory": "."},
         profiles: ["common", "documentation"],
         boundaries: [{path: ".", type: "repository", title: "Repository Standards"}],
         "dependency-updates": [{ecosystem: "github-actions", directory: "/", schedule: "weekly"}],
@@ -1019,7 +1085,8 @@
             {key: "repository.dependency-updates", value: input["dependency-updates"]},
             {key: "repository.variables", value: input.variables},
             {key: "repository.local-fragments", value: input["local-fragments"]},
-            {key: "repository.owned-paths", value: input["repository-owned"]}
+            {key: "repository.owned-paths", value: input["repository-owned"]},
+            {key: "canonical-validation", value: input["canonical-validation"]}
           ]
         });
         const migration = {
@@ -1074,6 +1141,28 @@
         });
       }
 
+      function incompatibleSelectionFixture() {
+        return buildRequest({
+          name: "Rejected · incompatible package selection",
+          policyPack: id("policy-pack", "compatibility"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          ecosystemProfiles: [id("ecosystem-profile", "strict-ci-conflict")],
+          applicabilityFacts: {ecosystem: "node", framework: "vite-react"},
+          repositoryFacts: repositoryFacts("incompatible-selection")
+        });
+      }
+
+      function duplicatePolicySubjectFixture() {
+        return buildRequest({
+          name: "Rejected · duplicate policy subject",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          ecosystemProfiles: [id("ecosystem-profile", "policy-guidance-conflict")],
+          applicabilityFacts: {ecosystem: "node"},
+          repositoryFacts: repositoryFacts("duplicate-policy-subject")
+        });
+      }
+
       function run(request) {
         return resolve(clone(request));
       }
@@ -1119,6 +1208,14 @@
           case "USE_NONMATCHING_PROFILE":
             request = nonmatchingProfileFixture();
             lastChange = "Selected the npm profile for repository facts that declare pnpm.";
+            break;
+          case "USE_INCOMPATIBLE_SELECTION":
+            request = incompatibleSelectionFixture();
+            lastChange = "Selected a profile whose typed package constraint requires a different policy pack.";
+            break;
+          case "ADD_DUPLICATE_POLICY_SUBJECT":
+            request = duplicatePolicySubjectFixture();
+            lastChange = "Selected two packages that claim different documents for the same policy subject.";
             break;
           case "TAMPER_ACQUIRED_CONTENT": {
             request = fixture("compat-planning-zero");
@@ -1189,6 +1286,8 @@
       ["Reject mismatched lock metadata", {type: "TAMPER_LOCK_METADATA"}],
       ["Migrate exact v5.0.0 input", {type: "MIGRATE_V5"}],
       ["Reject nonmatching profile", {type: "USE_NONMATCHING_PROFILE"}],
+      ["Reject incompatible packages", {type: "USE_INCOMPATIBLE_SELECTION"}],
+      ["Reject duplicate policy subject", {type: "ADD_DUPLICATE_POLICY_SUBJECT"}],
       ["Reset", {type: "RESET"}]
     ];
 
@@ -1205,8 +1304,8 @@
       },
       rejection: {
         title: "No ambiguity or capability guessing",
-        description: "Two profiles cannot own the same managed path, and any selected package is rejected when its capability closure is unavailable from the pinned platform. Both fail with stable, actionable diagnostics.",
-        steps: [freeActions[5], freeActions[6], freeActions[10]]
+        description: "Reject duplicate content, unavailable capabilities, nonmatching profiles, incompatible package combinations, and competing authoritative policy documents with stable diagnostics.",
+        steps: [freeActions[5], freeActions[6], freeActions[10], freeActions[11], freeActions[12]]
       },
       migration: {
         title: "Exact preceding-release migration",
@@ -1240,7 +1339,7 @@
 
       const integrityRows = locked.map(entry => `<tr>
         <td><code>${escapeHtml(ResolverPrototype.identityKey(entry.identity))}</code></td>
-        <td>${escapeHtml(entry.publisher)}</td>
+        <td>${escapeHtml(entry.identity.publisher)}</td>
         <td><code>${escapeHtml(entry.source.revision.slice(0, 10))}</code></td>
         <td>${escapeHtml(entry.license)}</td>
         <td><code>${escapeHtml(entry.digest.slice(0, 21))}…</code></td>
@@ -1277,6 +1376,7 @@
           </tr>`)
         ).join("");
         const documentRows = result.contract.policyDocuments.map(document => `<tr>
+          <td><code>${escapeHtml(document.subject)}</code></td>
           <td><code>${escapeHtml(document.path)}</code></td>
           <td>${escapeHtml(document.purpose)}</td>
           <td><code>${escapeHtml(document.owner)}</code></td>
@@ -1293,7 +1393,7 @@
           <h3 class="section-gap">Selected capability closure</h3>
           <div class="table-wrap"><table><thead><tr><th>Capability</th><th>Owner</th><th>Demand reasons</th></tr></thead><tbody>${capabilityRows}</tbody></table></div>
           <h3 class="section-gap">Applicable policy documents</h3>
-          <div class="table-wrap"><table><thead><tr><th>Document</th><th>Purpose</th><th>Owner</th></tr></thead><tbody>${documentRows || '<tr><td colspan="3">None</td></tr>'}</tbody></table></div>`;
+          <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Document</th><th>Purpose</th><th>Owner</th></tr></thead><tbody>${documentRows || '<tr><td colspan="4">None</td></tr>'}</tbody></table></div>`;
       }
 
       let migrationPanel = "";
