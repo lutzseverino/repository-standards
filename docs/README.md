@@ -72,6 +72,12 @@ standards documentation.
   former managed skills explicitly, and expose canonical artifacts to Claude
   through drift-checked pointers.
 
+## Design evidence
+
+- [Policy resolver model](policy-resolver-model.md): settled logical shapes,
+  ownership and diagnostic rules, migration evidence, and production layout
+  assumptions from the throwaway policy-resolution prototype.
+
 ## Agent configuration
 
 - [Issue tracker](agents/issue-tracker.md): GitHub operations and relationship
