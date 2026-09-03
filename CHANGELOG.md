@@ -9,6 +9,10 @@ and standards releases use semantic versioning.
 
 ### Added
 
+- Record the tested policy-resolver model for independent pack and workflow
+  selection, offline integrity, exclusive and composed ownership, provenance
+  explanation, and exact `5.0.0` migration inputs before production schema
+  implementation.
 - Install only thin `create-repository` and `adopt-standards` bootstrap skills
   at user scope through the open Agent Skills installer, then resolve and
   disclose one immutable stable release before delegating creation or adoption
@@ -27,6 +31,9 @@ and standards releases use semantic versioning.
 
 ### Changed
 
+- Separate the shared capability platform from selectable declarative policy
+  packs, workflows, profiles, and repository-local choices, superseding the
+  assumption that one workflow and its skill closure are universal.
 - Simplify creation, adoption, and consumer-acceptance tests around shared
   lifecycle support for isolated environments, executable substitutes, and
   immutable release fixtures without changing their public journey coverage.

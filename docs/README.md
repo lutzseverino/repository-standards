@@ -70,7 +70,22 @@ standards documentation.
 - [Curate skills and adapt harness discovery](adr/0013-curate-skills-and-adapt-harness-discovery.md):
   distribute only the canonical workflow's transitive skill closure, retire
   former managed skills explicitly, and expose canonical artifacts to Claude
-  through drift-checked pointers.
+  through drift-checked pointers; superseded in part by ADR 0016.
+- [Compose product-neutral ecosystem profiles](adr/0014-compose-product-neutral-ecosystem-profiles.md):
+  select every applicable ecosystem profile while keeping product
+  implementation and guidance outside mechanical conformance.
+- [Bootstrap through thin user-scoped skills](adr/0015-bootstrap-through-thin-user-scoped-skills.md):
+  install only the two public entry skills globally, select one immutable
+  release, and delegate lifecycle behavior to its release-pinned environment.
+- [Separate the capability platform from policy packs](adr/0016-separate-capability-platform-from-policy-packs.md):
+  provide shared safe repository operations independently of declarative,
+  selectable, authorable, and forkable policy.
+
+## Design evidence
+
+- [Policy resolver model](policy-resolver-model.md): settled logical shapes,
+  exclusive and composed ownership rules, diagnostics, migration evidence, and
+  production layout assumptions from the throwaway policy-resolution prototype.
 
 ## Agent configuration
 

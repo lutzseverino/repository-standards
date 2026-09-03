@@ -5,10 +5,16 @@ Canonical language for the conventions shared by participating repositories.
 ## Language
 
 **Canonical workflow**:
-The actor-neutral, repository-owned change process expected of every
-participating repository. Skills and other tools may execute its operations,
-but they do not define the process.
-_Avoid_: Skill workflow, workflow option, workflow profile
+The actor-neutral change process defined by the workflow policy selected for a
+repository. A workflow is canonical for repositories selecting it, not for
+every repository compatible with the capability platform.
+_Avoid_: Skill workflow, universal workflow
+
+**Workflow policy**:
+A versioned, independently selectable definition of a repository change
+process. A policy pack may recommend one, but an ecosystem profile does not own
+it and it does not own an ecosystem profile.
+_Avoid_: Workflow profile, capability skill
 
 **Response language**:
 English by default for agent responses, regardless of the language used to
@@ -16,14 +22,12 @@ address the agent. Another language is appropriate when the subject itself
 requires it, such as quoted documents or translation content.
 _Avoid_: Input language, English-only content
 
-**Standard skill bundle**:
-A release-pinned, explicitly inventoried set containing the transitive closure
-of Agent Skills required by the canonical workflow. It is distributed to every
-participating repository through the common profile. Agent Skills is the
-canonical skill format; harness-specific discovery uses adapters rather than a
-second skill format.
-_Avoid_: Global skill installation, harness-native skill format, every upstream
-skill
+**Capability skill bundle**:
+A platform-release-pinned, explicitly inventoried set of shared capability
+skills. Policy packs select and configure its capabilities but do not contain
+or replace them.
+_Avoid_: Standard skill bundle, pack-specific skill bundle, global skill
+installation
 
 **Bootstrap skill**:
 A thin user-scoped Agent Skill that lets a maintainer create a participating
@@ -32,6 +36,53 @@ It delegates substantive behavior to a selected immutable standards release;
 the resulting repository remains release-pinned and self-contained.
 _Avoid_: Globally installed standard skill bundle, custom skill installer,
 standards source of truth
+
+**Capability platform**:
+The stable operational half of the product, providing reusable repository
+capabilities and non-configurable boundaries independently of selected policy.
+It owns the capability skill bundle and the deterministic operations behind it.
+_Avoid_: Policy pack, repository setup, standards profile
+
+**Capability skill**:
+A reusable repository operation that applies the resolved repository contract
+without owning its configurable policy. Its implementation is shared across
+compatible policy packs.
+_Avoid_: Policy skill, workflow policy
+
+**Policy pack**:
+A versioned, attributable, shareable collection of repository policy and
+defaults that a maintainer can select, author, or fork. It contains no hidden
+executable capability.
+_Avoid_: Repository setup, repository configuration, ecosystem profile,
+capability skill bundle
+
+**Policy document**:
+The authoritative prose source for policy that requires human or agent
+judgment. Deterministic tooling identifies but does not interpret it.
+_Avoid_: Repository configuration, generated policy summary
+
+**Policy subject**:
+The platform-defined identity of one judgment-based policy area. A selected
+policy document owns its subject regardless of the document's package-relative
+path, and two selected documents cannot own the same subject.
+_Avoid_: Policy document path, documentation category
+
+**Repository configuration**:
+The repository-owned selection of one policy pack, one workflow policy,
+ecosystem profiles, and explicit local choices. It owns repository-local
+machine-readable facts, not prose policy.
+_Avoid_: Policy pack, resolved repository contract, agent configuration
+
+**Repository setup**:
+The operation that selects, authors, or forks policy packs and produces or
+updates repository configuration.
+_Avoid_: Setup file, policy pack, repository configuration
+
+**Resolved repository contract**:
+The single validated effective result of selected policy and repository
+configuration, including the applicable policy documents, consumed by every
+repository capability.
+_Avoid_: Merged setup, skill-specific configuration
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting

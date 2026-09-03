@@ -34,7 +34,8 @@ environment.
   adapter mechanics distinct living owners.
 - [Define the public repository environment](0010-define-the-public-repository-environment.md):
   make the standards adoptable by unrelated maintainers while leaving product
-  implementation and repository-owned tooling under repository ownership.
+  implementation and repository-owned tooling under repository ownership;
+  superseded in part by ADR 0016.
 - [Advertise only operational lifecycle interfaces](0011-advertise-only-operational-lifecycle-interfaces.md):
   remove the delivery command stub, present agent-owned delivery through its
   Agent Skill, and separate concise human output from complete evidence.
@@ -44,10 +45,13 @@ environment.
 - [Curate skills and adapt harness discovery](0013-curate-skills-and-adapt-harness-discovery.md):
   distribute only the canonical workflow's transitive skill closure, retire
   former managed skills explicitly, and expose canonical artifacts to Claude
-  through drift-checked pointers.
+  through drift-checked pointers; superseded in part by ADR 0016.
 - [Compose product-neutral ecosystem profiles](0014-compose-product-neutral-ecosystem-profiles.md):
   select every applicable ecosystem profile while keeping product
   implementation and guidance outside mechanical conformance.
 - [Bootstrap through thin user-scoped skills](0015-bootstrap-through-thin-user-scoped-skills.md):
   install only the two public entry skills globally, select one immutable
   release, and delegate lifecycle behavior to its release-pinned environment.
+- [Separate the capability platform from policy packs](0016-separate-capability-platform-from-policy-packs.md):
+  provide shared safe repository operations independently of declarative,
+  selectable, authorable, and forkable policy.
