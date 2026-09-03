@@ -351,6 +351,12 @@
       };
 
       const PLATFORM = {
+        identity: {
+          publisher: DEFAULT_PUBLISHER,
+          name: "capability-platform",
+          version: "6.0.0",
+          revision: "2222222222222222222222222222222222222222"
+        },
         release: "6.0.0",
         capabilities: {
           resolve: [],
@@ -381,7 +387,6 @@
             contributions: [
               {key: "managed:AGENTS.md", value: {mode: "exact", source: "environment/AGENTS.md"}},
               {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-base", fragmentId: "base", order: 0}},
-              {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "environment/CONTRIBUTING.md"}},
               {key: "github.required-labels", value: ["bug", "enhancement", "ready-for-agent", "ready-for-human"]},
               {key: "github.ruleset", value: {name: "Protect main", merge: "squash", forcePush: false}},
               {key: "github.features.projects", value: false, extension: "github.features.projects"}
@@ -394,7 +399,6 @@
           files: {
             "environment/AGENTS.md": "Compatibility agent guidance\n",
             "environment/gitignore-base": ".DS_Store\n",
-            "environment/CONTRIBUTING.md": "Planning-oriented contribution policy\n",
             "policy/repository-lifecycle.md": "Compatibility lifecycle policy\n"
           }
         },
@@ -429,8 +433,10 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
             contributions: [
+              {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "policy/contributing.md"}},
               {key: "workflow.process", value: ["grill-with-docs", "specify", "ticket", "implement", "deliver"]},
-              {key: "workflow.readiness", value: "ready-for-agent"}
+              {key: "workflow.readiness", value: "ready-for-agent"},
+              {key: "workflow.authorization", value: {implementation: "issue-assigned", delivery: "exact-confirmation"}}
             ],
             policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/contributing.md", purpose: "ordinary change workflow"}]
           },
@@ -443,8 +449,10 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "implementation", "github-delivery"],
             contributions: [
+              {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "policy/contributing.md"}},
               {key: "workflow.process", value: ["issue", "implement", "deliver"]},
-              {key: "workflow.readiness", value: "ready-for-agent"}
+              {key: "workflow.readiness", value: "ready-for-agent"},
+              {key: "workflow.authorization", value: {implementation: "issue-ready", delivery: "exact-confirmation"}}
             ],
             policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/contributing.md", purpose: "ordinary change workflow"}]
           },
@@ -457,7 +465,7 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "marketplace-sync"],
             applicability: {ecosystem: "node"},
-            contributions: [],
+            contributions: [{key: "github.required-label:marketplace-sync", value: "marketplace-sync"}],
             policyDocuments: []
           },
           files: {}
@@ -526,7 +534,7 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             applicability: {ecosystem: "node"},
-            contributions: [],
+            contributions: [{key: "github.required-label:policy-review", value: "policy-review"}],
             policyDocuments: [{subject: "ordinary-change-workflow", path: "policy/competing-workflow.md", purpose: "competing workflow guidance"}]
           },
           files: {"policy/competing-workflow.md": "Competing workflow policy\n"}
@@ -541,15 +549,37 @@
       }
 
       function configDigest(configuration) {
-        return sha256(stable(configuration));
+        return sha256(stable(normalizeConfiguration(configuration)));
+      }
+
+      function normalizeConfiguration(configuration) {
+        const normalized = clone(configuration);
+        normalized.ecosystemProfiles = [...normalized.ecosystemProfiles]
+          .sort((left, right) => identityKey(left).localeCompare(identityKey(right)));
+        normalized.applicabilityFacts = Object.fromEntries(
+          Object.entries(normalized.applicabilityFacts).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? [...value].sort((left, right) => stable(left).localeCompare(stable(right))) : value
+          ])
+        );
+        normalized.localChoices = [...normalized.localChoices]
+          .sort((left, right) => left.key.localeCompare(right.key));
+        normalized.repositoryFacts = [...normalized.repositoryFacts]
+          .sort((left, right) => left.key.localeCompare(right.key));
+        return normalized;
       }
 
       function selectedIdentities(selection) {
-        return [selection.policyPack, selection.workflowPolicy, ...selection.ecosystemProfiles];
+        return [
+          selection.policyPack,
+          selection.workflowPolicy,
+          ...[...selection.ecosystemProfiles]
+            .sort((left, right) => identityKey(left).localeCompare(identityKey(right)))
+        ];
       }
 
       function buildRequest({name, policyPack, workflowPolicy, ecosystemProfiles = [], applicabilityFacts = {}, localChoices = [], repositoryFacts = []}) {
-        const configuration = {
+        const configuration = normalizeConfiguration({
           modelVersion: 1,
           policyPack,
           workflowPolicy,
@@ -557,7 +587,7 @@
           applicabilityFacts,
           localChoices,
           repositoryFacts
-        };
+        });
         const acquiredPackages = {};
         const packages = selectedIdentities(configuration).map(identity => {
           const key = identityKey(identity);
@@ -577,7 +607,15 @@
           name,
           platform: clone(PLATFORM),
           configuration,
-          lock: {modelVersion: 1, platformRelease: PLATFORM.release, configurationDigest: configDigest(configuration), packages},
+          lock: {
+            modelVersion: 1,
+            platform: {
+              identity: clone(PLATFORM.identity),
+              inventoryDigest: sha256(stable(PLATFORM.capabilities))
+            },
+            configurationDigest: configDigest(configuration),
+            packages
+          },
           acquiredPackages
         };
       }
@@ -611,7 +649,7 @@
           policyPack: id("policy-pack", "minimal"),
           workflowPolicy: id("workflow-policy", "planning-oriented"),
           ecosystemProfiles: [id("ecosystem-profile", "node-npm"), id("ecosystem-profile", "vite-react")],
-          applicabilityFacts: {ecosystem: "node", packageManager: "npm", projectKind: "package", framework: "vite-react"},
+          applicabilityFacts: {ecosystem: ["node", "web"], packageManager: "npm", projectKind: "package", framework: "vite-react"},
           localChoices: [{key: "github.features.projects", value: true}],
           repositoryFacts: repositoryFacts("minimal-planning-several", ["--all"])
         },
@@ -632,6 +670,42 @@
         return {code, subject, message, sources, remediation};
       }
 
+      const DIAGNOSTIC_PHASE = {
+        "selection.": 1,
+        "lock.platform.": 2,
+        "lock.configuration.": 2,
+        "lock.selection.": 2,
+        "lock.identity.": 3,
+        "lock.metadata.": 3,
+        "lock.content.": 3,
+        "package.reference.": 3,
+        "compatibility.platform.": 4,
+        "compatibility.package.": 5,
+        "profile.applicability.": 6,
+        "profile.behavior.": 6,
+        "compatibility.capability.": 7,
+        "capability.": 7,
+        "choice.": 8,
+        "policy.subject.": 11,
+        "composition.": 11,
+        "ownership.": 12
+      };
+
+      function orderedDiagnostics(diagnostics) {
+        const phase = code => Object.entries(DIAGNOSTIC_PHASE)
+          .find(([prefix]) => code.startsWith(prefix))?.[1] || 99;
+        return diagnostics.slice().sort((left, right) =>
+          phase(left.code) - phase(right.code)
+          || left.subject.localeCompare(right.subject)
+          || left.code.localeCompare(right.code)
+          || stable(left.sources).localeCompare(stable(right.sources))
+        );
+      }
+
+      function failure(diagnostics) {
+        return {ok: false, diagnostics: orderedDiagnostics(diagnostics), contract: null, explanation: null};
+      }
+
       function supportsRange(release, range) {
         const major = Number(release.split(".")[0]);
         return range === `>=${major}.0.0 <${major + 1}.0.0`;
@@ -650,7 +724,21 @@
         return false;
       }
 
-      function capabilityClosure(roots, inventory, diagnostics) {
+      function isSafePackagePath(path) {
+        return typeof path === "string"
+          && path.length > 0
+          && !path.startsWith("/")
+          && !path.includes("\\")
+          && path.split("/").every(part => part && part !== "." && part !== "..");
+      }
+
+      function matchesApplicabilityFact(actual, expected) {
+        return Array.isArray(actual)
+          ? actual.some(value => stable(value) === stable(expected))
+          : stable(actual) === stable(expected);
+      }
+
+      function capabilityClosure(roots, inventory, platformRelease, diagnostics) {
         const resolved = new Set();
         const demandReasons = new Map();
         const missingReasons = new Map();
@@ -688,7 +776,7 @@
           diagnostics.push(diagnostic(
             "compatibility.capability.unsupported",
             name,
-            `Selected packages require capability ${name}, which is absent from platform ${PLATFORM.release}.`,
+            `Selected packages require capability ${name}, which is absent from platform ${platformRelease}.`,
             sources,
             "Select compatible packages or a platform release that provides the capability."
           ));
@@ -704,23 +792,68 @@
         const diagnostics = [];
         const selected = selectedIdentities(request.configuration);
         const selectedKeys = selected.map(identityKey);
-        const lockByKey = Object.fromEntries(request.lock.packages.map(entry => [identityKey(entry.identity), entry]));
-        const verified = [];
 
-        if (request.lock.platformRelease !== request.platform.release) {
-          diagnostics.push(diagnostic("lock.platform.stale", "platformRelease", "The lock targets a different capability-platform release."));
+        if (request.configuration.policyPack?.kind !== "policy-pack") {
+          diagnostics.push(diagnostic("selection.policy-pack.count", "policyPack", "Configuration must select exactly one policy pack."));
+        }
+        if (request.configuration.workflowPolicy?.kind !== "workflow-policy") {
+          diagnostics.push(diagnostic("selection.workflow-policy.count", "workflowPolicy", "Configuration must select exactly one workflow policy."));
+        }
+        const profileKeys = request.configuration.ecosystemProfiles.map(identityKey);
+        [...new Set(profileKeys.filter((key, index) => profileKeys.indexOf(key) !== index))]
+          .sort()
+          .forEach(key => diagnostics.push(diagnostic(
+            "selection.ecosystem-profile.duplicate",
+            key,
+            `Ecosystem profile ${key} is selected more than once.`
+          )));
+        request.configuration.ecosystemProfiles.forEach(identity => {
+          if (identity.kind !== "ecosystem-profile") {
+            diagnostics.push(diagnostic("selection.ecosystem-profile.kind", identityKey(identity), "Every ecosystem profile selector must name an ecosystem-profile package."));
+          }
+        });
+        if (diagnostics.length) return failure(diagnostics);
+
+        if (stable(request.lock.platform?.identity) !== stable(request.platform.identity)
+          || request.lock.platform?.inventoryDigest !== sha256(stable(request.platform.capabilities))) {
+          diagnostics.push(diagnostic("lock.platform.stale", "platform", "The lock targets a different capability-platform identity or capability inventory."));
         }
         if (request.lock.configurationDigest !== configDigest(request.configuration)) {
           diagnostics.push(diagnostic("lock.configuration.stale", "configuration", "The repository configuration changed after this lock was created."));
         }
 
+        const lockKeys = request.lock.packages.map(entry => identityKey(entry.identity));
+        const lockKeyCounts = new Map();
+        lockKeys.forEach(key => lockKeyCounts.set(key, (lockKeyCounts.get(key) || 0) + 1));
+        [...lockKeyCounts.entries()]
+          .filter(([, count]) => count > 1)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .forEach(([key]) => diagnostics.push(diagnostic(
+            "lock.selection.duplicate",
+            key,
+            `The lock contains more than one entry for selected package ${key}.`
+          )));
+        const selectedKeySet = new Set(selectedKeys);
+        [...new Set(lockKeys.filter(key => !selectedKeySet.has(key)))]
+          .sort()
+          .forEach(key => diagnostics.push(diagnostic(
+            "lock.selection.extra",
+            key,
+            `Lock entry ${key} is not selected by repository configuration.`
+          )));
+        const lockByKey = new Map(request.lock.packages.map(entry => [identityKey(entry.identity), entry]));
         selectedKeys.forEach(key => {
-          const entry = lockByKey[key];
-          const acquired = request.acquiredPackages[key];
-          if (!entry) {
+          if (!lockByKey.has(key)) {
             diagnostics.push(diagnostic("lock.selection.missing", key, `The selected package ${key} has no exact lock entry.`));
-            return;
           }
+        });
+        if (diagnostics.length) return failure(diagnostics);
+
+        const verified = [];
+
+        selectedKeys.forEach(key => {
+          const entry = lockByKey.get(key);
+          const acquired = request.acquiredPackages[key];
           if (!acquired) {
             diagnostics.push(diagnostic("lock.content.missing", key, `The locked package ${key} is not present in the local package store.`));
             return;
@@ -756,6 +889,40 @@
             ));
             return;
           }
+          const referencedPaths = [
+            ...(acquired.manifest.contributions || [])
+              .filter(contribution => contribution.key.startsWith("managed:") && contribution.value?.source)
+              .map((contribution, index) => ({path: contribution.value.source, declaration: `/contributions/${index}/value/source`})),
+            ...(acquired.manifest.policyDocuments || [])
+              .map((document, index) => ({path: document.path, declaration: `/policyDocuments/${index}/path`}))
+          ];
+          const unsafeReferences = referencedPaths.filter(reference => !isSafePackagePath(reference.path));
+          if (unsafeReferences.length) {
+            unsafeReferences.forEach(reference => diagnostics.push(diagnostic(
+              "package.reference.unsafe",
+              `${key}:${reference.path}`,
+              `Package ${key} contains unsafe content reference ${reference.path}.`,
+              [key, reference.declaration],
+              "Use a normalized package-relative path that cannot escape the immutable package root."
+            )));
+            return;
+          }
+          const missingReferences = referencedPaths.filter(reference => !(reference.path in acquired.files));
+          if (missingReferences.length) {
+            missingReferences.forEach(reference => diagnostics.push(diagnostic(
+              "package.reference.missing",
+              `${key}:${reference.path}`,
+              `Package ${key} references content path ${reference.path}, but that path is absent from the verified package.`,
+              [key, reference.declaration],
+              "Publish a self-contained package whose declared content references are present and locked."
+            )));
+            return;
+          }
+          verified.push({key, entry, acquired});
+        });
+        if (diagnostics.length) return failure(diagnostics);
+
+        verified.forEach(({key, acquired}) => {
           if (!supportsRange(request.platform.release, acquired.manifest.platformRange)) {
             diagnostics.push(diagnostic(
               "compatibility.platform.unsupported",
@@ -763,10 +930,9 @@
               `${key} does not support platform ${request.platform.release}.`,
               [key]
             ));
-            return;
           }
-          verified.push({key, entry, acquired});
         });
+        if (diagnostics.length) return failure(diagnostics);
 
         verified.forEach(({key, acquired}) => {
           const constraints = acquired.manifest.selectionConstraints;
@@ -794,15 +960,25 @@
             }
           });
         });
+        if (diagnostics.length) return failure(diagnostics);
 
         verified
           .filter(({acquired}) => acquired.manifest.identity.kind === "ecosystem-profile")
           .forEach(({key, acquired}) => {
+            if (!(acquired.manifest.contributions || []).length) {
+              diagnostics.push(diagnostic(
+                "profile.behavior.missing",
+                key,
+                `Selected profile ${key} declares no observable repository-environment behavior.`,
+                [key],
+                "Remove the profile or publish it as guidance rather than a selectable ecosystem profile."
+              ));
+            }
             const predicate = acquired.manifest.applicability;
             const missing = Object.keys(predicate).filter(field => !(field in request.configuration.applicabilityFacts));
             const mismatched = Object.keys(predicate).filter(field =>
               field in request.configuration.applicabilityFacts
-              && stable(request.configuration.applicabilityFacts[field]) !== stable(predicate[field])
+              && !matchesApplicabilityFact(request.configuration.applicabilityFacts[field], predicate[field])
             );
             if (missing.length) {
               diagnostics.push(diagnostic(
@@ -823,6 +999,7 @@
               ));
             }
           });
+        if (diagnostics.length) return failure(diagnostics);
 
         const capabilityRoots = [];
         verified.forEach(({key, acquired}) => {
@@ -832,14 +1009,76 @@
             declaration: `/requiredCapabilities/${index}`
           }));
         });
-        const capabilities = capabilityClosure(capabilityRoots, request.platform.capabilities, diagnostics);
+        const capabilities = capabilityClosure(capabilityRoots, request.platform.capabilities, request.platform.release, diagnostics);
+        if (diagnostics.length) return failure(diagnostics);
 
         const packKey = identityKey(request.configuration.policyPack);
         const pack = verified.find(candidate => candidate.key === packKey);
-        const extensions = new Map((pack?.acquired.manifest.extensionPoints || []).map(extension => [extension.key, extension]));
+        verified.forEach(({key, acquired}) => {
+          (acquired.manifest.contributions || []).forEach((contribution, index) => {
+            if (contribution.key === "canonical-validation") {
+              diagnostics.push(diagnostic(
+                "ownership.reserved",
+                contribution.key,
+                `Package ${key} attempts to own repository-reserved canonical validation.`,
+                [key, `/contributions/${index}`],
+                "Keep canonical validation solely in repository configuration."
+              ));
+            }
+          });
+        });
+        const extensionDeclarations = pack?.acquired.manifest.extensionPoints || [];
+        const extensionCounts = new Map();
+        extensionDeclarations.forEach(extension => extensionCounts.set(extension.key, (extensionCounts.get(extension.key) || 0) + 1));
+        [...extensionCounts.entries()]
+          .filter(([, count]) => count > 1)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .forEach(([key]) => diagnostics.push(diagnostic(
+            "choice.declaration.invalid",
+            key,
+            `Policy pack ${packKey} declares extension point ${key} more than once.`,
+            [packKey]
+          )));
+        extensionDeclarations.forEach((extension, index) => {
+          if (extension.key === "canonical-validation") {
+            diagnostics.push(diagnostic(
+              "choice.reserved",
+              extension.key,
+              `Policy pack ${packKey} attempts to expose repository-reserved canonical validation as a local choice.`,
+              [packKey, `/extensionPoints/${index}`],
+              "Keep canonical validation solely in repository configuration."
+            ));
+          }
+          const defaults = (pack?.acquired.manifest.contributions || [])
+            .filter(contribution => contribution.extension === extension.key && contribution.key === extension.key);
+          if (defaults.length !== 1) {
+            diagnostics.push(diagnostic(
+              "choice.declaration.invalid",
+              extension.key,
+              `Extension point ${extension.key} must identify exactly one replaceable default owned by ${packKey}.`,
+              [packKey, `/extensionPoints/${index}`],
+              "Declare one typed default at the same canonical address as the extension point."
+            ));
+          }
+        });
+        if (diagnostics.length) return failure(diagnostics);
+
+        const extensions = new Map(extensionDeclarations.map(extension => [extension.key, extension]));
         const localChoices = new Map();
 
         if (pack) {
+          const choiceCounts = new Map();
+          request.configuration.localChoices.forEach(choice => choiceCounts.set(choice.key, (choiceCounts.get(choice.key) || 0) + 1));
+          [...choiceCounts.entries()]
+            .filter(([, count]) => count > 1)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .forEach(([key]) => diagnostics.push(diagnostic(
+              "choice.duplicate",
+              key,
+              `Repository configuration declares local choice ${key} more than once.`,
+              ["repository-configuration"],
+              "Keep exactly one value for each declared extension point."
+            )));
           request.configuration.localChoices.forEach(choice => {
             const declaration = extensions.get(choice.key);
             if (!declaration) {
@@ -861,6 +1100,7 @@
             }
           });
         }
+        if (diagnostics.length) return failure(diagnostics);
 
         const candidates = [];
         verified.forEach(({key, entry, acquired}) => {
@@ -962,6 +1202,24 @@
           }
         });
 
+        const ownedPaths = request.configuration.repositoryFacts
+          .find(fact => fact.key === "repository.owned-paths")?.value || [];
+        const ownsPath = path => ownedPaths.some(pattern =>
+          pattern === path || (pattern.endsWith("/**") && path.startsWith(pattern.slice(0, -2)))
+        );
+        managedByTarget.forEach((facts, target) => {
+          const path = target.slice("managed:".length);
+          if (ownsPath(path)) {
+            diagnostics.push(diagnostic(
+              "ownership.repository-conflict",
+              path,
+              `Selected packages attempt to manage repository-owned path ${path}.`,
+              ["repository-configuration", ...facts.map(fact => fact.owner)],
+              "Remove the managed declaration or explicitly change repository ownership before resolving."
+            ));
+          }
+        });
+
         const policyDocuments = verified.flatMap(({key, entry, acquired}) =>
           (acquired.manifest.policyDocuments || []).map((document, index) => ({
             ...document,
@@ -987,7 +1245,7 @@
           }
         });
 
-        if (diagnostics.length) return {ok: false, diagnostics, contract: null, explanation: null};
+        if (diagnostics.length) return failure(diagnostics);
 
         const packages = verified.map(({key, entry}) => ({
           identity: key,
@@ -996,7 +1254,7 @@
           license: entry.license,
           digest: entry.digest,
           platformRange: entry.platformRange
-        }));
+        })).sort((left, right) => left.identity.localeCompare(right.identity));
         const facts = [...factsByKey.values()].map(([fact]) => fact).sort((left, right) => left.key.localeCompare(right.key));
         const compositions = [...managedByTarget.entries()]
           .filter(([, groupedFacts]) => groupedFacts.every(fact => fact.composition))
@@ -1004,17 +1262,22 @@
             target,
             fragments: groupedFacts
               .slice()
-              .sort((left, right) => left.value.order - right.value.order)
+              .sort((left, right) => left.value.order - right.value.order || left.key.localeCompare(right.key))
               .map(fact => ({address: fact.key, owner: fact.owner, source: fact.value.source, order: fact.value.order}))
-          }));
+          }))
+          .sort((left, right) => left.target.localeCompare(right.target));
+        policyDocuments.sort((left, right) => left.subject.localeCompare(right.subject) || left.owner.localeCompare(right.owner));
         const compatibility = packages.map(pkg => ({identity: pkg.identity, requested: pkg.platformRange, selectedPlatform: request.platform.release, status: "compatible"}));
         const contract = {
           modelVersion: 1,
-          platformRelease: request.platform.release,
+          platform: {
+            identity: request.platform.identity,
+            inventoryDigest: request.lock.platform.inventoryDigest
+          },
           selections: {
             policyPack: packKey,
             workflowPolicy: identityKey(request.configuration.workflowPolicy),
-            ecosystemProfiles: request.configuration.ecosystemProfiles.map(identityKey)
+            ecosystemProfiles: [...request.configuration.ecosystemProfiles].map(identityKey).sort()
           },
           facts,
           compositions,
@@ -1062,9 +1325,30 @@
         "repository-owned": [".repository-standards.json", "README.md", "LICENSE", "CHANGELOG.md", "VERSION", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md", "docs/adr/**", "standards/**", "profiles/**", "schema/**", "examples/**", "scripts/**", ".github/workflows/ci.yml", ".github/workflows/release.yml", ".github/workflows/standards-check.yml"]
       };
 
-      function migrateV5(input) {
+      const V5_RELEASE_TREE = {
+        release: "5.0.0",
+        revision: "d80f76b3abe877d0390d081e3038e3898d946ca0",
+        treeDigest: "64f8b2e49c1b21849bee27f8d749aff7b5d08365",
+        profiles: {
+          common: {extends: ["agent-skills", "repository-lifecycle-skills"], owns: ["repository-environment", "ordinary-change-workflow", "gitignore-fragment:0"]},
+          documentation: {extends: [], owns: ["documentation-environment"]},
+          "node-npm": {extends: [], owns: ["gitignore-fragment:20", "npm-environment"]},
+          "vite-react": {extends: [], owns: ["gitignore-fragment:30", "vite-react-environment"]}
+        }
+      };
+
+      function migrateV5(input, releaseTree) {
         if (input["standards-version"] !== 5 || input["standards-release"] !== "5.0.0") {
           return {ok: false, diagnostics: [diagnostic("migration.source.unsupported", "source", "This prototype accepts only the exact preceding stable release, 5.0.0.")]};
+        }
+        if (releaseTree.release !== "5.0.0"
+          || releaseTree.revision !== V5_RELEASE_TREE.revision
+          || releaseTree.treeDigest !== V5_RELEASE_TREE.treeDigest) {
+          return {ok: false, diagnostics: [diagnostic("migration.release-tree.mismatch", "releaseTree", "Migration requires the immutable v5.0.0 release tree used to interpret inherited profile behavior.")]};
+        }
+        const unknownProfiles = input.profiles.filter(name => !(name in releaseTree.profiles));
+        if (unknownProfiles.length) {
+          return {ok: false, diagnostics: [diagnostic("migration.profile.unknown", unknownProfiles.sort().join(","), "The exact release tree does not define every selected v5 profile.")]};
         }
         const profileMap = {"node-npm": id("ecosystem-profile", "node-npm"), "vite-react": id("ecosystem-profile", "vite-react")};
         const selectedProfiles = input.profiles.filter(name => name in profileMap).map(name => profileMap[name]);
@@ -1090,15 +1374,28 @@
           ]
         });
         const migration = {
-          source: {protocol: 5, release: "5.0.0", digest: sha256(stable(input))},
+          source: {
+            protocol: 5,
+            release: "5.0.0",
+            declarationDigest: sha256(stable(input)),
+            releaseTreeRevision: releaseTree.revision,
+            releaseTreeDigest: releaseTree.treeDigest
+          },
           targetSelections: clone(migrated.configuration),
           acquire: selectedIdentities(migrated.configuration).map(identityKey),
           absorbedProfiles: absorbed,
           transfers: [
-            {from: "/profiles/common", to: "policy-pack:compatibility@6.0.0", meaning: "repository environment defaults"},
-            {from: "/profiles/documentation", to: "policy-pack:compatibility@6.0.0", meaning: "documentation environment defaults"},
-            {from: "/github", to: "repository-configuration", meaning: "repository-specific declared GitHub state"},
+            {from: "/profiles/common/files/CONTRIBUTING.md", to: identityKey(id("workflow-policy", "planning-oriented")), meaning: "ordinary change workflow authority"},
+            {from: "/profiles/common", to: identityKey(id("policy-pack", "compatibility")), meaning: "remaining repository environment defaults and base composition fragment"},
+            {from: "/profiles/documentation", to: identityKey(id("policy-pack", "compatibility")), meaning: "documentation environment defaults"},
+            {from: "/profiles/common/extends", to: `capability-platform:${PLATFORM.identity.publisher}/${PLATFORM.identity.name}@${PLATFORM.identity.version}`, meaning: "former skill roots and dependency closure"},
+            {from: "/canonical-validation", to: "repository-configuration", meaning: "literal repository-owned readiness invocation"},
+            {from: "/dependency-updates", to: "repository-configuration", meaning: "repository-specific dependency update declarations"},
+            {from: "/github", to: "repository-configuration", meaning: "repository-specific declared GitHub state except the chosen extension"},
+            {from: "/github/features/projects", to: "repository-configuration:local-choice", meaning: "pack-declared GitHub Projects choice"},
             {from: "/boundaries", to: "repository-configuration", meaning: "repository-owned boundary facts"},
+            {from: "/variables", to: "repository-configuration", meaning: "repository variables"},
+            {from: "/local-fragments", to: "repository-configuration", meaning: "repository-owned composition fragments"},
             {from: "/repository-owned", to: "repository-configuration", meaning: "preserved repository ownership"}
           ],
           retireAuthorities: ["v5 profile inheritance", "v5 profile registry", "split workflow and lifecycle skill registries"],
@@ -1163,6 +1460,17 @@
         });
       }
 
+      function repositoryOwnershipFixture() {
+        const facts = repositoryFacts("repository-ownership-conflict");
+        facts.find(fact => fact.key === "repository.owned-paths").value.push("AGENTS.md");
+        return buildRequest({
+          name: "Rejected · repository ownership conflict",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          repositoryFacts: facts
+        });
+      }
+
       function run(request) {
         return resolve(clone(request));
       }
@@ -1217,6 +1525,37 @@
             request = duplicatePolicySubjectFixture();
             lastChange = "Selected two packages that claim different documents for the same policy subject.";
             break;
+          case "REORDER_SET_INPUTS":
+            request = fixture("minimal-planning-several");
+            request.configuration.ecosystemProfiles.reverse();
+            request.configuration.applicabilityFacts.ecosystem.reverse();
+            request.lock.packages.reverse();
+            lastChange = "Reversed profile selectors, multi-value applicability facts, and lock entries. The normalized digest and contract remain unchanged.";
+            break;
+          case "ADD_EXTRA_LOCK_ENTRY": {
+            request = fixture("compat-planning-zero");
+            const other = fixture("minimal-issue-zero").lock.packages
+              .find(entry => entry.identity.kind === "policy-pack");
+            request.lock.packages.push(clone(other));
+            lastChange = "Added an unselected package entry to the lock. Exact selection/lock bijection rejects it before package interpretation.";
+            break;
+          }
+          case "REMOVE_REFERENCED_CONTENT": {
+            request = fixture("compat-planning-zero");
+            const key = identityKey(request.configuration.policyPack);
+            const acquired = request.acquiredPackages[key];
+            delete acquired.files["policy/repository-lifecycle.md"];
+            const integrity = packageDigest(acquired);
+            const entry = request.lock.packages.find(candidate => identityKey(candidate.identity) === key);
+            entry.digest = integrity.digest;
+            entry.contents = integrity.files;
+            lastChange = "Republished internally consistent package bytes while omitting declared policy content. Referential integrity rejects the package.";
+            break;
+          }
+          case "CLAIM_REPOSITORY_OWNED_TARGET":
+            request = repositoryOwnershipFixture();
+            lastChange = "Declared AGENTS.md repository-owned while the selected pack manages it. The ownership guard rejects the collision.";
+            break;
           case "TAMPER_ACQUIRED_CONTENT": {
             request = fixture("compat-planning-zero");
             const key = identityKey(request.configuration.policyPack);
@@ -1231,7 +1570,7 @@
             break;
           }
           case "MIGRATE_V5": {
-            const migrated = migrateV5(clone(V5_INPUT));
+            const migrated = migrateV5(clone(V5_INPUT), clone(V5_RELEASE_TREE));
             if (!migrated.ok) return {...state, result: migrated, lastChange: "Migration input was rejected."};
             request = migrated.request;
             migration = migrated.migration;
@@ -1288,6 +1627,10 @@
       ["Reject nonmatching profile", {type: "USE_NONMATCHING_PROFILE"}],
       ["Reject incompatible packages", {type: "USE_INCOMPATIBLE_SELECTION"}],
       ["Reject duplicate policy subject", {type: "ADD_DUPLICATE_POLICY_SUBJECT"}],
+      ["Normalize reordered set inputs", {type: "REORDER_SET_INPUTS"}],
+      ["Reject extra lock package", {type: "ADD_EXTRA_LOCK_ENTRY"}],
+      ["Reject missing referenced content", {type: "REMOVE_REFERENCED_CONTENT"}],
+      ["Reject repository-owned target", {type: "CLAIM_REPOSITORY_OWNED_TARGET"}],
       ["Reset", {type: "RESET"}]
     ];
 
@@ -1316,6 +1659,11 @@
         title: "Explain every effective fact",
         description: "Resolve the richest representative repository and inspect each fact's sole owner, selected/default/local origin, declaration pointer, package digest, policy documents, and capability demand.",
         steps: [freeActions[2]]
+      },
+      invariants: {
+        title: "Boundary invariants",
+        description: "Prove input-order independence, exact selection/lock correspondence, and referential integrity before any package declaration becomes effective.",
+        steps: [freeActions[13], freeActions[14], freeActions[15], freeActions[16]]
       }
     };
 
@@ -1404,7 +1752,9 @@
           <div class="state-grid">
             <div class="state-card"><dl>
               ${field("Source", `protocol ${migration.source.protocol}, release ${migration.source.release}`)}
-              ${field("Source digest", migration.source.digest)}
+              ${field("Declaration digest", migration.source.declarationDigest)}
+              ${field("Release tree", migration.source.releaseTreeRevision)}
+              ${field("Release-tree digest", migration.source.releaseTreeDigest)}
               ${field("Acquire", migration.acquire)}
               ${field("Absorbed profiles", migration.absorbedProfiles)}
             </dl></div>
