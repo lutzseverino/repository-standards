@@ -30,7 +30,7 @@ of package selection order. This preserves the current supported `.gitignore`
 composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/280bfb1fbd79f7c226331e4267b32dac182fc79a/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/8ef112dbe227257a7711234ab4b48658be2ffe42/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
 
@@ -65,6 +65,10 @@ The guided failure and migration cases demonstrate:
   from the pinned platform;
 - a selected npm profile is rejected with `profile.applicability.mismatch`
   when repository facts declare pnpm;
+- otherwise non-colliding packages fail with
+  `compatibility.package.required` when a typed package constraint is unmet;
+- different document paths claiming the same policy subject fail with
+  `policy.subject.duplicate`;
 - changing an acquired policy document without changing the lock fails with
   `lock.content.tampered` before an effective contract is returned;
 - changing duplicated lock metadata without changing the content-hashed
@@ -137,6 +141,12 @@ default at an extension point declared by the selected pack. Its effective
 owner becomes repository configuration, its origin is `local-choice`, and its
 explanation also names the pack declaration that permitted it.
 
+Canonical validation is always a repository-configuration-owned declaration.
+Package contributions and extension points cannot supply or replace its
+executable, literal arguments, or working directory. The resolver carries that
+declaration as data; only the lifecycle capability that needs it may execute
+the validated literal process vector.
+
 ### Package envelope and kind-specific payloads
 
 Every package has one common, content-hashed closed envelope:
@@ -144,13 +154,15 @@ Every package has one common, content-hashed closed envelope:
 - kind, publisher, name, and semantic version;
 - supported capability-platform range;
 - capability root names;
+- closed inter-package `requires` and `conflicts` constraints over package
+  kind, publisher, name, and semantic-version range;
 - authoritative source attribution and license metadata;
 - references to included content and policy documents.
 
 The immutable locked identity is the complete coordinate, including kind,
 publisher, name, and exact version. The manifest is authoritative for declared
-publisher, source, license, compatibility, and capability roots. Source
-and publisher remain separately visible trust roots so a change to either can
+publisher, source, license, compatibility, and capability roots. Source and
+publisher remain separately visible trust roots so a change to either can
 require renewed confirmation.
 
 Each kind then has a distinct closed payload:
@@ -166,6 +178,17 @@ Each kind then has a distinct closed payload:
 Policy packages contain declarative data and content only. They cannot contain
 executable capability implementations or commands for the resolver to run.
 
+Every requirement must match at least one selected complete package coordinate,
+and every conflict must match none. A constraint declared by either side is
+sufficient to reject a combination; packages do not repeat reciprocal rules.
+Constraints have no arbitrary expressions, evaluation hooks, or selection-order
+semantics.
+
+Every policy-document declaration contains one platform-defined policy subject,
+one content path, and its purpose. The subject—not its path—is the canonical
+ownership address. Two selected packages cannot claim authoritative documents
+for the same subject even when their paths or prose differ.
+
 ### Lock and acquired packages
 
 The lock contains:
@@ -173,9 +196,9 @@ The lock contains:
 - a lock format version;
 - the exact capability-platform identity;
 - a digest of the repository configuration it resolves;
-- one entry for every selected package, with complete immutable identity,
-  publisher, source and immutable source revision, license, compatibility
-  declaration, package digest, and a sorted path-to-digest content inventory.
+- one entry for every selected package, with complete immutable coordinate,
+  source and immutable source revision, license, compatibility declaration,
+  package digest, and a sorted path-to-digest content inventory.
 
 The locally acquired package set contains the closed package manifest and the
 content bytes described by each lock entry. Resolution verifies selection,
@@ -201,7 +224,7 @@ resolved contract. Representative address families include:
 - exclusive managed path or managed absence;
 - composed managed fragment, identified within its parent target;
 - declared GitHub field or required resource;
-- canonical-validation field;
+- repository-configuration-owned canonical-validation field;
 - repository boundary, dependency-update declaration, or owned path;
 - workflow process or readiness field;
 - selected capability and policy-document reference.
@@ -275,16 +298,18 @@ The production resolver should perform phases in this order:
 3. verify selected identities, acquired content, package digests, and exact
    lock/manifest metadata parity;
 4. validate package/platform compatibility;
-5. prove each selected ecosystem profile's applicability predicate against the
+5. validate every selected package's typed inter-package requirements and
+   conflicts against the complete selected coordinates;
+6. prove each selected ecosystem profile's applicability predicate against the
    closed repository facts, rejecting missing or nonmatching evidence;
-6. validate transitive capability closure and cycles for roots from every
+7. validate transitive capability closure and cycles for roots from every
    selected package;
-7. validate declared extension points and typed local choices;
-8. normalize typed contributions into the ownership index;
-9. apply only explicit local-choice replacement;
-10. validate exclusive targets and composed fragment identities and order;
-11. reject every remaining duplicate owner;
-12. emit the canonical contract and explanation evidence.
+8. validate declared extension points and typed local choices;
+9. normalize typed contributions into the ownership index;
+10. apply only explicit local-choice replacement;
+11. validate exclusive targets, composed fragments, and policy subjects;
+12. reject every remaining duplicate owner;
+13. emit the canonical contract and explanation evidence.
 
 Later phases do not guess after an earlier authority or integrity failure. For
 example, a tampered pack produces the tamper diagnostic rather than cascading
@@ -301,19 +326,20 @@ Diagnostics are structured records with:
 - an actionable remediation.
 
 They are ordered first by resolver phase and then by canonical subject. One
-root cause is reported once even when a capability appears as both a declared
-requirement and a workflow root. The prototype established these initial code
-families:
+root cause is reported once even when several packages declare the same root or
+that root also appears as a transitive dependency; the diagnostic retains every
+implicated source. The prototype established these initial code families:
 
 | Family | Representative codes |
 | --- | --- |
 | Selection | `selection.policy-pack.count`, `selection.workflow-policy.count` |
 | Lock | `lock.platform.stale`, `lock.configuration.stale`, `lock.selection.missing` |
 | Integrity | `lock.identity.mismatch`, `lock.metadata.mismatch`, `lock.content.missing`, `lock.content.tampered` |
-| Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported` |
+| Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported`, `compatibility.package.required`, `compatibility.package.conflict` |
 | Profile applicability | `profile.applicability.incomplete`, `profile.applicability.mismatch` |
 | Capability closure | `capability.missing`, `capability.cycle` |
 | Local choice | `choice.undeclared`, `choice.type.invalid` |
+| Policy authority | `policy.subject.duplicate` |
 | Composition | `composition.mode.conflict`, `composition.fragment.duplicate`, `composition.order.ambiguous` |
 | Ownership | `ownership.duplicate` |
 
