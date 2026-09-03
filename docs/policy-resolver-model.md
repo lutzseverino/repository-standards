@@ -30,7 +30,7 @@ of package selection order. This preserves the current supported `.gitignore`
 composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/c22a8041af235c91f84616d16ca4362f59a96a6e/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/280bfb1fbd79f7c226331e4267b32dac182fc79a/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
 
@@ -63,6 +63,8 @@ The guided failure and migration cases demonstrate:
 - an ecosystem profile is rejected with
   `compatibility.capability.unsupported` when it requires a capability absent
   from the pinned platform;
+- a selected npm profile is rejected with `profile.applicability.mismatch`
+  when repository facts declare pnpm;
 - changing an acquired policy document without changing the lock fails with
   `lock.content.tampered` before an effective contract is returned;
 - changing duplicated lock metadata without changing the content-hashed
@@ -116,6 +118,8 @@ The configuration contains:
 - one policy-pack selector;
 - one workflow-policy selector;
 - an ordered-insensitive set of zero or more ecosystem-profile selectors;
+- closed profile-applicability facts sufficient to prove every selected
+  profile's predicate;
 - typed local choices keyed only by extension points declared by the selected
   policy pack;
 - closed repository-owned sections for repository identity, boundaries,
@@ -217,6 +221,11 @@ explicit order in their typed configuration section after package fragments.
 The capability platform owns the composition operation, not the fragment
 policy.
 
+Selected capabilities are owned by the capability platform. Package root
+demands are provenance edges rather than competing ownership claims. The index
+retains every demanding package and declaration pointer for a root, plus every
+capability-to-capability dependency edge in its transitive closure.
+
 Every other collision fails. Values that happen to be equal still conflict
 when owners differ, because authority would remain ambiguous.
 
@@ -229,8 +238,8 @@ The normalized contract contains:
   GitHub state, canonical validation, repository ownership, and workflow facts;
 - composed managed targets with their ordered, independently owned fragments
   and aggregate provenance;
-- the validated transitive capability closure and the package that demanded
-  each root;
+- the platform-owned validated transitive capability closure, every package
+  that demanded each root, and every transitive dependency reason;
 - applicable authoritative policy documents;
 - compatibility evidence for every selected package;
 - provenance for every material effective fact.
@@ -252,9 +261,10 @@ resolution pass. For every material fact it includes:
 - the extension-point declarer when a local choice replaced a default.
 
 It also includes selected identities and provenance, policy documents,
-capability closure and demand reasons, compatibility evidence, and each
-composed target's ordered fragment owners. Stable human output renders this
-same structure; it does not reconstruct provenance from decorative prose.
+capability closure and all package-root and transitive dependency reasons,
+compatibility evidence, and each composed target's ordered fragment owners.
+Stable human output renders this same structure; it does not reconstruct
+provenance from decorative prose.
 
 ## Resolver order
 
@@ -265,14 +275,16 @@ The production resolver should perform phases in this order:
 3. verify selected identities, acquired content, package digests, and exact
    lock/manifest metadata parity;
 4. validate package/platform compatibility;
-5. validate transitive capability closure and cycles for roots from every
+5. prove each selected ecosystem profile's applicability predicate against the
+   closed repository facts, rejecting missing or nonmatching evidence;
+6. validate transitive capability closure and cycles for roots from every
    selected package;
-6. validate declared extension points and typed local choices;
-7. normalize typed contributions into the ownership index;
-8. apply only explicit local-choice replacement;
-9. validate exclusive targets and composed fragment identities and order;
-10. reject every remaining duplicate owner;
-11. emit the canonical contract and explanation evidence.
+7. validate declared extension points and typed local choices;
+8. normalize typed contributions into the ownership index;
+9. apply only explicit local-choice replacement;
+10. validate exclusive targets and composed fragment identities and order;
+11. reject every remaining duplicate owner;
+12. emit the canonical contract and explanation evidence.
 
 Later phases do not guess after an earlier authority or integrity failure. For
 example, a tampered pack produces the tamper diagnostic rather than cascading
@@ -299,6 +311,7 @@ families:
 | Lock | `lock.platform.stale`, `lock.configuration.stale`, `lock.selection.missing` |
 | Integrity | `lock.identity.mismatch`, `lock.metadata.mismatch`, `lock.content.missing`, `lock.content.tampered` |
 | Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported` |
+| Profile applicability | `profile.applicability.incomplete`, `profile.applicability.mismatch` |
 | Capability closure | `capability.missing`, `capability.cycle` |
 | Local choice | `choice.undeclared`, `choice.type.invalid` |
 | Composition | `composition.mode.conflict`, `composition.fragment.duplicate`, `composition.order.ambiguous` |
@@ -321,6 +334,8 @@ The migration result needs:
 - explicit mapping of selectable v5 ecosystem profiles to new package
   identities, while recording behavior absorbed from `common` and
   `documentation`;
+- repository facts and evidence sufficient to prove every migrated ecosystem
+  profile still applies;
 - preservation of the ordered `common`, `node-npm`, and `vite-react`
   `.gitignore` fragments when those profiles are selected, with each fragment
   assigned to its new sole owner;
