@@ -1,0 +1,1217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Throwaway policy resolver model</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17211f;
+      --muted: #60706c;
+      --line: #d8e0dc;
+      --surface: #ffffff;
+      --canvas: #f4f7f5;
+      --accent: #006d5b;
+      --accent-soft: #dff2ed;
+      --danger: #a23428;
+      --danger-soft: #f9e5e1;
+      --warning: #865700;
+      --warning-soft: #fff2cc;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 32px auto 72px;
+    }
+
+    h1, h2, h3 { line-height: 1.15; }
+    h1 { margin-bottom: 8px; font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { margin: 0 0 16px; font-size: 1.35rem; }
+    h3 { margin: 0 0 10px; font-size: 1rem; }
+    p { margin: 0 0 12px; }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .question {
+      max-width: 850px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .notice {
+      margin: 20px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--warning);
+      background: var(--warning-soft);
+      font-weight: 650;
+    }
+
+    .panel {
+      margin-top: 20px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 8px 28px rgb(23 33 31 / 5%);
+    }
+
+    .status-line, .button-row, .tabs, .step-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .status-line { margin-bottom: 18px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #edf1ef;
+      color: #46534f;
+      font-size: .82rem;
+      font-weight: 750;
+    }
+
+    .pill.good { color: var(--accent); background: var(--accent-soft); }
+    .pill.bad { color: var(--danger); background: var(--danger-soft); }
+
+    button {
+      padding: 9px 12px;
+      border: 1px solid #b8c5c0;
+      border-radius: 9px;
+      color: var(--ink);
+      background: white;
+      font: inherit;
+      font-size: .9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled), button:focus-visible {
+      border-color: var(--accent);
+      outline: 2px solid var(--accent-soft);
+      outline-offset: 1px;
+    }
+
+    button.primary, button.tab.active {
+      border-color: var(--accent);
+      color: white;
+      background: var(--accent);
+    }
+
+    button:disabled { cursor: not-allowed; opacity: .45; }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .state-card {
+      min-width: 0;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcfb;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: minmax(105px, .42fr) 1fr;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid #e9eeeb;
+    }
+
+    .field:last-child { border-bottom: 0; }
+    .field dt { color: var(--muted); font-size: .82rem; font-weight: 700; }
+    .field dd { margin: 0; overflow-wrap: anywhere; font-size: .86rem; }
+
+    .change {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      font-weight: 700;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .84rem;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: var(--muted); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    td code { white-space: nowrap; }
+
+    code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #eef2f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .82em;
+    }
+
+    .diagnostic {
+      margin: 9px 0;
+      padding: 12px;
+      border-left: 4px solid var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .diagnostic strong { display: block; color: var(--danger); }
+    .empty { color: var(--muted); font-style: italic; }
+    .section-gap { margin-top: 20px; }
+
+    .walkthrough-copy {
+      margin: 14px 0;
+      padding: 14px;
+      border-radius: 10px;
+      background: #f7faf8;
+    }
+
+    .step-list { align-items: stretch; }
+    .step-list button { flex: 1 1 190px; text-align: left; }
+    .step-list button.done { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+    .history {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    @media (max-width: 620px) {
+      main { width: min(100% - 20px, 1180px); margin-top: 18px; }
+      .panel { padding: 16px; }
+      .field { grid-template-columns: 1fr; gap: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Throwaway logic prototype · issue #69</p>
+    <h1>Policy resolver model</h1>
+    <p class="question">
+      Can one deterministic resolver combine a selected policy pack, an independently selected workflow,
+      zero or more ecosystem profiles, and declared local choices from verified local packages—while
+      rejecting ambiguity and explaining every effective fact with its owner and provenance?
+    </p>
+    <div class="notice">
+      PROTOTYPE — this page is disposable evidence for the production model. It is not a production
+      capability, schema, package store, or cryptographic implementation.
+    </div>
+
+    <section class="panel" aria-labelledby="state-title">
+      <h2 id="state-title">Current resolver state</h2>
+      <div id="state"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="free-play-title">
+      <h2 id="free-play-title">Free play</h2>
+      <p>Load any representative repository or force one of the unsafe cases. Every action reruns the pure resolver.</p>
+      <div class="button-row" id="free-play"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="walkthrough-title">
+      <h2 id="walkthrough-title">Guided walkthroughs</h2>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div id="walkthrough"></div>
+    </section>
+  </main>
+
+  <script>
+    const ResolverPrototype = (() => {
+      "use strict";
+
+      const clone = value => JSON.parse(JSON.stringify(value));
+
+      function stable(value) {
+        if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+        if (value && typeof value === "object") {
+          return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(",")}}`;
+        }
+        return JSON.stringify(value);
+      }
+
+      // Compact synchronous SHA-256 for the prototype's small ASCII fixtures.
+      function sha256(ascii) {
+        const rightRotate = (value, amount) => (value >>> amount) | (value << (32 - amount));
+        const maxWord = 2 ** 32;
+        let result = "";
+        const words = [];
+        const asciiBitLength = ascii.length * 8;
+        const hash = [];
+        const constants = [];
+        const isComposite = {};
+        let primeCounter = 0;
+
+        for (let candidate = 2; primeCounter < 64; candidate += 1) {
+          if (!isComposite[candidate]) {
+            for (let multiple = 0; multiple < 313; multiple += candidate) isComposite[multiple] = candidate;
+            hash[primeCounter] = (candidate ** .5 * maxWord) | 0;
+            constants[primeCounter] = (candidate ** (1 / 3) * maxWord) | 0;
+            primeCounter += 1;
+          }
+        }
+
+        ascii += "\x80";
+        while (ascii.length % 64 !== 56) ascii += "\x00";
+        for (let index = 0; index < ascii.length; index += 1) {
+          const code = ascii.charCodeAt(index);
+          if (code >> 8) throw new Error("Prototype SHA-256 accepts ASCII fixture content only");
+          words[index >> 2] |= code << ((3 - index) % 4) * 8;
+        }
+        words.push((asciiBitLength / maxWord) | 0);
+        words.push(asciiBitLength);
+
+        for (let blockStart = 0; blockStart < words.length;) {
+          const schedule = words.slice(blockStart, blockStart += 16);
+          const oldHash = hash.slice(0);
+          let working = hash.slice(0, 8);
+
+          for (let round = 0; round < 64; round += 1) {
+            const w15 = schedule[round - 15];
+            const w2 = schedule[round - 2];
+            const a = working[0];
+            const e = working[4];
+            const word = schedule[round] = round < 16 ? schedule[round] : (
+              schedule[round - 16]
+              + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+              + schedule[round - 7]
+              + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+            ) | 0;
+            const temp1 = (working[7]
+              + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+              + ((e & working[5]) ^ ((~e) & working[6]))
+              + constants[round] + word) | 0;
+            const temp2 = ((rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+              + ((a & working[1]) ^ (a & working[2]) ^ (working[1] & working[2]))) | 0;
+            working = [(temp1 + temp2) | 0].concat(working);
+            working[4] = (working[4] + temp1) | 0;
+            working.pop();
+          }
+
+          for (let index = 0; index < 8; index += 1) hash[index] = (working[index] + oldHash[index]) | 0;
+        }
+
+        for (let index = 0; index < 8; index += 1) {
+          for (let byte = 3; byte >= 0; byte -= 1) {
+            const value = (hash[index] >> (byte * 8)) & 255;
+            result += (value < 16 ? "0" : "") + value.toString(16);
+          }
+        }
+        return `sha256:${result}`;
+      }
+
+      const identityKey = identity => `${identity.kind}:${identity.name}@${identity.version}`;
+      const id = (kind, name, version = "6.0.0") => ({kind, name, version});
+
+      const PLATFORM = {
+        release: "6.0.0",
+        capabilities: {
+          resolve: [],
+          explain: ["resolve"],
+          plan: ["resolve"],
+          apply: ["plan"],
+          implementation: ["plan", "code-review"],
+          "code-review": ["resolve"],
+          "test-driven-development": [],
+          "github-delivery": ["apply", "explain"],
+          triage: [],
+          grilling: [],
+          specification: ["grilling"],
+          ticketing: ["specification"],
+          wayfinding: ["explain"],
+          prototype: [],
+          research: []
+        }
+      };
+
+      const packageDefinitions = [
+        {
+          manifest: {
+            identity: id("policy-pack", "compatibility"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve", "explain", "plan", "apply"],
+            contributions: [
+              {key: "managed:AGENTS.md", value: {mode: "exact", source: "environment/AGENTS.md"}},
+              {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "environment/CONTRIBUTING.md"}},
+              {key: "github.required-labels", value: ["bug", "enhancement", "ready-for-agent", "ready-for-human"]},
+              {key: "github.ruleset", value: {name: "Protect main", merge: "squash", forcePush: false}},
+              {key: "github.features.projects", value: false, extension: "github.features.projects"},
+              {key: "canonical-validation.arguments", value: [], extension: "canonical-validation.arguments"}
+            ],
+            extensionPoints: [
+              {key: "github.features.projects", type: "boolean"},
+              {key: "canonical-validation.arguments", type: "string-list"}
+            ],
+            policyDocuments: [{path: "policy/repository-lifecycle.md", purpose: "repository lifecycle"}]
+          },
+          files: {
+            "environment/AGENTS.md": "Compatibility agent guidance\n",
+            "environment/CONTRIBUTING.md": "Planning-oriented contribution policy\n",
+            "policy/repository-lifecycle.md": "Compatibility lifecycle policy\n"
+          }
+        },
+        {
+          manifest: {
+            identity: id("policy-pack", "minimal"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve", "explain", "plan", "apply"],
+            contributions: [
+              {key: "managed:AGENTS.md", value: {mode: "exact", source: "environment/AGENTS.md"}},
+              {key: "github.required-labels", value: ["bug", "enhancement"]},
+              {key: "github.ruleset", value: null},
+              {key: "github.features.projects", value: false, extension: "github.features.projects"},
+              {key: "canonical-validation.arguments", value: [], extension: "canonical-validation.arguments"}
+            ],
+            extensionPoints: [
+              {key: "github.features.projects", type: "boolean"},
+              {key: "canonical-validation.arguments", type: "string-list"}
+            ],
+            policyDocuments: [{path: "policy/lightweight-lifecycle.md", purpose: "repository lifecycle"}]
+          },
+          files: {
+            "environment/AGENTS.md": "Minimal agent guidance\n",
+            "policy/lightweight-lifecycle.md": "Lightweight lifecycle policy\n"
+          }
+        },
+        {
+          manifest: {
+            identity: id("workflow-policy", "planning-oriented"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["implementation", "github-delivery", "specification", "ticketing"],
+            capabilityRoots: ["implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
+            contributions: [
+              {key: "workflow.process", value: ["grill-with-docs", "specify", "ticket", "implement", "deliver"]},
+              {key: "workflow.readiness", value: "ready-for-agent"}
+            ],
+            policyDocuments: [{path: "policy/contributing.md", purpose: "ordinary change workflow"}]
+          },
+          files: {"policy/contributing.md": "Planning-oriented workflow policy\n"}
+        },
+        {
+          manifest: {
+            identity: id("workflow-policy", "issue-directed"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["implementation", "github-delivery"],
+            capabilityRoots: ["implementation", "github-delivery"],
+            contributions: [
+              {key: "workflow.process", value: ["issue", "implement", "deliver"]},
+              {key: "workflow.readiness", value: "ready-for-agent"}
+            ],
+            policyDocuments: [{path: "policy/contributing.md", purpose: "ordinary change workflow"}]
+          },
+          files: {"policy/contributing.md": "Issue-directed workflow policy\n"}
+        },
+        {
+          manifest: {
+            identity: id("workflow-policy", "marketplace-dependent"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["implementation", "marketplace-sync"],
+            capabilityRoots: ["implementation", "marketplace-sync"],
+            contributions: [{key: "workflow.process", value: ["discover", "install", "implement"]}],
+            policyDocuments: []
+          },
+          files: {}
+        },
+        {
+          manifest: {
+            identity: id("ecosystem-profile", "node-npm"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve"],
+            contributions: [
+              {key: "managed:.github/dependabot.yml", value: {mode: "exact", source: "environment/dependabot.yml"}},
+              {key: "dependency-update:npm:/", value: {ecosystem: "npm", directory: "/", schedule: "weekly"}}
+            ],
+            policyDocuments: [{path: "policy/node-npm.md", purpose: "npm repository environment"}]
+          },
+          files: {
+            "environment/dependabot.yml": "version: 2\nupdates: []\n",
+            "policy/node-npm.md": "Node and npm environment guidance\n"
+          }
+        },
+        {
+          manifest: {
+            identity: id("ecosystem-profile", "vite-react"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve"],
+            contributions: [
+              {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/ci.yml"}}
+            ],
+            policyDocuments: [{path: "policy/vite-react.md", purpose: "Vite React repository environment"}]
+          },
+          files: {
+            "environment/ci.yml": "name: CI\non: [push]\n",
+            "policy/vite-react.md": "Vite React environment guidance\n"
+          }
+        },
+        {
+          manifest: {
+            identity: id("ecosystem-profile", "strict-ci-conflict"),
+            platformRange: ">=6.0.0 <7.0.0",
+            requiredCapabilities: ["resolve"],
+            contributions: [
+              {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/strict-ci.yml"}}
+            ],
+            policyDocuments: []
+          },
+          files: {"environment/strict-ci.yml": "name: Strict CI\non: [push]\n"}
+        }
+      ];
+
+      const CATALOG = Object.fromEntries(packageDefinitions.map(pkg => [identityKey(pkg.manifest.identity), pkg]));
+
+      function packageDigest(pkg) {
+        const files = Object.keys(pkg.files).sort().map(path => ({path, digest: sha256(pkg.files[path])}));
+        return {digest: sha256(`${stable(pkg.manifest)}\n${stable(files)}`), files};
+      }
+
+      function configDigest(configuration) {
+        return sha256(stable(configuration));
+      }
+
+      function selectedIdentities(selection) {
+        return [selection.policyPack, selection.workflowPolicy, ...selection.ecosystemProfiles];
+      }
+
+      function buildRequest({name, policyPack, workflowPolicy, ecosystemProfiles = [], localChoices = [], repositoryFacts = []}) {
+        const configuration = {
+          modelVersion: 1,
+          policyPack,
+          workflowPolicy,
+          ecosystemProfiles,
+          localChoices,
+          repositoryFacts
+        };
+        const acquiredPackages = {};
+        const packages = selectedIdentities(configuration).map(identity => {
+          const key = identityKey(identity);
+          const pkg = clone(CATALOG[key]);
+          acquiredPackages[key] = pkg;
+          const integrity = packageDigest(pkg);
+          return {
+            identity,
+            publisher: "github.com/lutzseverino",
+            source: {type: "git", uri: "https://github.com/lutzseverino/repository-standards", revision: "1111111111111111111111111111111111111111"},
+            license: "MIT",
+            platformRange: pkg.manifest.platformRange,
+            digest: integrity.digest,
+            contents: integrity.files
+          };
+        });
+        return {
+          name,
+          platform: clone(PLATFORM),
+          configuration,
+          lock: {modelVersion: 1, platformRelease: PLATFORM.release, configurationDigest: configDigest(configuration), packages},
+          acquiredPackages
+        };
+      }
+
+      const repositoryFacts = suffix => [
+        {key: "github.repository", value: `example/${suffix}`},
+        {key: "repository.boundaries", value: [{path: ".", type: "repository", title: suffix}]},
+        {key: "repository.owned-paths", value: ["README.md", "src/**"]}
+      ];
+
+      const fixtureDefinitions = {
+        "compat-planning-zero": {
+          name: "Compatibility pack + planning workflow · zero profiles",
+          policyPack: id("policy-pack", "compatibility"),
+          workflowPolicy: id("workflow-policy", "planning-oriented"),
+          localChoices: [{key: "canonical-validation.arguments", value: ["--strict"]}],
+          repositoryFacts: repositoryFacts("compat-planning-zero")
+        },
+        "compat-issue-one": {
+          name: "Compatibility pack + issue-directed workflow · one profile",
+          policyPack: id("policy-pack", "compatibility"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          ecosystemProfiles: [id("ecosystem-profile", "node-npm")],
+          localChoices: [{key: "github.features.projects", value: true}],
+          repositoryFacts: repositoryFacts("compat-issue-one")
+        },
+        "minimal-planning-several": {
+          name: "Minimal pack + planning workflow · several profiles",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "planning-oriented"),
+          ecosystemProfiles: [id("ecosystem-profile", "node-npm"), id("ecosystem-profile", "vite-react")],
+          localChoices: [{key: "canonical-validation.arguments", value: ["--all"]}],
+          repositoryFacts: repositoryFacts("minimal-planning-several")
+        },
+        "minimal-issue-zero": {
+          name: "Minimal pack + issue-directed workflow · zero profiles",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          localChoices: [{key: "github.features.projects", value: false}],
+          repositoryFacts: repositoryFacts("minimal-issue-zero")
+        }
+      };
+
+      function fixture(name) {
+        return buildRequest(clone(fixtureDefinitions[name]));
+      }
+
+      function diagnostic(code, subject, message, sources = [], remediation = "Correct the declarations and resolve again.") {
+        return {code, subject, message, sources, remediation};
+      }
+
+      function supportsRange(release, range) {
+        const major = Number(release.split(".")[0]);
+        return range === `>=${major}.0.0 <${major + 1}.0.0`;
+      }
+
+      function validateChoice(type, value) {
+        if (type === "boolean") return typeof value === "boolean";
+        if (type === "string-list") return Array.isArray(value) && value.every(item => typeof item === "string");
+        return false;
+      }
+
+      function capabilityClosure(roots, inventory, diagnostics) {
+        const resolved = new Set();
+        const missing = new Set();
+        const demandedBy = new Map();
+        const visiting = new Set();
+
+        function visit(name, demander) {
+          if (!demandedBy.has(name)) demandedBy.set(name, new Set());
+          demandedBy.get(name).add(demander);
+          if (!(name in inventory)) {
+            if (!missing.has(name)) {
+              missing.add(name);
+              diagnostics.push(diagnostic(
+                "compatibility.capability.unsupported",
+                name,
+                `Selected policy requires capability ${name}, which is absent from platform ${PLATFORM.release}.`,
+                [demander],
+                "Select a compatible package or a platform release that provides the capability."
+              ));
+            }
+            return;
+          }
+          if (visiting.has(name)) {
+            diagnostics.push(diagnostic("capability.cycle", name, `Capability dependency cycle includes ${name}.`, [demander]));
+            return;
+          }
+          if (resolved.has(name)) return;
+          visiting.add(name);
+          inventory[name].forEach(dependency => visit(dependency, name));
+          visiting.delete(name);
+          resolved.add(name);
+        }
+
+        roots.forEach(({name, demander}) => visit(name, demander));
+        return [...resolved].sort().map(name => ({name, demandedBy: [...(demandedBy.get(name) || [])].sort()}));
+      }
+
+      function resolve(request) {
+        const diagnostics = [];
+        const selected = selectedIdentities(request.configuration);
+        const selectedKeys = selected.map(identityKey);
+        const lockByKey = Object.fromEntries(request.lock.packages.map(entry => [identityKey(entry.identity), entry]));
+        const verified = [];
+
+        if (request.lock.platformRelease !== request.platform.release) {
+          diagnostics.push(diagnostic("lock.platform.stale", "platformRelease", "The lock targets a different capability-platform release."));
+        }
+        if (request.lock.configurationDigest !== configDigest(request.configuration)) {
+          diagnostics.push(diagnostic("lock.configuration.stale", "configuration", "The repository configuration changed after this lock was created."));
+        }
+
+        selectedKeys.forEach(key => {
+          const entry = lockByKey[key];
+          const acquired = request.acquiredPackages[key];
+          if (!entry) {
+            diagnostics.push(diagnostic("lock.selection.missing", key, `The selected package ${key} has no exact lock entry.`));
+            return;
+          }
+          if (!acquired) {
+            diagnostics.push(diagnostic("lock.content.missing", key, `The locked package ${key} is not present in the local package store.`));
+            return;
+          }
+          if (identityKey(acquired.manifest.identity) !== key) {
+            diagnostics.push(diagnostic("lock.identity.mismatch", key, `The acquired manifest claims a different identity than lock entry ${key}.`));
+            return;
+          }
+          const actual = packageDigest(acquired);
+          const badPath = entry.contents.find(content => {
+            const actualContent = actual.files.find(candidate => candidate.path === content.path);
+            return !actualContent || actualContent.digest !== content.digest;
+          });
+          if (badPath || actual.files.length !== entry.contents.length || actual.digest !== entry.digest) {
+            diagnostics.push(diagnostic(
+              "lock.content.tampered",
+              badPath ? badPath.path : key,
+              `Acquired content for ${key} does not match its locked digest.`,
+              [key],
+              "Do not resolve or mutate the repository; reacquire the exact immutable package."
+            ));
+            return;
+          }
+          if (!supportsRange(request.platform.release, acquired.manifest.platformRange)) {
+            diagnostics.push(diagnostic(
+              "compatibility.platform.unsupported",
+              key,
+              `${key} does not support platform ${request.platform.release}.`,
+              [key]
+            ));
+            return;
+          }
+          verified.push({key, entry, acquired});
+        });
+
+        const capabilityRoots = [];
+        verified.forEach(({key, acquired}) => {
+          (acquired.manifest.requiredCapabilities || []).forEach(name => capabilityRoots.push({name, demander: key}));
+          (acquired.manifest.capabilityRoots || []).forEach(name => capabilityRoots.push({name, demander: key}));
+        });
+        const capabilities = capabilityClosure(capabilityRoots, request.platform.capabilities, diagnostics);
+
+        const packKey = identityKey(request.configuration.policyPack);
+        const pack = verified.find(candidate => candidate.key === packKey);
+        const extensions = new Map((pack?.acquired.manifest.extensionPoints || []).map(extension => [extension.key, extension]));
+        const localChoices = new Map();
+
+        if (pack) {
+          request.configuration.localChoices.forEach(choice => {
+            const declaration = extensions.get(choice.key);
+            if (!declaration) {
+              diagnostics.push(diagnostic(
+                "choice.undeclared",
+                choice.key,
+                `Local choice ${choice.key} is not an extension point declared by ${packKey}.`,
+                [packKey]
+              ));
+            } else if (!validateChoice(declaration.type, choice.value)) {
+              diagnostics.push(diagnostic(
+                "choice.type.invalid",
+                choice.key,
+                `Local choice ${choice.key} must have type ${declaration.type}.`,
+                [packKey]
+              ));
+            } else {
+              localChoices.set(choice.key, {choice, declaration});
+            }
+          });
+        }
+
+        const candidates = [];
+        verified.forEach(({key, entry, acquired}) => {
+          (acquired.manifest.contributions || []).forEach((contribution, index) => {
+            if (contribution.extension && localChoices.has(contribution.extension)) return;
+            const origin = acquired.manifest.identity.kind === "policy-pack" ? "selected-default"
+              : acquired.manifest.identity.kind === "workflow-policy" ? "workflow-policy"
+                : "ecosystem-profile";
+            candidates.push({
+              key: contribution.key,
+              value: contribution.value,
+              owner: key,
+              origin,
+              source: {identity: key, digest: entry.digest, declaration: `/contributions/${index}`}
+            });
+          });
+        });
+
+        request.configuration.repositoryFacts.forEach((fact, index) => candidates.push({
+          key: fact.key,
+          value: fact.value,
+          owner: "repository-configuration",
+          origin: "local-declaration",
+          source: {identity: "repository-configuration", digest: request.lock.configurationDigest, declaration: `/repositoryFacts/${index}`}
+        }));
+
+        localChoices.forEach(({choice}, key) => candidates.push({
+          key,
+          value: choice.value,
+          owner: "repository-configuration",
+          origin: "local-choice",
+          declaredBy: packKey,
+          source: {identity: "repository-configuration", digest: request.lock.configurationDigest, declaration: `/localChoices/${request.configuration.localChoices.indexOf(choice)}`}
+        }));
+
+        const factsByKey = new Map();
+        candidates.forEach(fact => {
+          if (!factsByKey.has(fact.key)) factsByKey.set(fact.key, []);
+          factsByKey.get(fact.key).push(fact);
+        });
+        factsByKey.forEach((facts, key) => {
+          if (facts.length > 1) {
+            diagnostics.push(diagnostic(
+              "ownership.duplicate",
+              key,
+              `Effective fact ${key} has ${facts.length} owners; selection order cannot choose one.`,
+              facts.map(fact => fact.owner),
+              "Remove one contribution or select packages with disjoint ownership."
+            ));
+          }
+        });
+
+        if (diagnostics.length) return {ok: false, diagnostics, contract: null, explanation: null};
+
+        const packages = verified.map(({key, entry}) => ({
+          identity: key,
+          publisher: entry.publisher,
+          source: entry.source,
+          license: entry.license,
+          digest: entry.digest,
+          platformRange: entry.platformRange
+        }));
+        const facts = [...factsByKey.values()].map(([fact]) => fact).sort((left, right) => left.key.localeCompare(right.key));
+        const policyDocuments = verified.flatMap(({key, entry, acquired}) =>
+          (acquired.manifest.policyDocuments || []).map(document => ({
+            ...document,
+            owner: key,
+            packageDigest: entry.digest
+          }))
+        );
+        const compatibility = packages.map(pkg => ({identity: pkg.identity, requested: pkg.platformRange, selectedPlatform: request.platform.release, status: "compatible"}));
+        const contract = {
+          modelVersion: 1,
+          platformRelease: request.platform.release,
+          selections: {
+            policyPack: packKey,
+            workflowPolicy: identityKey(request.configuration.workflowPolicy),
+            ecosystemProfiles: request.configuration.ecosystemProfiles.map(identityKey)
+          },
+          facts,
+          policyDocuments,
+          capabilities,
+          packages,
+          compatibility
+        };
+        const explanation = {
+          summary: `${facts.length} effective facts from ${packages.length} verified local packages; ${capabilities.length} capabilities selected.`,
+          selections: contract.selections,
+          facts: facts.map(fact => ({key: fact.key, owner: fact.owner, origin: fact.origin, declaredBy: fact.declaredBy || null, source: fact.source})),
+          policyDocuments,
+          capabilities,
+          provenance: packages,
+          compatibility
+        };
+        return {ok: true, diagnostics: [], contract, explanation};
+      }
+
+      const V5_INPUT = {
+        "standards-version": 5,
+        "standards-release": "5.0.0",
+        profiles: ["common", "documentation"],
+        boundaries: [{path: ".", type: "repository", title: "Repository Standards"}],
+        "dependency-updates": [{ecosystem: "github-actions", directory: "/", schedule: "weekly"}],
+        github: {
+          repository: "lutzseverino/repository-standards",
+          "default-branch": "main",
+          settings: {
+            "delete-branch-on-merge": true,
+            "allow-squash-merge": true,
+            "allow-merge-commit": false,
+            "allow-rebase-merge": false,
+            "squash-merge-commit-title": "PR_TITLE",
+            "squash-merge-commit-message": "PR_BODY"
+          },
+          features: {issues: true, projects: false, wiki: false},
+          ruleset: null
+        },
+        variables: {},
+        "local-fragments": {".gitignore": [".repository-standards/gitignore.local"]},
+        "repository-owned": [".repository-standards.json", "README.md", "LICENSE", "CHANGELOG.md", "VERSION", "CONTEXT.md", "docs/README.md", "docs/agents/domain.md", "docs/adr/**", "standards/**", "profiles/**", "schema/**", "examples/**", "scripts/**", ".github/workflows/ci.yml", ".github/workflows/release.yml", ".github/workflows/standards-check.yml"]
+      };
+
+      function migrateV5(input) {
+        if (input["standards-version"] !== 5 || input["standards-release"] !== "5.0.0") {
+          return {ok: false, diagnostics: [diagnostic("migration.source.unsupported", "source", "This prototype accepts only the exact preceding stable release, 5.0.0.")]};
+        }
+        const profileMap = {"node-npm": id("ecosystem-profile", "node-npm"), "vite-react": id("ecosystem-profile", "vite-react")};
+        const selectedProfiles = input.profiles.filter(name => name in profileMap).map(name => profileMap[name]);
+        const absorbed = input.profiles.filter(name => !(name in profileMap));
+        const migrated = buildRequest({
+          name: "Migration from exact stable release 5.0.0",
+          policyPack: id("policy-pack", "compatibility"),
+          workflowPolicy: id("workflow-policy", "planning-oriented"),
+          ecosystemProfiles: selectedProfiles,
+          localChoices: [{key: "github.features.projects", value: input.github.features.projects}],
+          repositoryFacts: [
+            {key: "github.repository", value: input.github.repository},
+            {key: "github.default-branch", value: input.github["default-branch"]},
+            {key: "github.settings", value: input.github.settings},
+            {key: "github.features.issues", value: input.github.features.issues},
+            {key: "github.features.wiki", value: input.github.features.wiki},
+            {key: "repository.boundaries", value: input.boundaries},
+            {key: "repository.dependency-updates", value: input["dependency-updates"]},
+            {key: "repository.variables", value: input.variables},
+            {key: "repository.local-fragments", value: input["local-fragments"]},
+            {key: "repository.owned-paths", value: input["repository-owned"]}
+          ]
+        });
+        const migration = {
+          source: {protocol: 5, release: "5.0.0", digest: sha256(stable(input))},
+          targetSelections: clone(migrated.configuration),
+          acquire: selectedIdentities(migrated.configuration).map(identityKey),
+          absorbedProfiles: absorbed,
+          transfers: [
+            {from: "/profiles/common", to: "policy-pack:compatibility@6.0.0", meaning: "repository environment defaults"},
+            {from: "/profiles/documentation", to: "policy-pack:compatibility@6.0.0", meaning: "documentation environment defaults"},
+            {from: "/github", to: "repository-configuration", meaning: "repository-specific declared GitHub state"},
+            {from: "/boundaries", to: "repository-configuration", meaning: "repository-owned boundary facts"},
+            {from: "/repository-owned", to: "repository-configuration", meaning: "preserved repository ownership"}
+          ],
+          retireAuthorities: ["v5 profile inheritance", "v5 profile registry", "split workflow and lifecycle skill registries"],
+          requiredMaintainerWork: [],
+          policyEquivalence: "Compatibility pack plus planning-oriented workflow preserves the intended v5 policy while changing its owners."
+        };
+        return {ok: true, request: migrated, migration, diagnostics: []};
+      }
+
+      function duplicateOwnershipFixture() {
+        return buildRequest({
+          name: "Rejected · duplicate ownership",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "planning-oriented"),
+          ecosystemProfiles: [id("ecosystem-profile", "vite-react"), id("ecosystem-profile", "strict-ci-conflict")],
+          repositoryFacts: repositoryFacts("duplicate-ownership")
+        });
+      }
+
+      function incompatibleFixture() {
+        return buildRequest({
+          name: "Rejected · unsupported capability",
+          policyPack: id("policy-pack", "compatibility"),
+          workflowPolicy: id("workflow-policy", "marketplace-dependent"),
+          repositoryFacts: repositoryFacts("incompatible-capability")
+        });
+      }
+
+      function run(request) {
+        return resolve(clone(request));
+      }
+
+      function initialState() {
+        const request = fixture("compat-planning-zero");
+        return {
+          network: "online (unused by resolver)",
+          request,
+          result: run(request),
+          migration: null,
+          lastChange: "Loaded the compatibility pack with the planning workflow and no ecosystem profiles.",
+          history: ["Initial representative repository resolved"]
+        };
+      }
+
+      function transition(state, action) {
+        let request;
+        let migration = null;
+        let network = state.network;
+        let lastChange;
+
+        switch (action.type) {
+          case "RESET":
+            return initialState();
+          case "LOAD_FIXTURE":
+            request = fixture(action.name);
+            lastChange = `Loaded ${request.name}.`;
+            break;
+          case "SET_OFFLINE_AND_RESOLVE":
+            request = clone(state.request);
+            network = "offline";
+            lastChange = "Disabled the network. Resolution still used only configuration, lock, acquired packages, and the pinned platform inventory.";
+            break;
+          case "ADD_DUPLICATE_PROFILE":
+            request = duplicateOwnershipFixture();
+            lastChange = "Selected two profiles that both claim the CI workflow path.";
+            break;
+          case "USE_INCOMPATIBLE_WORKFLOW":
+            request = incompatibleFixture();
+            lastChange = "Selected a workflow that requires a capability absent from the pinned platform.";
+            break;
+          case "TAMPER_ACQUIRED_CONTENT": {
+            request = fixture("compat-planning-zero");
+            const key = identityKey(request.configuration.policyPack);
+            request.acquiredPackages[key].files["policy/repository-lifecycle.md"] += "tampered after acquisition\n";
+            lastChange = "Changed acquired policy content without changing its lock entry.";
+            break;
+          }
+          case "MIGRATE_V5": {
+            const migrated = migrateV5(clone(V5_INPUT));
+            if (!migrated.ok) return {...state, result: migrated, lastChange: "Migration input was rejected."};
+            request = migrated.request;
+            migration = migrated.migration;
+            lastChange = "Read the exact v5.0.0 declaration and produced new selections, preserved facts, acquisition needs, ownership transfers, and retired authorities.";
+            break;
+          }
+          default:
+            throw new Error(`Unknown action ${action.type}`);
+        }
+
+        const result = run(request);
+        return {
+          network,
+          request,
+          result,
+          migration,
+          lastChange,
+          history: [...state.history, lastChange].slice(-8)
+        };
+      }
+
+      return Object.freeze({initialState, transition, identityKey});
+    })();
+
+    const escapeHtml = value => String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+
+    const formatValue = value => {
+      if (value === null) return "none";
+      if (Array.isArray(value)) return value.length ? value.map(item => typeof item === "object" ? JSON.stringify(item) : item).join(", ") : "empty list";
+      if (typeof value === "object") return JSON.stringify(value);
+      return String(value);
+    };
+
+    let state = ResolverPrototype.initialState();
+    let activeWalkthrough = "matrix";
+    let walkthroughProgress = 0;
+
+    const freeActions = [
+      ["Compatibility + planning · 0 profiles", {type: "LOAD_FIXTURE", name: "compat-planning-zero"}],
+      ["Compatibility + issue · 1 profile", {type: "LOAD_FIXTURE", name: "compat-issue-one"}],
+      ["Minimal + planning · several profiles", {type: "LOAD_FIXTURE", name: "minimal-planning-several"}],
+      ["Minimal + issue · 0 profiles", {type: "LOAD_FIXTURE", name: "minimal-issue-zero"}],
+      ["Resolve offline", {type: "SET_OFFLINE_AND_RESOLVE"}],
+      ["Reject duplicate ownership", {type: "ADD_DUPLICATE_PROFILE"}],
+      ["Reject unsupported capability", {type: "USE_INCOMPATIBLE_WORKFLOW"}],
+      ["Detect acquired-content tampering", {type: "TAMPER_ACQUIRED_CONTENT"}],
+      ["Migrate exact v5.0.0 input", {type: "MIGRATE_V5"}],
+      ["Reset", {type: "RESET"}]
+    ];
+
+    const walkthroughs = {
+      matrix: {
+        title: "Orthogonal selection matrix",
+        description: "Run both workflows with both policy packs. Watch the workflow change independently of pack-owned facts, across zero, one, and several profiles plus typed local choices.",
+        steps: freeActions.slice(0, 4)
+      },
+      lock: {
+        title: "Offline lock and tamper evidence",
+        description: "First resolve with no network. Then alter one acquired policy document while leaving the immutable lock untouched; resolution must stop before producing a contract.",
+        steps: [freeActions[0], freeActions[4], freeActions[7]]
+      },
+      rejection: {
+        title: "No ambiguity or capability guessing",
+        description: "Two profiles cannot own the same managed path, and a workflow cannot request a capability missing from the pinned platform. Both fail with stable, actionable diagnostics.",
+        steps: [freeActions[5], freeActions[6]]
+      },
+      migration: {
+        title: "Exact preceding-release migration",
+        description: "Read the exact v5.0.0 declaration, select the compatibility environment, preserve repository-local facts, and name the authorities the future migration must retire.",
+        steps: [freeActions[8]]
+      },
+      provenance: {
+        title: "Explain every effective fact",
+        description: "Resolve the richest representative repository and inspect each fact's sole owner, selected/default/local origin, declaration pointer, package digest, policy documents, and capability demand.",
+        steps: [freeActions[2]]
+      }
+    };
+
+    function dispatch(action, fromWalkthrough = false) {
+      state = ResolverPrototype.transition(state, action);
+      if (fromWalkthrough) walkthroughProgress += 1;
+      render();
+    }
+
+    function field(label, value) {
+      return `<div class="field"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(formatValue(value))}</dd></div>`;
+    }
+
+    function renderState() {
+      const {request, result, migration} = state;
+      const config = request.configuration;
+      const selected = [config.policyPack, config.workflowPolicy, ...config.ecosystemProfiles].map(ResolverPrototype.identityKey);
+      const statusClass = result.ok ? "good" : "bad";
+      const statusText = result.ok ? "Resolved" : "Rejected";
+      const locked = request.lock.packages;
+
+      const integrityRows = locked.map(entry => `<tr>
+        <td><code>${escapeHtml(ResolverPrototype.identityKey(entry.identity))}</code></td>
+        <td>${escapeHtml(entry.publisher)}</td>
+        <td><code>${escapeHtml(entry.source.revision.slice(0, 10))}</code></td>
+        <td>${escapeHtml(entry.license)}</td>
+        <td><code>${escapeHtml(entry.digest.slice(0, 21))}…</code></td>
+      </tr>`).join("");
+
+      const diagnostics = result.diagnostics.length ? result.diagnostics.map(item => `<div class="diagnostic">
+        <strong><code>${escapeHtml(item.code)}</code> · ${escapeHtml(item.subject)}</strong>
+        <div>${escapeHtml(item.message)}</div>
+        <div><small>Sources: ${escapeHtml(item.sources.length ? item.sources.join(", ") : "input declaration")}</small></div>
+        <div><small>Next: ${escapeHtml(item.remediation)}</small></div>
+      </div>`).join("") : '<p class="empty">No diagnostics. Every selected input has one coherent interpretation.</p>';
+
+      let contract = '<p class="empty">No resolved repository contract is emitted for a rejected input.</p>';
+      if (result.ok) {
+        const factRows = result.contract.facts.map(fact => `<tr>
+          <td><code>${escapeHtml(fact.key)}</code></td>
+          <td>${escapeHtml(formatValue(fact.value))}</td>
+          <td><code>${escapeHtml(fact.owner)}</code></td>
+          <td>${escapeHtml(fact.origin)}</td>
+          <td><code>${escapeHtml(fact.source.declaration)}</code></td>
+          <td><code>${escapeHtml(fact.source.digest.slice(0, 18))}…</code></td>
+        </tr>`).join("");
+        const capabilityRows = result.contract.capabilities.map(capability => `<tr>
+          <td><code>${escapeHtml(capability.name)}</code></td>
+          <td>${escapeHtml(capability.demandedBy.join(", "))}</td>
+        </tr>`).join("");
+        const documentRows = result.contract.policyDocuments.map(document => `<tr>
+          <td><code>${escapeHtml(document.path)}</code></td>
+          <td>${escapeHtml(document.purpose)}</td>
+          <td><code>${escapeHtml(document.owner)}</code></td>
+        </tr>`).join("");
+        contract = `
+          <h3>Structured explanation</h3>
+          <p>${escapeHtml(result.explanation.summary)}</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Effective fact</th><th>Value</th><th>Sole owner</th><th>Origin</th><th>Declaration</th><th>Evidence digest</th></tr></thead>
+            <tbody>${factRows}</tbody>
+          </table></div>
+          <h3 class="section-gap">Selected capability closure</h3>
+          <div class="table-wrap"><table><thead><tr><th>Capability</th><th>Demanded by</th></tr></thead><tbody>${capabilityRows}</tbody></table></div>
+          <h3 class="section-gap">Applicable policy documents</h3>
+          <div class="table-wrap"><table><thead><tr><th>Document</th><th>Purpose</th><th>Owner</th></tr></thead><tbody>${documentRows || '<tr><td colspan="3">None</td></tr>'}</tbody></table></div>`;
+      }
+
+      let migrationPanel = "";
+      if (migration) {
+        const transferRows = migration.transfers.map(item => `<tr><td><code>${escapeHtml(item.from)}</code></td><td><code>${escapeHtml(item.to)}</code></td><td>${escapeHtml(item.meaning)}</td></tr>`).join("");
+        migrationPanel = `<div class="section-gap">
+          <h3>Migration evidence from v5.0.0</h3>
+          <div class="state-grid">
+            <div class="state-card"><dl>
+              ${field("Source", `protocol ${migration.source.protocol}, release ${migration.source.release}`)}
+              ${field("Source digest", migration.source.digest)}
+              ${field("Acquire", migration.acquire)}
+              ${field("Absorbed profiles", migration.absorbedProfiles)}
+            </dl></div>
+            <div class="state-card"><dl>
+              ${field("Retire authorities", migration.retireAuthorities)}
+              ${field("Maintainer work", migration.requiredMaintainerWork.length ? migration.requiredMaintainerWork : "none")}
+              ${field("Equivalence", migration.policyEquivalence)}
+            </dl></div>
+          </div>
+          <div class="table-wrap section-gap"><table><thead><tr><th>v5 source</th><th>New owner</th><th>Meaning</th></tr></thead><tbody>${transferRows}</tbody></table></div>
+        </div>`;
+      }
+
+      document.querySelector("#state").innerHTML = `
+        <div class="status-line">
+          <span class="pill ${statusClass}">${statusText}</span>
+          <span class="pill">Network: ${escapeHtml(state.network)}</span>
+          <span class="pill">Platform: ${escapeHtml(request.platform.release)}</span>
+          <span class="pill">Lock: ${locked.length} exact packages</span>
+        </div>
+        <p class="change">${escapeHtml(state.lastChange)}</p>
+        <div class="state-grid">
+          <div class="state-card"><h3>Repository configuration</h3><dl>
+            ${field("Fixture", request.name)}
+            ${field("Policy pack", ResolverPrototype.identityKey(config.policyPack))}
+            ${field("Workflow", ResolverPrototype.identityKey(config.workflowPolicy))}
+            ${field("Profiles", config.ecosystemProfiles.length ? config.ecosystemProfiles.map(ResolverPrototype.identityKey) : "none")}
+            ${field("Local choices", config.localChoices.map(choice => `${choice.key} = ${formatValue(choice.value)}`))}
+            ${field("Local facts", config.repositoryFacts.map(fact => fact.key))}
+          </dl></div>
+          <div class="state-card"><h3>Local resolution inputs</h3><dl>
+            ${field("Selected identities", selected)}
+            ${field("Configuration digest", request.lock.configurationDigest)}
+            ${field("Acquired packages", Object.keys(request.acquiredPackages))}
+            ${field("Network input", "none — deliberately absent from resolver interface")}
+          </dl></div>
+        </div>
+        <h3 class="section-gap">Immutable lock and provenance</h3>
+        <div class="table-wrap"><table><thead><tr><th>Identity</th><th>Publisher</th><th>Source revision</th><th>License</th><th>Package digest</th></tr></thead><tbody>${integrityRows}</tbody></table></div>
+        <h3 class="section-gap">Diagnostics</h3>
+        ${diagnostics}
+        <div class="section-gap">${contract}</div>
+        ${migrationPanel}
+        <h3 class="section-gap">Recent actions</h3>
+        <ol class="history">${state.history.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`;
+    }
+
+    function renderFreePlay() {
+      document.querySelector("#free-play").innerHTML = freeActions.map(([label, action], index) =>
+        `<button class="${index < 4 ? "primary" : ""}" data-free-action="${index}">${escapeHtml(label)}</button>`
+      ).join("");
+      document.querySelectorAll("[data-free-action]").forEach(button => {
+        button.addEventListener("click", () => dispatch(freeActions[Number(button.dataset.freeAction)][1]));
+      });
+    }
+
+    function renderWalkthrough() {
+      document.querySelector("#tabs").innerHTML = Object.entries(walkthroughs).map(([key, item]) =>
+        `<button class="tab ${key === activeWalkthrough ? "active" : ""}" role="tab" aria-selected="${key === activeWalkthrough}" data-tab="${key}">${escapeHtml(item.title)}</button>`
+      ).join("");
+      document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => {
+        activeWalkthrough = button.dataset.tab;
+        walkthroughProgress = 0;
+        state = ResolverPrototype.initialState();
+        render();
+      }));
+
+      const item = walkthroughs[activeWalkthrough];
+      document.querySelector("#walkthrough").innerHTML = `<div class="walkthrough-copy">
+        <h3>${escapeHtml(item.title)}</h3>
+        <p>${escapeHtml(item.description)}</p>
+        <p><strong>Progress:</strong> ${Math.min(walkthroughProgress, item.steps.length)} of ${item.steps.length} steps</p>
+      </div>
+      <div class="step-list">${item.steps.map(([label], index) => `<button
+        class="${index < walkthroughProgress ? "done" : ""}"
+        data-step="${index}"
+        ${index === walkthroughProgress ? "" : "disabled"}
+      >${index + 1}. ${escapeHtml(label)}</button>`).join("")}</div>`;
+      document.querySelectorAll("[data-step]").forEach(button => button.addEventListener("click", () => {
+        const step = Number(button.dataset.step);
+        dispatch(item.steps[step][1], true);
+      }));
+    }
+
+    function render() {
+      renderState();
+      renderFreePlay();
+      renderWalkthrough();
+    }
+
+    render();
+  </script>
+</body>
+</html>
