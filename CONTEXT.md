@@ -5,9 +5,9 @@ Canonical language for the conventions shared by participating repositories.
 ## Language
 
 **Canonical workflow**:
-The actor-neutral, repository-owned change process selected for a repository.
-A workflow is canonical for repositories selecting it, not for every repository
-compatible with the capability platform.
+The actor-neutral change process defined by the workflow policy selected for a
+repository. A workflow is canonical for repositories selecting it, not for
+every repository compatible with the capability platform.
 _Avoid_: Skill workflow, universal workflow
 
 **Workflow policy**:
@@ -68,9 +68,9 @@ path, and two selected documents cannot own the same subject.
 _Avoid_: Policy document path, documentation category
 
 **Repository configuration**:
-The repository-owned selection of policy packs, workflow policy, ecosystem
-profiles, and explicit local choices. It owns machine-readable facts, not prose
-policy.
+The repository-owned selection of one policy pack, one workflow policy,
+ecosystem profiles, and explicit local choices. It owns repository-local
+machine-readable facts, not prose policy.
 _Avoid_: Policy pack, resolved repository contract, agent configuration
 
 **Repository setup**:

@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted in the repository architecture design session completed on
-2026-09-02. The replacement specification will reconcile the existing issue
-tree before implementation begins.
+Accepted in the repository architecture design session completed on 2026-09-02
+and recorded in
+[issue #68](https://github.com/lutzseverino/repository-standards/issues/68).
+The replacement specification will reconcile the existing issue tree before
+implementation begins.
 
 ## Context
 
