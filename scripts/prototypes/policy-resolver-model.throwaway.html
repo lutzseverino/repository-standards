@@ -802,10 +802,15 @@
         managedByTarget.forEach((facts, target) => {
           if (facts.length < 2) return;
           if (!facts.every(fact => fact.composition)) {
+            const modes = new Set(facts.map(fact => fact.value?.mode));
+            const code = modes.size > 1 ? "composition.mode.conflict" : "ownership.duplicate";
+            const message = modes.size > 1
+              ? `Managed target ${target} mixes compose with an exclusive mode.`
+              : `Managed target ${target} has multiple exclusive owners.`;
             diagnostics.push(diagnostic(
-              "ownership.duplicate",
+              code,
               target,
-              `Managed target ${target} has competing exclusive or mixed-mode owners.`,
+              message,
               facts.map(fact => fact.owner),
               "Select disjoint owners, or declare every contribution as an independently owned composition fragment."
             ));
