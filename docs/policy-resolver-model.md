@@ -30,7 +30,7 @@ of package selection order. This preserves the current supported `.gitignore`
 composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/123620547ff539737728552764175fccd5cb4eee/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/c22a8041af235c91f84616d16ca4362f59a96a6e/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
 
@@ -60,8 +60,9 @@ The guided failure and migration cases demonstrate:
   `.gitignore` fragments with sole fragment owners and explicit orders;
 - two ecosystem profiles claiming the same exclusive managed path fail with
   `ownership.duplicate`, independent of selection order;
-- a workflow requiring a capability absent from the pinned platform fails with
-  `compatibility.capability.unsupported`;
+- an ecosystem profile is rejected with
+  `compatibility.capability.unsupported` when it requires a capability absent
+  from the pinned platform;
 - changing an acquired policy document without changing the lock fails with
   `lock.content.tampered` before an effective contract is returned;
 - changing duplicated lock metadata without changing the content-hashed
@@ -138,23 +139,23 @@ Every package has one common, content-hashed closed envelope:
 
 - kind, publisher, name, and semantic version;
 - supported capability-platform range;
-- required capability names;
+- capability root names;
 - authoritative source attribution and license metadata;
 - references to included content and policy documents.
 
 The immutable locked identity is the complete coordinate, including kind,
 publisher, name, and exact version. The manifest is authoritative for declared
-publisher, source, license, compatibility, and capability requirements. Source
+publisher, source, license, compatibility, and capability roots. Source
 and publisher remain separately visible trust roots so a change to either can
 require renewed confirmation.
 
 Each kind then has a distinct closed payload:
 
 - a policy pack declares typed repository-environment defaults, extension
-  points, capability requirements, authoritative policy documents, and
-  optional non-binding workflow or profile recommendations;
-- a workflow policy declares capability roots, ordered process or transition
-  facts, readiness criteria, and its authoritative workflow document;
+  points, authoritative policy documents, and optional non-binding workflow or
+  profile recommendations;
+- a workflow policy declares ordered process or transition facts, readiness
+  criteria, and its authoritative workflow document;
 - an ecosystem profile declares applicability plus explicit observable
   repository-environment contributions and its policy documents.
 
@@ -263,8 +264,9 @@ The production resolver should perform phases in this order:
 2. prove that the lock matches the pinned platform and configuration;
 3. verify selected identities, acquired content, package digests, and exact
    lock/manifest metadata parity;
-4. validate package/platform and required-capability compatibility;
-5. validate workflow capability closure and cycles;
+4. validate package/platform compatibility;
+5. validate transitive capability closure and cycles for roots from every
+   selected package;
 6. validate declared extension points and typed local choices;
 7. normalize typed contributions into the ownership index;
 8. apply only explicit local-choice replacement;

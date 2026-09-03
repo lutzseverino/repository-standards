@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted in [issue #45](https://github.com/lutzseverino/repository-standards/issues/45)
+Superseded in part by
+[ADR 0016](0016-separate-capability-platform-from-policy-packs.md). Accepted in
+[issue #45](https://github.com/lutzseverino/repository-standards/issues/45).
 
 ## Context
 
