@@ -430,7 +430,7 @@
             identity: id("workflow-policy", "planning-oriented"),
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
-            requiredCapabilities: ["implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
+            requiredCapabilities: ["resolve", "implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
             contributions: [
               {key: "workflow.process", value: ["grill-with-docs", "specify", "ticket", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
@@ -444,7 +444,7 @@
             identity: id("workflow-policy", "issue-directed"),
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
-            requiredCapabilities: ["implementation", "github-delivery"],
+            requiredCapabilities: ["resolve", "implementation", "github-delivery"],
             contributions: [
               {key: "workflow.process", value: ["issue", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
@@ -459,6 +459,7 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "marketplace-sync"],
+            applicability: {ecosystem: "node"},
             contributions: [],
             policyDocuments: []
           },
@@ -470,6 +471,7 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
+            applicability: {ecosystem: "node", packageManager: "npm", projectKind: "package"},
             contributions: [
               {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-node", fragmentId: "node-npm", order: 20}},
               {key: "managed:.github/dependabot.yml", value: {mode: "exact", source: "environment/dependabot.yml"}},
@@ -489,6 +491,7 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
+            applicability: {ecosystem: "node", framework: "vite-react"},
             contributions: [
               {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-vite", fragmentId: "vite-react", order: 30}},
               {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/ci.yml"}}
@@ -507,6 +510,7 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
+            applicability: {ecosystem: "node", framework: "vite-react"},
             contributions: [
               {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/strict-ci.yml"}}
             ],
@@ -531,12 +535,13 @@
         return [selection.policyPack, selection.workflowPolicy, ...selection.ecosystemProfiles];
       }
 
-      function buildRequest({name, policyPack, workflowPolicy, ecosystemProfiles = [], localChoices = [], repositoryFacts = []}) {
+      function buildRequest({name, policyPack, workflowPolicy, ecosystemProfiles = [], applicabilityFacts = {}, localChoices = [], repositoryFacts = []}) {
         const configuration = {
           modelVersion: 1,
           policyPack,
           workflowPolicy,
           ecosystemProfiles,
+          applicabilityFacts,
           localChoices,
           repositoryFacts
         };
@@ -584,6 +589,7 @@
           policyPack: id("policy-pack", "compatibility"),
           workflowPolicy: id("workflow-policy", "issue-directed"),
           ecosystemProfiles: [id("ecosystem-profile", "node-npm")],
+          applicabilityFacts: {ecosystem: "node", packageManager: "npm", projectKind: "package"},
           localChoices: [{key: "github.features.projects", value: true}],
           repositoryFacts: repositoryFacts("compat-issue-one")
         },
@@ -592,6 +598,7 @@
           policyPack: id("policy-pack", "minimal"),
           workflowPolicy: id("workflow-policy", "planning-oriented"),
           ecosystemProfiles: [id("ecosystem-profile", "node-npm"), id("ecosystem-profile", "vite-react")],
+          applicabilityFacts: {ecosystem: "node", packageManager: "npm", projectKind: "package", framework: "vite-react"},
           localChoices: [{key: "canonical-validation.arguments", value: ["--all"]}],
           repositoryFacts: repositoryFacts("minimal-planning-several")
         },
@@ -625,39 +632,52 @@
 
       function capabilityClosure(roots, inventory, diagnostics) {
         const resolved = new Set();
-        const missing = new Set();
-        const demandedBy = new Map();
+        const demandReasons = new Map();
+        const missingReasons = new Map();
         const visiting = new Set();
 
-        function visit(name, demander) {
-          if (!demandedBy.has(name)) demandedBy.set(name, new Set());
-          demandedBy.get(name).add(demander);
+        function addReason(target, name, reason) {
+          if (!target.has(name)) target.set(name, new Map());
+          target.get(name).set(stable(reason), reason);
+        }
+
+        function visit(name, reason) {
+          addReason(demandReasons, name, reason);
           if (!(name in inventory)) {
-            if (!missing.has(name)) {
-              missing.add(name);
-              diagnostics.push(diagnostic(
-                "compatibility.capability.unsupported",
-                name,
-                `Selected policy requires capability ${name}, which is absent from platform ${PLATFORM.release}.`,
-                [demander],
-                "Select a compatible package or a platform release that provides the capability."
-              ));
-            }
+            addReason(missingReasons, name, reason);
             return;
           }
           if (visiting.has(name)) {
-            diagnostics.push(diagnostic("capability.cycle", name, `Capability dependency cycle includes ${name}.`, [demander]));
+            diagnostics.push(diagnostic("capability.cycle", name, `Capability dependency cycle includes ${name}.`, [reason.source]));
             return;
           }
           if (resolved.has(name)) return;
           visiting.add(name);
-          inventory[name].forEach(dependency => visit(dependency, name));
+          inventory[name].forEach((dependency, index) => visit(dependency, {
+            kind: "capability-dependency",
+            source: name,
+            declaration: `/capabilities/${name}/${index}`
+          }));
           visiting.delete(name);
           resolved.add(name);
         }
 
-        roots.forEach(({name, demander}) => visit(name, demander));
-        return [...resolved].sort().map(name => ({name, demandedBy: [...(demandedBy.get(name) || [])].sort()}));
+        roots.forEach(({name, demander, declaration}) => visit(name, {kind: "package-root", source: demander, declaration}));
+        [...missingReasons.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([name, reasons]) => {
+          const sources = [...new Set([...reasons.values()].map(reason => reason.source))].sort();
+          diagnostics.push(diagnostic(
+            "compatibility.capability.unsupported",
+            name,
+            `Selected packages require capability ${name}, which is absent from platform ${PLATFORM.release}.`,
+            sources,
+            "Select compatible packages or a platform release that provides the capability."
+          ));
+        });
+        return [...resolved].sort().map(name => ({
+          name,
+          owner: "capability-platform",
+          demandReasons: [...(demandReasons.get(name)?.values() || [])].sort((left, right) => stable(left).localeCompare(stable(right)))
+        }));
       }
 
       function resolve(request) {
@@ -728,9 +748,42 @@
           verified.push({key, entry, acquired});
         });
 
+        verified
+          .filter(({acquired}) => acquired.manifest.identity.kind === "ecosystem-profile")
+          .forEach(({key, acquired}) => {
+            const predicate = acquired.manifest.applicability;
+            const missing = Object.keys(predicate).filter(field => !(field in request.configuration.applicabilityFacts));
+            const mismatched = Object.keys(predicate).filter(field =>
+              field in request.configuration.applicabilityFacts
+              && stable(request.configuration.applicabilityFacts[field]) !== stable(predicate[field])
+            );
+            if (missing.length) {
+              diagnostics.push(diagnostic(
+                "profile.applicability.incomplete",
+                key,
+                `Applicability for ${key} cannot be proven because facts are missing: ${missing.sort().join(", ")}.`,
+                [key, "repository-configuration"],
+                "Record the missing repository facts or remove the unproven profile selection."
+              ));
+            }
+            if (mismatched.length) {
+              diagnostics.push(diagnostic(
+                "profile.applicability.mismatch",
+                key,
+                `Selected profile ${key} does not match repository facts: ${mismatched.sort().join(", ")}.`,
+                [key, "repository-configuration"],
+                "Select only profiles whose declared applicability matches the repository."
+              ));
+            }
+          });
+
         const capabilityRoots = [];
         verified.forEach(({key, acquired}) => {
-          (acquired.manifest.requiredCapabilities || []).forEach(name => capabilityRoots.push({name, demander: key}));
+          (acquired.manifest.requiredCapabilities || []).forEach((name, index) => capabilityRoots.push({
+            name,
+            demander: key,
+            declaration: `/requiredCapabilities/${index}`
+          }));
         });
         const capabilities = capabilityClosure(capabilityRoots, request.platform.capabilities, diagnostics);
 
@@ -994,6 +1047,7 @@
           policyPack: id("policy-pack", "minimal"),
           workflowPolicy: id("workflow-policy", "planning-oriented"),
           ecosystemProfiles: [id("ecosystem-profile", "vite-react"), id("ecosystem-profile", "strict-ci-conflict")],
+          applicabilityFacts: {ecosystem: "node", framework: "vite-react"},
           repositoryFacts: repositoryFacts("duplicate-ownership")
         });
       }
@@ -1004,7 +1058,19 @@
           policyPack: id("policy-pack", "compatibility"),
           workflowPolicy: id("workflow-policy", "issue-directed"),
           ecosystemProfiles: [id("ecosystem-profile", "marketplace-dependent")],
+          applicabilityFacts: {ecosystem: "node"},
           repositoryFacts: repositoryFacts("incompatible-capability")
+        });
+      }
+
+      function nonmatchingProfileFixture() {
+        return buildRequest({
+          name: "Rejected · nonmatching profile",
+          policyPack: id("policy-pack", "minimal"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          ecosystemProfiles: [id("ecosystem-profile", "node-npm")],
+          applicabilityFacts: {ecosystem: "node", packageManager: "pnpm", projectKind: "package"},
+          repositoryFacts: repositoryFacts("nonmatching-profile")
         });
       }
 
@@ -1046,9 +1112,13 @@
             request = duplicateOwnershipFixture();
             lastChange = "Selected two profiles that both claim the CI workflow path.";
             break;
-          case "USE_INCOMPATIBLE_WORKFLOW":
+          case "USE_INCOMPATIBLE_PACKAGE":
             request = incompatibleFixture();
             lastChange = "Selected an ecosystem profile that requires a capability absent from the pinned platform.";
+            break;
+          case "USE_NONMATCHING_PROFILE":
+            request = nonmatchingProfileFixture();
+            lastChange = "Selected the npm profile for repository facts that declare pnpm.";
             break;
           case "TAMPER_ACQUIRED_CONTENT": {
             request = fixture("compat-planning-zero");
@@ -1114,10 +1184,11 @@
       ["Minimal + issue · 0 profiles", {type: "LOAD_FIXTURE", name: "minimal-issue-zero"}],
       ["Resolve offline", {type: "SET_OFFLINE_AND_RESOLVE"}],
       ["Reject duplicate ownership", {type: "ADD_DUPLICATE_PROFILE"}],
-      ["Reject unsupported capability", {type: "USE_INCOMPATIBLE_WORKFLOW"}],
+      ["Reject unsupported capability", {type: "USE_INCOMPATIBLE_PACKAGE"}],
       ["Detect acquired-content tampering", {type: "TAMPER_ACQUIRED_CONTENT"}],
       ["Reject mismatched lock metadata", {type: "TAMPER_LOCK_METADATA"}],
       ["Migrate exact v5.0.0 input", {type: "MIGRATE_V5"}],
+      ["Reject nonmatching profile", {type: "USE_NONMATCHING_PROFILE"}],
       ["Reset", {type: "RESET"}]
     ];
 
@@ -1135,7 +1206,7 @@
       rejection: {
         title: "No ambiguity or capability guessing",
         description: "Two profiles cannot own the same managed path, and any selected package is rejected when its capability closure is unavailable from the pinned platform. Both fail with stable, actionable diagnostics.",
-        steps: [freeActions[5], freeActions[6]]
+        steps: [freeActions[5], freeActions[6], freeActions[10]]
       },
       migration: {
         title: "Exact preceding-release migration",
@@ -1194,7 +1265,8 @@
         </tr>`).join("");
         const capabilityRows = result.contract.capabilities.map(capability => `<tr>
           <td><code>${escapeHtml(capability.name)}</code></td>
-          <td>${escapeHtml(capability.demandedBy.join(", "))}</td>
+          <td><code>${escapeHtml(capability.owner)}</code></td>
+          <td>${escapeHtml(capability.demandReasons.map(reason => `${reason.kind}: ${reason.source} @ ${reason.declaration}`).join(", "))}</td>
         </tr>`).join("");
         const compositionRows = result.contract.compositions.flatMap(composition =>
           composition.fragments.map(fragment => `<tr>
@@ -1219,7 +1291,7 @@
           <h3 class="section-gap">Composed managed targets</h3>
           <div class="table-wrap"><table><thead><tr><th>Target</th><th>Explicit order</th><th>Fragment</th><th>Sole fragment owner</th></tr></thead><tbody>${compositionRows || '<tr><td colspan="4">None</td></tr>'}</tbody></table></div>
           <h3 class="section-gap">Selected capability closure</h3>
-          <div class="table-wrap"><table><thead><tr><th>Capability</th><th>Demanded by</th></tr></thead><tbody>${capabilityRows}</tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Capability</th><th>Owner</th><th>Demand reasons</th></tr></thead><tbody>${capabilityRows}</tbody></table></div>
           <h3 class="section-gap">Applicable policy documents</h3>
           <div class="table-wrap"><table><thead><tr><th>Document</th><th>Purpose</th><th>Owner</th></tr></thead><tbody>${documentRows || '<tr><td colspan="3">None</td></tr>'}</tbody></table></div>`;
       }
@@ -1260,6 +1332,7 @@
             ${field("Policy pack", ResolverPrototype.identityKey(config.policyPack))}
             ${field("Workflow", ResolverPrototype.identityKey(config.workflowPolicy))}
             ${field("Profiles", config.ecosystemProfiles.length ? config.ecosystemProfiles.map(ResolverPrototype.identityKey) : "none")}
+            ${field("Applicability facts", config.applicabilityFacts)}
             ${field("Local choices", config.localChoices.map(choice => `${choice.key} = ${formatValue(choice.value)}`))}
             ${field("Local facts", config.repositoryFacts.map(fact => fact.key))}
           </dl></div>
