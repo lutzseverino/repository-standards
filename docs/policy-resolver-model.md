@@ -256,8 +256,9 @@ semantics.
 
 Every policy-document declaration contains one platform-defined policy subject,
 one content path, and its purpose. The subject—not its path—is the canonical
-ownership address. Two selected packages cannot claim authoritative documents
-for the same subject even when their paths or prose differ.
+ownership address. No two selected policy-document declarations can claim the
+same subject, whether they come from different packages or from the same
+package and whether their paths or prose differ.
 
 When an authoritative document is also emitted as managed repository content,
 the same selected package owns both the policy subject and managed target. In
