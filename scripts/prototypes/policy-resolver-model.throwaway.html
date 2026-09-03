@@ -368,6 +368,7 @@
             requiredCapabilities: ["resolve", "explain", "plan", "apply"],
             contributions: [
               {key: "managed:AGENTS.md", value: {mode: "exact", source: "environment/AGENTS.md"}},
+              {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-base", fragmentId: "base", order: 0}},
               {key: "managed:CONTRIBUTING.md", value: {mode: "exact", source: "environment/CONTRIBUTING.md"}},
               {key: "github.required-labels", value: ["bug", "enhancement", "ready-for-agent", "ready-for-human"]},
               {key: "github.ruleset", value: {name: "Protect main", merge: "squash", forcePush: false}},
@@ -382,6 +383,7 @@
           },
           files: {
             "environment/AGENTS.md": "Compatibility agent guidance\n",
+            "environment/gitignore-base": ".DS_Store\n",
             "environment/CONTRIBUTING.md": "Planning-oriented contribution policy\n",
             "policy/repository-lifecycle.md": "Compatibility lifecycle policy\n"
           }
@@ -393,6 +395,7 @@
             requiredCapabilities: ["resolve", "explain", "plan", "apply"],
             contributions: [
               {key: "managed:AGENTS.md", value: {mode: "exact", source: "environment/AGENTS.md"}},
+              {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-base", fragmentId: "base", order: 0}},
               {key: "github.required-labels", value: ["bug", "enhancement"]},
               {key: "github.ruleset", value: null},
               {key: "github.features.projects", value: false, extension: "github.features.projects"},
@@ -406,6 +409,7 @@
           },
           files: {
             "environment/AGENTS.md": "Minimal agent guidance\n",
+            "environment/gitignore-base": ".DS_Store\n",
             "policy/lightweight-lifecycle.md": "Lightweight lifecycle policy\n"
           }
         },
@@ -454,12 +458,14 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             contributions: [
+              {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-node", fragmentId: "node-npm", order: 20}},
               {key: "managed:.github/dependabot.yml", value: {mode: "exact", source: "environment/dependabot.yml"}},
               {key: "dependency-update:npm:/", value: {ecosystem: "npm", directory: "/", schedule: "weekly"}}
             ],
             policyDocuments: [{path: "policy/node-npm.md", purpose: "npm repository environment"}]
           },
           files: {
+            "environment/gitignore-node": "node_modules/\n",
             "environment/dependabot.yml": "version: 2\nupdates: []\n",
             "policy/node-npm.md": "Node and npm environment guidance\n"
           }
@@ -470,11 +476,13 @@
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             contributions: [
+              {key: "managed:.gitignore", value: {mode: "compose", source: "environment/gitignore-vite", fragmentId: "vite-react", order: 30}},
               {key: "managed:.github/workflows/ci.yml", value: {mode: "exact", source: "environment/ci.yml"}}
             ],
             policyDocuments: [{path: "policy/vite-react.md", purpose: "Vite React repository environment"}]
           },
           files: {
+            "environment/gitignore-vite": "dist/\n",
             "environment/ci.yml": "name: CI\non: [push]\n",
             "policy/vite-react.md": "Vite React environment guidance\n"
           }
@@ -735,11 +743,18 @@
             const origin = acquired.manifest.identity.kind === "policy-pack" ? "selected-default"
               : acquired.manifest.identity.kind === "workflow-policy" ? "workflow-policy"
                 : "ecosystem-profile";
+            const managedTarget = contribution.key.startsWith("managed:") ? contribution.key : null;
+            const composition = managedTarget && contribution.value?.mode === "compose";
+            const canonicalKey = composition
+              ? `${contribution.key}#fragment:${key}:${contribution.value.fragmentId}`
+              : contribution.key;
             candidates.push({
-              key: contribution.key,
+              key: canonicalKey,
               value: contribution.value,
               owner: key,
               origin,
+              managedTarget,
+              composition,
               source: {identity: key, digest: entry.digest, declaration: `/contributions/${index}`}
             });
           });
@@ -768,13 +783,50 @@
           factsByKey.get(fact.key).push(fact);
         });
         factsByKey.forEach((facts, key) => {
-          if (facts.length > 1) {
+          if (facts.length > 1 && !facts.every(fact => fact.managedTarget)) {
             diagnostics.push(diagnostic(
               "ownership.duplicate",
               key,
               `Effective fact ${key} has ${facts.length} owners; selection order cannot choose one.`,
               facts.map(fact => fact.owner),
               "Remove one contribution or select packages with disjoint ownership."
+            ));
+          }
+        });
+
+        const managedByTarget = new Map();
+        candidates.filter(fact => fact.managedTarget).forEach(fact => {
+          if (!managedByTarget.has(fact.managedTarget)) managedByTarget.set(fact.managedTarget, []);
+          managedByTarget.get(fact.managedTarget).push(fact);
+        });
+        managedByTarget.forEach((facts, target) => {
+          if (facts.length < 2) return;
+          if (!facts.every(fact => fact.composition)) {
+            diagnostics.push(diagnostic(
+              "ownership.duplicate",
+              target,
+              `Managed target ${target} has competing exclusive or mixed-mode owners.`,
+              facts.map(fact => fact.owner),
+              "Select disjoint owners, or declare every contribution as an independently owned composition fragment."
+            ));
+            return;
+          }
+          if (new Set(facts.map(fact => fact.key)).size !== facts.length) {
+            diagnostics.push(diagnostic(
+              "composition.fragment.duplicate",
+              target,
+              `Composed target ${target} repeats a fragment identity.`,
+              facts.map(fact => fact.owner)
+            ));
+            return;
+          }
+          if (new Set(facts.map(fact => fact.value.order)).size !== facts.length) {
+            diagnostics.push(diagnostic(
+              "composition.order.ambiguous",
+              target,
+              `Composed target ${target} has multiple fragments at the same explicit order.`,
+              facts.map(fact => fact.owner),
+              "Assign an unambiguous order that does not depend on package selection order."
             ));
           }
         });
@@ -790,6 +842,15 @@
           platformRange: entry.platformRange
         }));
         const facts = [...factsByKey.values()].map(([fact]) => fact).sort((left, right) => left.key.localeCompare(right.key));
+        const compositions = [...managedByTarget.entries()]
+          .filter(([, groupedFacts]) => groupedFacts.every(fact => fact.composition))
+          .map(([target, groupedFacts]) => ({
+            target,
+            fragments: groupedFacts
+              .slice()
+              .sort((left, right) => left.value.order - right.value.order)
+              .map(fact => ({address: fact.key, owner: fact.owner, source: fact.value.source, order: fact.value.order}))
+          }));
         const policyDocuments = verified.flatMap(({key, entry, acquired}) =>
           (acquired.manifest.policyDocuments || []).map(document => ({
             ...document,
@@ -807,6 +868,7 @@
             ecosystemProfiles: request.configuration.ecosystemProfiles.map(identityKey)
           },
           facts,
+          compositions,
           policyDocuments,
           capabilities,
           packages,
@@ -816,6 +878,7 @@
           summary: `${facts.length} effective facts from ${packages.length} verified local packages; ${capabilities.length} capabilities selected.`,
           selections: contract.selections,
           facts: facts.map(fact => ({key: fact.key, owner: fact.owner, origin: fact.origin, declaredBy: fact.declaredBy || null, source: fact.source})),
+          compositions,
           policyDocuments,
           capabilities,
           provenance: packages,
@@ -1094,6 +1157,14 @@
           <td><code>${escapeHtml(capability.name)}</code></td>
           <td>${escapeHtml(capability.demandedBy.join(", "))}</td>
         </tr>`).join("");
+        const compositionRows = result.contract.compositions.flatMap(composition =>
+          composition.fragments.map(fragment => `<tr>
+            <td><code>${escapeHtml(composition.target)}</code></td>
+            <td>${escapeHtml(fragment.order)}</td>
+            <td><code>${escapeHtml(fragment.source)}</code></td>
+            <td><code>${escapeHtml(fragment.owner)}</code></td>
+          </tr>`)
+        ).join("");
         const documentRows = result.contract.policyDocuments.map(document => `<tr>
           <td><code>${escapeHtml(document.path)}</code></td>
           <td>${escapeHtml(document.purpose)}</td>
@@ -1106,6 +1177,8 @@
             <thead><tr><th>Effective fact</th><th>Value</th><th>Sole owner</th><th>Origin</th><th>Declaration</th><th>Evidence digest</th></tr></thead>
             <tbody>${factRows}</tbody>
           </table></div>
+          <h3 class="section-gap">Composed managed targets</h3>
+          <div class="table-wrap"><table><thead><tr><th>Target</th><th>Explicit order</th><th>Fragment</th><th>Sole fragment owner</th></tr></thead><tbody>${compositionRows || '<tr><td colspan="4">None</td></tr>'}</tbody></table></div>
           <h3 class="section-gap">Selected capability closure</h3>
           <div class="table-wrap"><table><thead><tr><th>Capability</th><th>Demanded by</th></tr></thead><tbody>${capabilityRows}</tbody></table></div>
           <h3 class="section-gap">Applicable policy documents</h3>
