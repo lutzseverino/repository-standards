@@ -339,6 +339,16 @@
       const identityKey = identity => `${identity.kind}:${identity.name}@${identity.version}`;
       const id = (kind, name, version = "6.0.0") => ({kind, name, version});
 
+      const PACKAGE_METADATA = {
+        publisher: "github.com/lutzseverino",
+        source: {
+          type: "git",
+          uri: "https://github.com/lutzseverino/repository-standards",
+          revision: "1111111111111111111111111111111111111111"
+        },
+        license: "MIT"
+      };
+
       const PLATFORM = {
         release: "6.0.0",
         capabilities: {
@@ -364,6 +374,7 @@
         {
           manifest: {
             identity: id("policy-pack", "compatibility"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "explain", "plan", "apply"],
             contributions: [
@@ -391,6 +402,7 @@
         {
           manifest: {
             identity: id("policy-pack", "minimal"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve", "explain", "plan", "apply"],
             contributions: [
@@ -416,6 +428,7 @@
         {
           manifest: {
             identity: id("workflow-policy", "planning-oriented"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["implementation", "github-delivery", "specification", "ticketing"],
             capabilityRoots: ["implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
@@ -430,6 +443,7 @@
         {
           manifest: {
             identity: id("workflow-policy", "issue-directed"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["implementation", "github-delivery"],
             capabilityRoots: ["implementation", "github-delivery"],
@@ -444,6 +458,7 @@
         {
           manifest: {
             identity: id("workflow-policy", "marketplace-dependent"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["implementation", "marketplace-sync"],
             capabilityRoots: ["implementation", "marketplace-sync"],
@@ -455,6 +470,7 @@
         {
           manifest: {
             identity: id("ecosystem-profile", "node-npm"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             contributions: [
@@ -473,6 +489,7 @@
         {
           manifest: {
             identity: id("ecosystem-profile", "vite-react"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             contributions: [
@@ -490,6 +507,7 @@
         {
           manifest: {
             identity: id("ecosystem-profile", "strict-ci-conflict"),
+            ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["resolve"],
             contributions: [
@@ -533,9 +551,9 @@
           const integrity = packageDigest(pkg);
           return {
             identity,
-            publisher: "github.com/lutzseverino",
-            source: {type: "git", uri: "https://github.com/lutzseverino/repository-standards", revision: "1111111111111111111111111111111111111111"},
-            license: "MIT",
+            publisher: pkg.manifest.publisher,
+            source: clone(pkg.manifest.source),
+            license: pkg.manifest.license,
             platformRange: pkg.manifest.platformRange,
             digest: integrity.digest,
             contents: integrity.files
@@ -672,6 +690,18 @@
           }
           if (identityKey(acquired.manifest.identity) !== key) {
             diagnostics.push(diagnostic("lock.identity.mismatch", key, `The acquired manifest claims a different identity than lock entry ${key}.`));
+            return;
+          }
+          const mismatchedMetadata = ["publisher", "source", "license", "platformRange"]
+            .find(field => stable(entry[field]) !== stable(acquired.manifest[field]));
+          if (mismatchedMetadata) {
+            diagnostics.push(diagnostic(
+              "lock.metadata.mismatch",
+              `${key}:${mismatchedMetadata}`,
+              `Locked ${mismatchedMetadata} for ${key} does not match its content-hashed manifest.`,
+              [key],
+              "Do not use either claim; reacquire the package and regenerate the lock from its verified manifest."
+            ));
             return;
           }
           const actual = packageDigest(acquired);
@@ -1030,6 +1060,12 @@
             lastChange = "Changed acquired policy content without changing its lock entry.";
             break;
           }
+          case "TAMPER_LOCK_METADATA": {
+            request = fixture("compat-planning-zero");
+            request.lock.packages[0].license = "Apache-2.0";
+            lastChange = "Changed locked license metadata without changing the content-hashed package manifest.";
+            break;
+          }
           case "MIGRATE_V5": {
             const migrated = migrateV5(clone(V5_INPUT));
             if (!migrated.ok) return {...state, result: migrated, lastChange: "Migration input was rejected."};
@@ -1083,6 +1119,7 @@
       ["Reject duplicate ownership", {type: "ADD_DUPLICATE_PROFILE"}],
       ["Reject unsupported capability", {type: "USE_INCOMPATIBLE_WORKFLOW"}],
       ["Detect acquired-content tampering", {type: "TAMPER_ACQUIRED_CONTENT"}],
+      ["Reject mismatched lock metadata", {type: "TAMPER_LOCK_METADATA"}],
       ["Migrate exact v5.0.0 input", {type: "MIGRATE_V5"}],
       ["Reset", {type: "RESET"}]
     ];
@@ -1095,8 +1132,8 @@
       },
       lock: {
         title: "Offline lock and tamper evidence",
-        description: "First resolve with no network. Then alter one acquired policy document while leaving the immutable lock untouched; resolution must stop before producing a contract.",
-        steps: [freeActions[0], freeActions[4], freeActions[7]]
+        description: "Resolve with no network, then independently alter acquired content and duplicated lock metadata. Each mismatch must stop resolution before a contract exists.",
+        steps: [freeActions[0], freeActions[4], freeActions[7], freeActions[8]]
       },
       rejection: {
         title: "No ambiguity or capability guessing",
@@ -1106,7 +1143,7 @@
       migration: {
         title: "Exact preceding-release migration",
         description: "Read the exact v5.0.0 declaration, select the compatibility environment, preserve repository-local facts, and name the authorities the future migration must retire.",
-        steps: [freeActions[8]]
+        steps: [freeActions[9]]
       },
       provenance: {
         title: "Explain every effective fact",
