@@ -430,8 +430,7 @@
             identity: id("workflow-policy", "planning-oriented"),
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
-            requiredCapabilities: ["implementation", "github-delivery", "specification", "ticketing"],
-            capabilityRoots: ["implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
+            requiredCapabilities: ["implementation", "github-delivery", "triage", "grilling", "specification", "ticketing", "wayfinding"],
             contributions: [
               {key: "workflow.process", value: ["grill-with-docs", "specify", "ticket", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
@@ -446,7 +445,6 @@
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
             requiredCapabilities: ["implementation", "github-delivery"],
-            capabilityRoots: ["implementation", "github-delivery"],
             contributions: [
               {key: "workflow.process", value: ["issue", "implement", "deliver"]},
               {key: "workflow.readiness", value: "ready-for-agent"}
@@ -457,12 +455,11 @@
         },
         {
           manifest: {
-            identity: id("workflow-policy", "marketplace-dependent"),
+            identity: id("ecosystem-profile", "marketplace-dependent"),
             ...PACKAGE_METADATA,
             platformRange: ">=6.0.0 <7.0.0",
-            requiredCapabilities: ["implementation", "marketplace-sync"],
-            capabilityRoots: ["implementation", "marketplace-sync"],
-            contributions: [{key: "workflow.process", value: ["discover", "install", "implement"]}],
+            requiredCapabilities: ["resolve", "marketplace-sync"],
+            contributions: [],
             policyDocuments: []
           },
           files: {}
@@ -734,7 +731,6 @@
         const capabilityRoots = [];
         verified.forEach(({key, acquired}) => {
           (acquired.manifest.requiredCapabilities || []).forEach(name => capabilityRoots.push({name, demander: key}));
-          (acquired.manifest.capabilityRoots || []).forEach(name => capabilityRoots.push({name, demander: key}));
         });
         const capabilities = capabilityClosure(capabilityRoots, request.platform.capabilities, diagnostics);
 
@@ -1006,7 +1002,8 @@
         return buildRequest({
           name: "Rejected · unsupported capability",
           policyPack: id("policy-pack", "compatibility"),
-          workflowPolicy: id("workflow-policy", "marketplace-dependent"),
+          workflowPolicy: id("workflow-policy", "issue-directed"),
+          ecosystemProfiles: [id("ecosystem-profile", "marketplace-dependent")],
           repositoryFacts: repositoryFacts("incompatible-capability")
         });
       }
@@ -1051,7 +1048,7 @@
             break;
           case "USE_INCOMPATIBLE_WORKFLOW":
             request = incompatibleFixture();
-            lastChange = "Selected a workflow that requires a capability absent from the pinned platform.";
+            lastChange = "Selected an ecosystem profile that requires a capability absent from the pinned platform.";
             break;
           case "TAMPER_ACQUIRED_CONTENT": {
             request = fixture("compat-planning-zero");
@@ -1137,7 +1134,7 @@
       },
       rejection: {
         title: "No ambiguity or capability guessing",
-        description: "Two profiles cannot own the same managed path, and a workflow cannot request a capability missing from the pinned platform. Both fail with stable, actionable diagnostics.",
+        description: "Two profiles cannot own the same managed path, and any selected package is rejected when its capability closure is unavailable from the pinned platform. Both fail with stable, actionable diagnostics.",
         steps: [freeActions[5], freeActions[6]]
       },
       migration: {
