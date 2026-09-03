@@ -10,8 +10,9 @@ and standards releases use semantic versioning.
 ### Added
 
 - Record the tested policy-resolver model for independent pack and workflow
-  selection, offline integrity, single ownership, provenance explanation, and
-  exact `5.0.0` migration inputs before production schema implementation.
+  selection, offline integrity, exclusive and composed ownership, provenance
+  explanation, and exact `5.0.0` migration inputs before production schema
+  implementation.
 - Install only thin `create-repository` and `adopt-standards` bootstrap skills
   at user scope through the open Agent Skills installer, then resolve and
   disclose one immutable stable release before delegating creation or adoption

@@ -13,15 +13,21 @@ profiles, and declared repository-local choices from verified local packages,
 while rejecting ambiguity and explaining every effective fact with its owner
 and provenance.
 
-The model works with one important refinement: arbitrary key-value contribution
-or repository-fact bags must not become production input. They were convenient
-inside the prototype, but would defeat closed schemas and typed extension
-points. Production inputs need kind-specific, closed payloads. The resolver may
-normalize those payloads internally into canonical contract addresses for
-ownership and provenance checks.
+The model works with two important refinements. First, arbitrary key-value
+contribution or repository-fact bags must not become production input. They
+were convenient inside the prototype, but would defeat closed schemas and
+typed extension points. Production inputs need kind-specific, closed payloads.
+The resolver may normalize those payloads internally into canonical contract
+addresses for ownership and provenance checks.
+
+Second, a managed target can be either exclusive or explicitly composed.
+Exclusive declarations retain one target owner. A composed target contains
+several independently owned fragments whose order is explicit and independent
+of package selection order. This preserves the current supported `.gitignore`
+composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/d55c0a45fdf4744e3b7025557d3d866456f81cfc/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/3bbc655423fbd4057a58217d05bd38a94e9efe6e/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
 
@@ -47,7 +53,9 @@ The guided failure and migration cases demonstrate:
 - ordinary resolution succeeds with the network disabled because the resolver
   accepts only local configuration, lock, acquired packages, and the pinned
   capability-platform inventory;
-- two ecosystem profiles claiming the same managed path fail with
+- the several-profile repository composes pack, `node-npm`, and `vite-react`
+  `.gitignore` fragments with sole fragment owners and explicit orders;
+- two ecosystem profiles claiming the same exclusive managed path fail with
   `ownership.duplicate`, independent of selection order;
 - a workflow requiring a capability absent from the pinned platform fails with
   `compatibility.capability.unsupported`;
@@ -173,7 +181,8 @@ After closed-shape and integrity validation, the resolver translates typed
 inputs into an internal ownership index keyed by canonical addresses in the
 resolved contract. Representative address families include:
 
-- managed path or managed absence;
+- exclusive managed path or managed absence;
+- composed managed fragment, identified within its parent target;
 - declared GitHub field or required resource;
 - canonical-validation field;
 - repository boundary, dependency-update declaration, or owned path;
@@ -181,10 +190,22 @@ resolved contract. Representative address families include:
 - selected capability and policy-document reference.
 
 Each material address must have exactly one effective owner. Local choices use
-the explicit extension replacement rule before duplicate detection. Every
-other collision fails; package order and profile order never establish
-precedence. Values that happen to be equal still conflict when owners differ,
-because authority would remain ambiguous.
+the explicit extension replacement rule before duplicate detection. An exact,
+template, tree-expanded, or absent managed declaration owns its target
+exclusively and conflicts with every other declaration for that target.
+
+Compose declarations may share a target only when every declaration for that
+target is compose. Each fragment has a canonical address containing the target,
+package identity, and package-local fragment identity, and that address has one
+owner. Fragment order is explicit; duplicate fragment identities or ambiguous
+orders fail rather than falling back to package or profile selection order.
+Repository-local fragments are repository-configuration-owned and follow the
+explicit order in their typed configuration section after package fragments.
+The capability platform owns the composition operation, not the fragment
+policy.
+
+Every other collision fails. Values that happen to be equal still conflict
+when owners differ, because authority would remain ambiguous.
 
 ### Resolved repository contract
 
@@ -193,6 +214,8 @@ The normalized contract contains:
 - exact selected platform, pack, workflow, and profile identities;
 - typed effective repository facts, managed content and absences, declared
   GitHub state, canonical validation, repository ownership, and workflow facts;
+- composed managed targets with their ordered, independently owned fragments
+  and aggregate provenance;
 - the validated transitive capability closure and the package that demanded
   each root;
 - applicable authoritative policy documents;
@@ -216,9 +239,9 @@ resolution pass. For every material fact it includes:
 - the extension-point declarer when a local choice replaced a default.
 
 It also includes selected identities and provenance, policy documents,
-capability closure and demand reasons, and compatibility evidence. Stable human
-output renders this same structure; it does not reconstruct provenance from
-decorative prose.
+capability closure and demand reasons, compatibility evidence, and each
+composed target's ordered fragment owners. Stable human output renders this
+same structure; it does not reconstruct provenance from decorative prose.
 
 ## Resolver order
 
@@ -232,8 +255,9 @@ The production resolver should perform phases in this order:
 6. validate declared extension points and typed local choices;
 7. normalize typed contributions into the ownership index;
 8. apply only explicit local-choice replacement;
-9. reject every remaining duplicate owner;
-10. emit the canonical contract and explanation evidence.
+9. validate exclusive targets and composed fragment identities and order;
+10. reject every remaining duplicate owner;
+11. emit the canonical contract and explanation evidence.
 
 Later phases do not guess after an earlier authority or integrity failure. For
 example, a tampered pack produces the tamper diagnostic rather than cascading
@@ -262,6 +286,7 @@ families:
 | Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported` |
 | Capability closure | `capability.missing`, `capability.cycle` |
 | Local choice | `choice.undeclared`, `choice.type.invalid` |
+| Composition | `composition.mode.conflict`, `composition.fragment.duplicate`, `composition.order.ambiguous` |
 | Ownership | `ownership.duplicate` |
 
 Production may add more specific codes, but should retain the phase and subject
@@ -281,6 +306,9 @@ The migration result needs:
 - explicit mapping of selectable v5 ecosystem profiles to new package
   identities, while recording behavior absorbed from `common` and
   `documentation`;
+- preservation of the ordered `common`, `node-npm`, and `vite-react`
+  `.gitignore` fragments when those profiles are selected, with each fragment
+  assigned to its new sole owner;
 - preserved repository-specific boundaries, dependency updates, GitHub state,
   variables, local fragments, canonical validation when present, and
   repository ownership;

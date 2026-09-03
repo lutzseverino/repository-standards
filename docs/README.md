@@ -75,8 +75,8 @@ standards documentation.
 ## Design evidence
 
 - [Policy resolver model](policy-resolver-model.md): settled logical shapes,
-  ownership and diagnostic rules, migration evidence, and production layout
-  assumptions from the throwaway policy-resolution prototype.
+  exclusive and composed ownership rules, diagnostics, migration evidence, and
+  production layout assumptions from the throwaway policy-resolution prototype.
 
 ## Agent configuration
 
