@@ -61,6 +61,12 @@ The authoritative prose source for policy that requires human or agent
 judgment. Deterministic tooling identifies but does not interpret it.
 _Avoid_: Repository configuration, generated policy summary
 
+**Policy subject**:
+The platform-defined identity of one judgment-based policy area. A selected
+policy document owns its subject regardless of the document's package-relative
+path, and two selected documents cannot own the same subject.
+_Avoid_: Policy document path, documentation category
+
 **Repository configuration**:
 The repository-owned selection of policy packs, workflow policy, ecosystem
 profiles, and explicit local choices. It owns machine-readable facts, not prose

@@ -30,20 +30,64 @@ of package selection order. This preserves the current supported `.gitignore`
 composition without weakening duplicate-ownership rejection.
 
 The click-through primary source remains on the deliberately unmerged
-[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/8ef112dbe227257a7711234ab4b48658be2ffe42/scripts/prototypes)
+[`test/policy-resolver-prototype-69`](https://github.com/lutzseverino/repository-standards/tree/d8c6223407b55fd0c867f146b42aea201f157341/scripts/prototypes)
 branch. It is a single HTML file with a pure resolver module, free-play actions,
 and guided walkthroughs. No production capability imports or invokes it.
+
+## Governing invariants
+
+The model is settled from six invariants rather than from a growing list of
+special cases:
+
+1. **One authority per subject.** Every machine fact, managed target,
+   composition fragment, capability, and judgment-based policy subject has
+   exactly one effective owner. The only replacement rule is an explicit,
+   typed local choice at one pack-declared extension point.
+2. **Trust before meaning.** Closed input shape, exact selection/lock
+   correspondence, immutable identity, content integrity, metadata parity,
+   and referenced-content presence are proven before any package declaration
+   is interpreted.
+3. **Orthogonal selection with explicit compatibility.** Pack, workflow, and
+   profile selectors do not imply one another. Applicability, platform ranges,
+   package constraints, and capability closure are the only compatibility
+   gates; selection order is never one.
+4. **Policy cannot become execution.** Packages own declarative policy and
+   content. The capability platform owns executable behavior and safety
+   boundaries. Repository-owned canonical validation crosses the resolver as
+   literal data and is executable only by its platform capability.
+5. **One deterministic result.** Resolution is pure and offline. Logical sets
+   are normalized before hashing, output is canonically ordered, diagnostics
+   are ordered by phase and subject, and any failed phase returns no partial
+   contract or later-phase guesses.
+6. **Migration transfers authority once.** Migration reads only the exact
+   preceding stable declaration and release tree, assigns every retained fact
+   one new owner, and retires the old owner. Ordinary resolution never accepts
+   both architectures.
+
+Every production field and resolver rule must discharge one of these
+invariants. A proposed field with no unique authority, verification evidence,
+compatibility semantics, canonical form, or migration disposition is not yet
+part of the model.
+
+| Invariant | Shape obligation | Resolver gate | Required evidence |
+| --- | --- | --- | --- |
+| One authority | Canonical subject addresses and typed extension points | Replacement, composition, policy-subject, and duplicate checks | Owner and declaration pointer for every effective subject |
+| Trust before meaning | Complete coordinates, self-contained package references, exact lock entries | Lock bijection, digest, metadata, and reference validation | Configuration, package, and content digests plus immutable source revision |
+| Orthogonal selection | One pack, one workflow, a set of profiles, typed constraints and applicability | Platform, package, profile, and capability checks | Selected coordinates and each compatibility or demand reason |
+| Policy is not execution | Closed declarative package payloads and platform capability inventory | Reserved-authority and capability-closure checks | Platform owner for executable capabilities; repository owner for canonical validation |
+| Deterministic result | Set semantics and canonical address forms | Phase barriers and canonical sorting | Stable contract, explanation, and diagnostics for equivalent input |
+| Single migration | Exact source reader and complete transfer/retirement records | Migration before ordinary resolution | Old-to-new owner mapping and deletion audit |
 
 ## Evidence exercised
 
 The prototype resolves this complete selection matrix through the same pure
 interface:
 
-| Policy pack | Workflow policy | Ecosystem profiles | Local choice |
+| Policy pack | Workflow policy | Ecosystem profiles | Repository-local inputs |
 | --- | --- | --- | --- |
-| Compatibility | Planning-oriented | Zero | Canonical-validation arguments |
-| Compatibility | Issue-directed | One (`node-npm`) | GitHub Projects enabled |
-| Minimal | Planning-oriented | Several (`node-npm`, `vite-react`) | Canonical-validation arguments |
+| Compatibility | Planning-oriented | Zero | GitHub Projects enabled; validation argument `--strict` |
+| Compatibility | Issue-directed | One (`node-npm`) | GitHub Projects enabled; validation with no arguments |
+| Minimal | Planning-oriented | Several (`node-npm`, `vite-react`) | GitHub Projects enabled; validation argument `--all` |
 | Minimal | Issue-directed | Zero | GitHub Projects explicitly disabled |
 
 The two packs own materially different managed content, required labels, and
@@ -73,11 +117,22 @@ The guided failure and migration cases demonstrate:
   `lock.content.tampered` before an effective contract is returned;
 - changing duplicated lock metadata without changing the content-hashed
   manifest fails with `lock.metadata.mismatch` before either claim is used;
+- adding a duplicate or unselected lock entry fails before package
+  interpretation, because selected coordinates and lock entries form an exact
+  bijection;
+- a content-hashed manifest that references an omitted policy or managed file
+  fails with `package.reference.missing`, even when its remaining bytes and
+  regenerated digest are internally consistent;
+- reversing the order-insensitive profile selectors, multi-value applicability
+  facts, and lock entries produces the same configuration digest and
+  byte-equivalent resolved contract;
+- a package-managed target overlapping a repository-owned path fails with
+  `ownership.repository-conflict`;
 - every resolved fact identifies its sole owner, selected/default/local origin,
   source declaration, and evidence digest;
-- the exact `5.0.0` declaration is sufficient to start migration, but its
-  immutable release tree is also required to interpret inherited profile
-  behavior and produce complete content and retirement plans.
+- the exact `5.0.0` declaration and its immutable commit and tree identities
+  are both required to interpret inherited profile behavior and produce
+  complete content, authority-transfer, and retirement plans.
 
 ## Deep module interface
 
@@ -121,7 +176,7 @@ The configuration contains:
 
 - one policy-pack selector;
 - one workflow-policy selector;
-- an ordered-insensitive set of zero or more ecosystem-profile selectors;
+- an order-insensitive set of zero or more ecosystem-profile selectors;
 - closed profile-applicability facts sufficient to prove every selected
   profile's predicate;
 - typed local choices keyed only by extension points declared by the selected
@@ -134,7 +189,18 @@ The configuration contains:
 Selectors identify a package coordinate. Setup may temporarily accept an
 omitted version while resolving an acquisition plan, but the ordinary stored
 configuration and lock used by capabilities must identify an exact version.
-Unknown fields and unknown choice keys fail explicitly.
+Duplicate selectors and duplicate local-choice keys fail explicitly. Logical
+sets are normalized before the configuration digest is computed, so textual
+reordering cannot stale a lock or change a contract. Unknown fields and
+unknown choice keys fail explicitly.
+
+Profile-applicability facts use a platform-defined closed vocabulary with
+typed values and evidence pointers; they are not an open key-value bag. A
+profile predicate can reference only that vocabulary and declares one required
+value per field. A repository fact may carry one value or a canonical nonempty
+set when the repository spans ecosystems; the predicate matches when its value
+is present. Every referenced fact remains attributable to repository
+configuration in explanation output.
 
 Local choices are not last-wins overrides. A valid choice replaces exactly one
 default at an extension point declared by the selected pack. Its effective
@@ -171,9 +237,13 @@ Each kind then has a distinct closed payload:
   points, authoritative policy documents, and optional non-binding workflow or
   profile recommendations;
 - a workflow policy declares ordered process or transition facts, readiness
-  criteria, and its authoritative workflow document;
+  criteria, authorization boundaries, and its authoritative workflow document;
 - an ecosystem profile declares applicability plus explicit observable
   repository-environment contributions and its policy documents.
+
+A selectable ecosystem profile must contribute observable repository-
+environment behavior. Guidance without such behavior remains documentation,
+not a selectable profile.
 
 Policy packages contain declarative data and content only. They cannot contain
 executable capability implementations or commands for the resolver to run.
@@ -189,24 +259,37 @@ one content path, and its purpose. The subject—not its path—is the canonical
 ownership address. Two selected packages cannot claim authoritative documents
 for the same subject even when their paths or prose differ.
 
+When an authoritative document is also emitted as managed repository content,
+the same selected package owns both the policy subject and managed target. In
+particular, the selected workflow policy owns the ordinary-change-workflow
+subject and the managed `CONTRIBUTING.md`; a policy pack cannot supply a
+competing copy.
+
+Every managed-content and policy-document path must resolve to verified bytes
+inside the declaring package. A valid package digest cannot make a dangling or
+escaping reference meaningful.
+
 ### Lock and acquired packages
 
 The lock contains:
 
 - a lock format version;
-- the exact capability-platform identity;
+- the complete capability-platform identity, immutable revision, and
+  capability-inventory digest;
 - a digest of the repository configuration it resolves;
-- one entry for every selected package, with complete immutable coordinate,
-  source and immutable source revision, license, compatibility declaration,
-  package digest, and a sorted path-to-digest content inventory.
+- exactly one entry for every selected package and no unselected entries, with
+  complete immutable coordinate, source and immutable source revision,
+  license, compatibility declaration, package digest, and a sorted
+  path-to-digest content inventory.
 
 The locally acquired package set contains the closed package manifest and the
 content bytes described by each lock entry. Resolution verifies selection,
-identity, configuration freshness, complete path inventory, individual content
-digests, aggregate package digest, and exact parity between every duplicated
-lock field and its content-hashed manifest declaration before interpreting any
-contribution. Extra, missing, changed, or contradictory content is an integrity
-failure.
+identity, configuration freshness, duplicate, missing, or extra lock entries,
+complete path inventory, individual content digests, aggregate package digest,
+declared content references, and exact parity between every duplicated lock
+field and its content-hashed manifest declaration before interpreting any
+contribution. Extra, missing, changed, dangling, or contradictory content is an
+integrity failure.
 
 The lock is the acquisition authority for ordinary offline resolution: it
 selects the complete immutable coordinate and exact source revision and pins
@@ -227,7 +310,7 @@ resolved contract. Representative address families include:
 - repository-configuration-owned canonical-validation field;
 - repository boundary, dependency-update declaration, or owned path;
 - workflow process or readiness field;
-- selected capability and policy-document reference.
+- selected capability and platform-defined policy subject.
 
 Each material address must have exactly one effective owner. Local choices use
 the explicit extension replacement rule before duplicate detection. An exact,
@@ -252,11 +335,17 @@ capability-to-capability dependency edge in its transitive closure.
 Every other collision fails. Values that happen to be equal still conflict
 when owners differ, because authority would remain ambiguous.
 
+Repository-owned path declarations are ownership guards, not ordinary facts
+that can coexist with managed targets. Normalization matches every managed
+path against those exact paths and closed path patterns before emission; an
+overlap fails even when package ownership would otherwise be unique.
+
 ### Resolved repository contract
 
 The normalized contract contains:
 
-- exact selected platform, pack, workflow, and profile identities;
+- exact selected platform, pack, workflow, and profile identities, including
+  the platform revision and capability-inventory digest;
 - typed effective repository facts, managed content and absences, declared
   GitHub state, canonical validation, repository ownership, and workflow facts;
 - composed managed targets with their ordered, independently owned fragments
@@ -268,7 +357,9 @@ The normalized contract contains:
 - provenance for every material effective fact.
 
 Contract ordering is canonical and independent of input order. The contract
-does not retain raw manifests as an alternate interpretation surface.
+sorts every set-like selection, package, document, capability, ownership, and
+diagnostic collection by its canonical identity or address. The contract does
+not retain raw manifests as an alternate interpretation surface.
 
 ### Explanation
 
@@ -293,10 +384,12 @@ provenance from decorative prose.
 
 The production resolver should perform phases in this order:
 
-1. validate every closed input shape and selection cardinality;
-2. prove that the lock matches the pinned platform and configuration;
-3. verify selected identities, acquired content, package digests, and exact
-   lock/manifest metadata parity;
+1. validate every closed input shape, selection cardinality, and set
+   uniqueness;
+2. prove that the lock matches the pinned platform and normalized
+   configuration and is an exact bijection with selected coordinates;
+3. verify selected identities, acquired content, package digests, exact
+   lock/manifest metadata parity, and every in-package content reference;
 4. validate package/platform compatibility;
 5. validate every selected package's typed inter-package requirements and
    conflicts against the complete selected coordinates;
@@ -304,10 +397,12 @@ The production resolver should perform phases in this order:
    closed repository facts, rejecting missing or nonmatching evidence;
 7. validate transitive capability closure and cycles for roots from every
    selected package;
-8. validate declared extension points and typed local choices;
+8. validate declared extension points, their one replaceable default, typed
+   local choices, and reserved repository/platform authorities;
 9. normalize typed contributions into the ownership index;
 10. apply only explicit local-choice replacement;
-11. validate exclusive targets, composed fragments, and policy subjects;
+11. validate exclusive targets, composed fragments, policy subjects, and
+    repository-ownership guards;
 12. reject every remaining duplicate owner;
 13. emit the canonical contract and explanation evidence.
 
@@ -333,15 +428,15 @@ implicated source. The prototype established these initial code families:
 | Family | Representative codes |
 | --- | --- |
 | Selection | `selection.policy-pack.count`, `selection.workflow-policy.count` |
-| Lock | `lock.platform.stale`, `lock.configuration.stale`, `lock.selection.missing` |
-| Integrity | `lock.identity.mismatch`, `lock.metadata.mismatch`, `lock.content.missing`, `lock.content.tampered` |
-| Compatibility | `compatibility.platform.unsupported`, `compatibility.capability.unsupported`, `compatibility.package.required`, `compatibility.package.conflict` |
-| Profile applicability | `profile.applicability.incomplete`, `profile.applicability.mismatch` |
-| Capability closure | `capability.missing`, `capability.cycle` |
-| Local choice | `choice.undeclared`, `choice.type.invalid` |
+| Lock | `lock.platform.stale`, `lock.configuration.stale`, `lock.selection.missing`, `lock.selection.extra`, `lock.selection.duplicate` |
+| Integrity | `lock.identity.mismatch`, `lock.metadata.mismatch`, `lock.content.missing`, `lock.content.tampered`, `package.reference.missing`, `package.reference.unsafe` |
+| Compatibility | `compatibility.platform.unsupported`, `compatibility.package.required`, `compatibility.package.conflict` |
+| Profile applicability | `profile.applicability.incomplete`, `profile.applicability.mismatch`, `profile.behavior.missing` |
+| Capability closure | `compatibility.capability.unsupported`, `capability.cycle` |
+| Local choice | `choice.undeclared`, `choice.type.invalid`, `choice.duplicate`, `choice.declaration.invalid`, `choice.reserved` |
 | Policy authority | `policy.subject.duplicate` |
 | Composition | `composition.mode.conflict`, `composition.fragment.duplicate`, `composition.order.ambiguous` |
-| Ownership | `ownership.duplicate` |
+| Ownership | `ownership.duplicate`, `ownership.repository-conflict`, `ownership.reserved` |
 
 Production may add more specific codes, but should retain the phase and subject
 structure rather than collapse failures into free-form exceptions.
@@ -392,13 +487,21 @@ to change during implementation:
   `schema`, including configuration, lock, common package envelope,
   kind-specific payloads, resolved contract, and explanation;
 - keep first-party pack, workflow, and profile sources in a declarative source
-  tree outside the executable capability-platform package;
+  tree outside the executable capability-platform package, and keep platform
+  capability content separately inventoried so package acquisition cannot add
+  executable capabilities;
 - keep acquired consumer packages in one managed internal store that is read as
   data and never added to the Python import path;
+- resolve every package content reference within its immutable package root;
+  reject absolute paths, parent traversal, and symlink escapes;
+- treat generated contracts, explanations, plans, and harness adapters as
+  projections or execution artifacts, never additional policy authorities;
 - place the `5.0.0` migration reader with setup/adoption migration internals,
   outside the ordinary resolver interface;
 - replace callers and tests at the resolved-contract seam rather than layering
-  policy-aware paths beside `repository_contract.py` and profile inheritance.
+  policy-aware paths beside `repository_contract.py` and profile inheritance;
+- keep every production import and runtime path independent of
+  `scripts/prototypes/`.
 
 The deletion test for the new module is decisive: removing it should force
 configuration, lock, integrity, ownership, compatibility, and explanation
