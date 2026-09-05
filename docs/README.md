@@ -97,6 +97,10 @@ requirements for independent publishers.
 
 ## Design evidence
 
+- [Planning, evidence, and final-change review investigation](review-process-investigation.md):
+  historical examples and evidence gaps, focused workflow proposals, and observable
+  acceptance criteria; the proposed workflow changes are not implemented.
+
 - [Policy resolver model](policy-resolver-model.md): historical logical shapes,
   exclusive and composed ownership rules, diagnostics, migration evidence, and
   former production-layout assumptions from the throwaway policy-resolution
