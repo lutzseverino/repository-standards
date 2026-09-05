@@ -9,7 +9,7 @@ and standards releases use semantic versioning.
 
 ### Added
 
-- Document the review-process investigation, historical handoff failures, and
+- Document the review-process investigation, historical examples, evidence gaps, and
   proposed acceptance scenarios for inherited requirements, discovery readiness,
   evidence timing, and review of the final source; workflow changes remain proposed.
 - Record the independent-author adoption proof and reconcile the replacement
