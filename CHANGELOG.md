@@ -7,11 +7,6 @@ and standards releases use semantic versioning.
 
 ## [Unreleased]
 
-Implementation entries describe the existing lifecycle. The independent-profile
-proof records accepted replacement direction, with earlier decisions reconciled
-in [ADR 0017](docs/adr/0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions);
-production migration has not been implemented.
-
 ### Added
 
 - Record the independent-author adoption proof and reconcile the replacement
@@ -38,6 +33,10 @@ production migration has not been implemented.
 
 ### Changed
 
+- Clarify that implementation entries describe the existing lifecycle, while
+  the independent-profile proof records accepted replacement direction.
+  [ADR 0017](docs/adr/0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+  reconciles earlier decisions; production migration has not been implemented.
 - Adopt independently authored complete profiles and shared system skills as
   the replacement design, superseding the former pack/workflow/profile matrix
   and universal workflow closure. Tool and standards pins are independent;
