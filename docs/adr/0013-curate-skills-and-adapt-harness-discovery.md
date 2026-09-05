@@ -6,6 +6,11 @@ Superseded in part by
 [ADR 0016](0016-separate-capability-platform-from-policy-packs.md). Accepted in
 [issue #47](https://github.com/lutzseverino/repository-standards/issues/47).
 
+Universal workflow skill closure and mandatory file-level managed-absence
+retirement are superseded for replacement planning. See
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+for retained principles and existing-implementation scope.
+
 ## Context
 
 ADR 0002 pinned and distributed the complete upstream skill bundle. That made

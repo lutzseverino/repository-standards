@@ -4,6 +4,11 @@
 
 Superseded in part by ADR 0004, ADR 0010, and ADR 0013
 
+Mandatory official-bundle inheritance and file-level managed-absence
+retirement are superseded for replacement planning. See
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+for retained principles and existing-implementation scope.
+
 ## Context
 
 Matt Pocock publishes composable skills rather than one complete change

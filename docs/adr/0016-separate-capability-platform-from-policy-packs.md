@@ -2,6 +2,12 @@
 
 ## Status
 
+Superseded by [ADR 0017](0017-independent-profiles-and-shared-adoption.md) and
+[specification #79](https://github.com/lutzseverino/repository-standards/issues/79).
+The decision below records the former model; its pack/workflow/ecosystem matrix,
+platform-only executable policy, and compatibility-first direction are not
+constraints on the replacement.
+
 Accepted in the repository architecture design session completed on 2026-09-02
 and recorded in
 [issue #68](https://github.com/lutzseverino/repository-standards/issues/68).

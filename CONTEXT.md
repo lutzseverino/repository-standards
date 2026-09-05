@@ -4,17 +4,99 @@ Canonical language for the conventions shared by participating repositories.
 
 ## Language
 
-**Canonical workflow**:
-The actor-neutral change process defined by the workflow policy selected for a
-repository. A workflow is canonical for repositories selecting it, not for
-every repository compatible with the capability platform.
-_Avoid_: Skill workflow, universal workflow
+### Replacement product model
 
-**Workflow policy**:
-A versioned, independently selectable definition of a repository change
-process. A policy pack may recommend one, but an ecosystem profile does not own
-it and it does not own an ecosystem profile.
-_Avoid_: Workflow profile, capability skill
+**Standards publisher**:
+An independent author offering complete standards profiles from an attributable,
+versioned source repository.
+_Avoid_: Registry member, platform extension author
+
+**Complete profile**:
+One coherent selection of guidance, supplied content, ordinary-work skills,
+checks, and fixes from a standards publisher, resolved against shared defaults.
+_Avoid_: Policy pack, workflow/ecosystem matrix, adoption subset
+
+**Shared defaults**:
+The publisher's common declarations inherited by each complete profile unless
+that profile replaces or excludes a declaration.
+_Avoid_: Parent profile, profile chain
+
+**Standards declaration**:
+The complete unit of inheritance, replacement, and exclusion for a file, skill,
+or named repository-level concern, including its associated governance.
+_Avoid_: Merge fragment, partial override
+
+**Exact supplied content**:
+Publisher-owned material installed as a whole file or complete skill directory,
+with a retained baseline for detecting local edits.
+_Avoid_: Contextual template, prose merge
+
+**Contextual guidance**:
+Publisher requirements applied by an agent to current project-owned content,
+with factual assessment distinct from scripted verification.
+_Avoid_: Exact supplied content, generated proof of correctness
+
+**Repository-level concern**:
+A named standards declaration governing a relationship or requirement spanning
+repository files without inventing a single output target.
+_Avoid_: Fake managed file, lifecycle hook
+
+**Exclusion**:
+Removal of a declaration and all of its associated governance from the effective
+selection, without permission to delete existing project-owned content.
+_Avoid_: Managed absence, deletion instruction
+
+**Retired installed content**:
+Previously installed exact material no longer governed by a new selection and
+requiring explicit ownership reconciliation during that update.
+_Avoid_: Automatically deleted content, excluded project-owned file
+
+**Resolved selection**:
+The single effective set of inherited, replaced, and excluded declarations for
+one complete profile at an exact publisher revision.
+_Avoid_: Merged policy pack, capability-specific interpretation
+
+**System skill**:
+A tool-version-pinned shared operation, including profile adoption, whose name
+and implementation are reserved against publisher replacement.
+_Avoid_: Author adoption hook, ordinary-work skill
+
+**Ordinary-work skill**:
+A publisher-authored Agent Skill governing later repository work according to
+the selected profile; its activities are not automatically adoption tasks.
+_Avoid_: System skill, mandatory adoption checklist
+
+**Profile bootstrap**:
+A thin first-entry skill that obtains the pinned installed tool and delegates
+to its shared adoption behavior before repository-local system skills exist.
+_Avoid_: Publisher adoption procedure, copied CLI implementation
+
+**Tool pin**:
+The exact installed tool identity selected by a project, independent of its
+standards revision and profile.
+_Avoid_: General installation version, standards pin
+
+**Standards pin**:
+The immutable publisher revision and single complete profile selected by a
+project, with retained inputs and provenance.
+_Avoid_: Tool version, moving source branch
+
+**Profile adoption**:
+The deliberate application or update of one pinned complete profile through
+exact installation, applicable scripted operations, and contextual agent work,
+completed with verification and changes left uncommitted.
+_Avoid_: File copying, automatic delivery, mandatory human checklist
+
+**Participating repository**:
+A repository whose maintainer deliberately adopts pinned standards.
+Participation is not limited by repository ownership or maintainer identity.
+_Avoid_: Repository maintained by Lutz Severino, internal repository
+
+**Canonical workflow**:
+The actor-neutral ordinary change process selected for a repository. Under the
+replacement model, it belongs to its complete profile rather than a universal
+platform workflow.
+_Avoid_: Skill workflow, universal workflow
 
 **Response language**:
 English by default for agent responses, regardless of the language used to
@@ -22,67 +104,7 @@ address the agent. Another language is appropriate when the subject itself
 requires it, such as quoted documents or translation content.
 _Avoid_: Input language, English-only content
 
-**Capability skill bundle**:
-A platform-release-pinned, explicitly inventoried set of shared capability
-skills. Policy packs select and configure its capabilities but do not contain
-or replace them.
-_Avoid_: Standard skill bundle, pack-specific skill bundle, global skill
-installation
-
-**Bootstrap skill**:
-A thin user-scoped Agent Skill that lets a maintainer create a participating
-repository or adopt standards before repository-local standard skills exist.
-It delegates substantive behavior to a selected immutable standards release;
-the resulting repository remains release-pinned and self-contained.
-_Avoid_: Globally installed standard skill bundle, custom skill installer,
-standards source of truth
-
-**Capability platform**:
-The stable operational half of the product, providing reusable repository
-capabilities and non-configurable boundaries independently of selected policy.
-It owns the capability skill bundle and the deterministic operations behind it.
-_Avoid_: Policy pack, repository setup, standards profile
-
-**Capability skill**:
-A reusable repository operation that applies the resolved repository contract
-without owning its configurable policy. Its implementation is shared across
-compatible policy packs.
-_Avoid_: Policy skill, workflow policy
-
-**Policy pack**:
-A versioned, attributable, shareable collection of repository policy and
-defaults that a maintainer can select, author, or fork. It contains no hidden
-executable capability.
-_Avoid_: Repository setup, repository configuration, ecosystem profile,
-capability skill bundle
-
-**Policy document**:
-The authoritative prose source for policy that requires human or agent
-judgment. Deterministic tooling identifies but does not interpret it.
-_Avoid_: Repository configuration, generated policy summary
-
-**Policy subject**:
-The platform-defined identity of one judgment-based policy area. A selected
-policy document owns its subject regardless of the document's package-relative
-path, and two selected documents cannot own the same subject.
-_Avoid_: Policy document path, documentation category
-
-**Repository configuration**:
-The repository-owned selection of one policy pack, one workflow policy,
-ecosystem profiles, and explicit local choices. It owns repository-local
-machine-readable facts, not prose policy.
-_Avoid_: Policy pack, resolved repository contract, agent configuration
-
-**Repository setup**:
-The operation that selects, authors, or forks policy packs and produces or
-updates repository configuration.
-_Avoid_: Setup file, policy pack, repository configuration
-
-**Resolved repository contract**:
-The single validated effective result of selected policy and repository
-configuration, including the applicable policy documents, consumed by every
-repository capability.
-_Avoid_: Merged setup, skill-specific configuration
+### Existing implementation workflow vocabulary
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting
@@ -129,6 +151,14 @@ A GitHub label whose exact name must exist for the canonical workflow. A
 repository can also have labels that are not required labels.
 _Avoid_: Exclusive label set
 
+### Existing implementation lifecycle vocabulary
+
+**Bootstrap skill**:
+A thin user-scoped `create-repository` or `adopt-standards` entry skill that
+selects an immutable standards release and delegates to its release-owned
+lifecycle behavior.
+_Avoid_: Profile bootstrap, installed-tool pin
+
 **Managed absence**:
 A declared repository path that must not exist because its presence would
 restore retired or conflicting behavior.
@@ -142,15 +172,9 @@ repository-owned tooling may vary or diverge without changing that environment.
 _Avoid_: Application skeleton, product architecture, project implementation
 
 **Standards adoption**:
-The deliberate work that initially brings a repository, or later updates a
-participating repository, into conformance with a specific standards release,
-including its repository environment and declared GitHub contract.
-_Avoid_: File copying, standards update
-
-**Participating repository**:
-A repository whose maintainer deliberately adopts an exact standards release.
-Participation is not limited by repository ownership or maintainer identity.
-_Avoid_: Repository maintained by Lutz Severino, internal repository
+The existing lifecycle's deliberate adoption or upgrade into its repository
+environment and declared GitHub contract, ending in a validated adoption commit.
+_Avoid_: Profile adoption, uncommitted adoption
 
 **Prepared creation baseline**:
 The uncommitted local repository content, including its settled

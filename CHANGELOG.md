@@ -9,10 +9,12 @@ and standards releases use semantic versioning.
 
 ### Added
 
-- Record the tested policy-resolver model for independent pack and workflow
-  selection, offline integrity, exclusive and composed ownership, provenance
-  explanation, and exact `5.0.0` migration inputs before production schema
-  implementation.
+- Record the independent-author adoption proof and reconcile the replacement
+  profile model, shared adoption boundary, retained pins, and discovery gaps
+  before production ticketing.
+- Preserve the tested policy-resolver model as historical evidence of pack and
+  workflow selection, ownership, offline integrity, and `5.0.0` migration inputs.
+  ADR 0017 supersedes its matrix and production-layout assumptions.
 - Install only thin `create-repository` and `adopt-standards` bootstrap skills
   at user scope through the open Agent Skills installer, then resolve and
   disclose one immutable stable release before delegating creation or adoption
@@ -31,17 +33,22 @@ and standards releases use semantic versioning.
 
 ### Changed
 
-- Separate the shared capability platform from selectable declarative policy
-  packs, workflows, profiles, and repository-local choices, superseding the
-  assumption that one workflow and its skill closure are universal.
+- Clarify that implementation entries describe the existing lifecycle, while
+  the independent-profile proof records accepted replacement direction.
+  [ADR 0017](docs/adr/0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+  reconciles earlier decisions; production migration has not been implemented.
+- Adopt independently authored complete profiles and shared system skills as
+  the replacement design, superseding the former pack/workflow/profile matrix
+  and universal workflow closure. Tool and standards pins are independent;
+  profile adoption leaves verified changes uncommitted.
 - Simplify creation, adoption, and consumer-acceptance tests around shared
   lifecycle support for isolated environments, executable substitutes, and
   immutable release fixtures without changing their public journey coverage.
-- Compose zero, one, or several applicable ecosystem profiles during initial
+- In the existing lifecycle, compose applicable ecosystem profiles during initial
   contract selection, reject guidance-only profiles, and keep profile
   conformance limited to observable repository-environment behavior rather
   than product implementation conventions.
-- Curate the release-pinned repository-local skill bundle to the canonical
+- In the existing lifecycle, curate the repository-local skill bundle to the canonical
   workflow's tested transitive closure, retire former managed skills through
   explicit absences, and add drift-checked Claude discovery adapters.
 - Present issue-tracker, triage-label, and domain-documentation guidance as

@@ -4,6 +4,11 @@
 
 Superseded in part by ADR 0002, ADR 0003, and ADR 0005
 
+Universal workflow, mandatory common/documentation/GitHub selection, and
+inherited retirement deletion are superseded for replacement planning. See
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+for retained principles and existing-implementation scope.
+
 ## Context
 
 The common profile couples baseline repository files to an issue-first change

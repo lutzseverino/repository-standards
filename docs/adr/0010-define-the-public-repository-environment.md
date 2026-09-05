@@ -6,6 +6,11 @@ Superseded in part by
 [ADR 0016](0016-separate-capability-platform-from-policy-packs.md). Accepted in
 [issue #45](https://github.com/lutzseverino/repository-standards/issues/45).
 
+The universal environment/workflow and blanket restrictions on contextual
+requirements are superseded for replacement planning. See
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+for retained principles and existing-implementation scope.
+
 ## Context
 
 Repository Standards was described as shared conventions for repositories

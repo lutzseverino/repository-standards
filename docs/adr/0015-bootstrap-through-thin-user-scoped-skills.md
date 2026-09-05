@@ -4,6 +4,11 @@
 
 Accepted in [issue #49](https://github.com/lutzseverino/repository-standards/issues/49)
 
+The fixed bootstrap inventory, coupled tool/standards release, and universal
+GitHub tag/VERSION acquisition contract are superseded for replacement planning. See
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+for retained principles and existing-implementation scope.
+
 ## Context
 
 A prospective adopter needs `create-repository` or `adopt-standards` before a
