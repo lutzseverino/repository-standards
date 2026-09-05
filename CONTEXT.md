@@ -4,6 +4,8 @@ Canonical language for the conventions shared by participating repositories.
 
 ## Language
 
+### Replacement product model
+
 **Standards publisher**:
 An independent author offering complete standards profiles from an attributable,
 versioned source repository.
@@ -79,6 +81,17 @@ The immutable publisher revision and single complete profile selected by a
 project, with retained inputs and provenance.
 _Avoid_: Tool version, moving source branch
 
+**Standards adoption**:
+The deliberate application or update of one pinned complete profile through
+exact installation, applicable scripted operations, and contextual agent work,
+completed with verification and changes left uncommitted.
+_Avoid_: File copying, automatic delivery, mandatory human checklist
+
+**Participating repository**:
+A repository whose maintainer deliberately adopts pinned standards.
+Participation is not limited by repository ownership or maintainer identity.
+_Avoid_: Repository maintained by Lutz Severino, internal repository
+
 **Canonical workflow**:
 The actor-neutral ordinary change process selected for a repository. Under the
 replacement model, it belongs to its complete profile rather than a universal
@@ -90,6 +103,8 @@ English by default for agent responses, regardless of the language used to
 address the agent. Another language is appropriate when the subject itself
 requires it, such as quoted documents or translation content.
 _Avoid_: Input language, English-only content
+
+### Shared workflow vocabulary
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting
@@ -150,16 +165,10 @@ GitHub behavior governed by a standards release. Product implementation and
 repository-owned tooling may vary or diverge without changing that environment.
 _Avoid_: Application skeleton, product architecture, project implementation
 
-**Standards adoption**:
-The deliberate application or update of one pinned complete profile through
-exact installation, applicable scripted operations, and contextual agent work,
-completed with verification and changes left uncommitted.
-_Avoid_: File copying, automatic delivery, mandatory human checklist
-
-**Participating repository**:
-A repository whose maintainer deliberately adopts pinned standards.
-Participation is not limited by repository ownership or maintainer identity.
-_Avoid_: Repository maintained by Lutz Severino, internal repository
+**Released standards adoption**:
+The current release's deliberate adoption or upgrade into its repository
+environment and declared GitHub contract, ending in a validated adoption commit.
+_Avoid_: Replacement-model adoption, uncommitted adoption
 
 **Prepared creation baseline**:
 The uncommitted local repository content, including its settled
