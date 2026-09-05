@@ -1,0 +1,137 @@
+{
+  "publisher": "atlas",
+  "defaults": {
+    "readme": {
+      "kind": "file",
+      "mode": "contextual",
+      "target": "README.md",
+      "guidance": [
+        "guidance/readme.md"
+      ]
+    },
+    "editor-config": {
+      "kind": "file",
+      "mode": "exact",
+      "target": ".editorconfig",
+      "source": "assets/editor-default",
+      "checks": [
+        {
+          "id": "atlas-obsolete-default-check",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "obsolete",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "csv-work": {
+      "kind": "skill",
+      "mode": "exact",
+      "target": ".agents/skills/trace-csv",
+      "source": "skills/trace-csv"
+    },
+    "data-contract": {
+      "kind": "concern",
+      "mode": "contextual",
+      "guidance": [
+        "guidance/data-contract.md"
+      ],
+      "fixes": [
+        {
+          "id": "atlas-data-contract-fix",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "fix-contract",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "atlas-data-contract-check",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "check-contract",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "contributing": {
+      "kind": "file",
+      "mode": "exact",
+      "target": "CONTRIBUTING.md",
+      "source": "assets/contributing.md",
+      "fixes": [
+        {
+          "id": "atlas-public-contribution-fix",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "fix-contribution",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "atlas-public-contribution-check",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "check-contribution",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    }
+  },
+  "profiles": {
+    "full": {
+      "editor-config": {
+        "kind": "file",
+        "mode": "exact",
+        "target": ".editorconfig",
+        "source": "assets/editor-full"
+      }
+    },
+    "employer": {
+      "editor-config": {
+        "kind": "file",
+        "mode": "exact",
+        "target": ".editorconfig",
+        "source": "assets/editor-employer"
+      },
+      "readme": {
+        "kind": "file",
+        "mode": "contextual",
+        "target": "README.md",
+        "guidance": [
+          "guidance/readme-employer.md"
+        ]
+      },
+      "contributing": {
+        "exclude": true
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Beacon operator record: full
+[operation]
+name = "markdown-link-inventory"
+network = false
+
+[capture]
+input_encoding = "utf-8"
+output_format = "json"
+keep_output_separate = true
