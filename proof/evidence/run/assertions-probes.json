@@ -1,0 +1,6 @@
+{
+  "malformed_result_incomplete": true,
+  "retirement_blocked_before_mutation": true,
+  "explicit_retention_preserves_bytes_and_relinquishes_ownership": true,
+  "probes_are_incomplete_adoptions": true
+}

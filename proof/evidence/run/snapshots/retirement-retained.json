@@ -1,0 +1,124 @@
+{
+  ".agents/skills/adopt-standards/SKILL.md": {
+    "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+    "executable": false
+  },
+  ".agents/skills/trace-csv/SKILL.md": {
+    "sha256": "98dcc1da771e884ee21d862089cce4c734d36a50ae146d09f438a721e9091cf0",
+    "executable": false
+  },
+  ".agents/skills/trace-csv/references/input-cases.md": {
+    "sha256": "3a268434ced26a6dfa2c6e46660a7da2ff76469c32cfb1a7dbe43cb5e2739c47",
+    "executable": false
+  },
+  ".author-trace.jsonl": {
+    "sha256": "2ce6fd0fbb81830c1b7f940e1e400ba1f6defa4167f925c96509f90e3f7d953b",
+    "executable": false
+  },
+  ".csv-summary.json": {
+    "sha256": "6808ad47c56094da27316386bae4f17eded9f3788ab7e04d94dd404dd11f89fe",
+    "executable": false
+  },
+  ".editorconfig": {
+    "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+    "executable": false
+  },
+  ".standards/agent-claims.json": {
+    "sha256": "a03fd5cd4f1ff3b3e4013427c044b4f606ad41f92a653f670f2275c97d11fbd1",
+    "executable": false
+  },
+  ".standards/assessment.json": {
+    "sha256": "f011acb7b118fb9bb0ddbbcc664ff1f3dba5912b95362b1904b515110490ffa0",
+    "executable": false
+  },
+  ".standards/events.jsonl": {
+    "sha256": "c1e8b361c4eb4a71511236a743c8e02e8cfd456529ee14c9bc4ce6dece7cfa99",
+    "executable": false
+  },
+  ".standards/inputs/AUTHOR.md": {
+    "sha256": "617f38c1902620cf1b5cb220d1189455e02b769c1cac7f4ace0300fb116ee9ec",
+    "executable": false
+  },
+  ".standards/inputs/assets/contributing.md": {
+    "sha256": "c989af199b49adfc288f52f7414ae5c8cb4916d53619743a7e858aa1baa24ccb",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-default": {
+    "sha256": "0dc82dcb4d762fc9c8c0e41b615453ced4f415aa5c2f872f77710de21d2314da",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-employer": {
+    "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-full": {
+    "sha256": "29c380ee803b4d125d910fac64d8d4a2d7db0bda19b7dab15f81da739c290906",
+    "executable": false
+  },
+  ".standards/inputs/guidance/data-contract.md": {
+    "sha256": "5438479668e5c88886886e96071e41e4e0033e6cee1bb6b4301b06f70174af6d",
+    "executable": false
+  },
+  ".standards/inputs/guidance/readme-employer.md": {
+    "sha256": "3d8dcf8e581b87a231e93b9b5a164a1e7f6465d2a67dfc521494988f15f1adc3",
+    "executable": false
+  },
+  ".standards/inputs/guidance/readme.md": {
+    "sha256": "8e14fc09014c4052a539dbb6d7b9c63967106c7989d4f9330262e262a36acb1c",
+    "executable": false
+  },
+  ".standards/inputs/scripts/check.py": {
+    "sha256": "abed5aaf1b531cfdd066cbf6c69755efd65391a576e5a0f4d73b66a4ef867de5",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv/SKILL.md": {
+    "sha256": "98dcc1da771e884ee21d862089cce4c734d36a50ae146d09f438a721e9091cf0",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv/references/input-cases.md": {
+    "sha256": "3a268434ced26a6dfa2c6e46660a7da2ff76469c32cfb1a7dbe43cb5e2739c47",
+    "executable": false
+  },
+  ".standards/inputs/standards.yaml": {
+    "sha256": "08e69dd5f6a9095797c8cd9f4a9ec37dc70605fe69cba3f997451845f2185305",
+    "executable": false
+  },
+  ".standards/progress.json": {
+    "sha256": "f0965e522db7c9ab07b8c5bdc4537b37a6bfd7d4f84cab43f59977cc10a1a939",
+    "executable": false
+  },
+  ".standards/selection.json": {
+    "sha256": "1a961d1e46831c1e6d908af5a64717d914b07127fbbf69e4fb4f9bb20459e506",
+    "executable": false
+  },
+  ".standards/setup.py": {
+    "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+    "executable": false
+  },
+  ".standards/state.json": {
+    "sha256": "cd4357ed7991e03feca66095adb081b90a2838a503c8c79e21fd50714ab543d6",
+    "executable": false
+  },
+  ".standards/tool.json": {
+    "sha256": "e4366151f9195a7e882da710bc3f7e874c329e2d7c39df739cac6e8e126310c8",
+    "executable": false
+  },
+  "CONTRIBUTING.md": {
+    "sha256": "974b941c9cefe3445b2f3576fcf25e760f0f8a6e64bffeedd453618f3accf2d7",
+    "executable": false
+  },
+  "README.md": {
+    "sha256": "f59ee9f1cecc0fa8a573305bcfb64b6fc1de82356c4a09f669cbc56b45484e60",
+    "executable": false
+  },
+  "app.py": {
+    "sha256": "7beec7909706ca295bcf24f7a2840ab56e3269bf346231673b19243b30e50bd9",
+    "executable": false
+  },
+  "docs/data-contract.md": {
+    "sha256": "3a6cd9514ccd39658443abc3440d7cb80d02453a529b52a0d3b58b6b13961e43",
+    "executable": false
+  },
+  "@HEAD": "9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab",
+  "@index-tree": "dec71e69769111267b59a62b4e44fd97dca6566e"
+}

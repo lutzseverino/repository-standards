@@ -1,0 +1,114 @@
+{
+  "identity": {
+    "source": "/private/tmp/standards-proof80-final/publishers/beacon",
+    "revision": "00764165dcdb9108bbad5edb095528d600ad5b31",
+    "profile": "compact",
+    "publisher": "beacon"
+  },
+  "declarations": {
+    "link-triage": {
+      "kind": "skill",
+      "mode": "exact",
+      "target": ".agents/skills/triage-links",
+      "source": "skills/triage-links"
+    },
+    "local-link-contract": {
+      "kind": "concern",
+      "mode": "contextual",
+      "guidance": [
+        "guidance/link-contract.md"
+      ],
+      "fixes": [
+        {
+          "id": "write-link-contract",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "fix-contract"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "verify-link-contract",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "check-contract"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "operations-record": {
+      "kind": "file",
+      "mode": "exact",
+      "target": ".beacon/operations.toml",
+      "source": "files/operations-compact.toml"
+    },
+    "readme": {
+      "kind": "file",
+      "mode": "contextual",
+      "target": "README.md",
+      "guidance": [
+        "guidance/readme.md"
+      ]
+    }
+  },
+  "resolution": {
+    "contribution-governance": "excluded",
+    "link-triage": "inherited",
+    "local-link-contract": "inherited",
+    "operations-record": "replaced",
+    "readme": "inherited"
+  },
+  "material": {
+    "skills/triage-links/SKILL.md": {
+      "sha256": "5914b73960361e57a1e4fd1d2dd9011ef5927e3452b48d28d703eb11e99d638d",
+      "text": "---\nname: triage-links\ndescription: Investigate missing or surprising entries from this repository's Markdown link inventory, and make a focused extraction fix when requested.\n---\n\n# Triage link inventory\n\nRead `app.py` and run `python3 app.py --help` to establish the live input and\noutput contract. Reproduce the reported discrepancy with the smallest Markdown\nfile that still exhibits it; keep both its exact source and observed JSON.\n\nRead [the extraction cases](references/extraction-cases.md) when deciding\nwhether the discrepancy is a parser bug or a supported-syntax boundary. Identify\nthe expected link objects before editing code. A URL being unreachable is a\nseparate observation from its absence in the extracted inventory.\n\nWhen a fix is requested, add the reproducer to the consumer's existing tests,\nchange the parser narrowly, and run the documented validation command. Report\nwhich input changed behavior and any remaining syntax limitation. When only\ninvestigation was requested, return the reproducer, cause, and supported next\nstep. Use [the report outline](assets/finding.md) for a reusable investigation\nrecord when the user requests a written artifact.\n"
+    },
+    "skills/triage-links/assets/finding.md": {
+      "sha256": "b8fbb9fb5509114869f33bbb04c37cc7dac3031bc7b742cf6fa9422412bd21ab",
+      "text": "# Link extraction finding\n\n## Reproducing input\n\nPaste the smallest exact Markdown input.\n\n## Expected and observed inventory\n\nRecord JSON objects and the command used.\n\n## Cause and disposition\n\nState the supported-syntax decision, any fix, and validation evidence.\n"
+    },
+    "skills/triage-links/references/extraction-cases.md": {
+      "sha256": "53a47b82ddfe79d289d92b9c673ae3801f09f7fc538b5c1c95c8039b33453967",
+      "text": "# Extraction cases\n\n| Case | Decision to establish from source and tests |\n| --- | --- |\n| `[Manual](guide.md)` | Baseline inline link: preserve label and destination. |\n| `[Status](https://status.example.invalid)` | Extract the URL without fetching it. |\n| `[Topic](#heading)` | Check whether anchors are included, rather than assuming. |\n| `[A [nested] label](guide.md)` | Nested syntax requires an explicit support decision. |\n| A reference-style link | Determine whether the tool intentionally supports only inline syntax. |\n\nFor regex-based implementations, nested labels and balanced destination\nparentheses are likely syntax boundaries. Confirm the actual behavior with a\nsmall input. Expanding the parser's supported syntax is a product decision;\na report can be complete by demonstrating a limitation accurately.\n"
+    },
+    "guidance/link-contract.md": {
+      "sha256": "423a55b8294258d8f0ab815e76357cab5e3837ce4ba604302c500c516238e09b",
+      "text": "# Link inventory contract\n\nKeep docs/link-policy.json and tests/fixtures/link-contract.md consistent. The\nJSON expected_links array is the expected result of running app.py on the\nfixture; it describes extraction only. An HTTPS URL in the fixture is literal\ninput, not permission to make a request. The declared repair writes this small\nshared example to both files. The declared check compares the consumer's actual\nJSON output with the policy and checks offline scope and the fixture path.\n\nThis concern has no single target file. It owns the policy/example relationship;\nordinary prose around the example remains repository-owned.\n"
+    },
+    "scripts/check.py": {
+      "sha256": "09df7881a7d991fb59225c1c50fdbaa78418b96d8c8644e500066e46b0e7ca8b",
+      "text": "#!/usr/bin/env python3\n\"\"\"Beacon's declaration operations; all consumer paths are relative to cwd.\"\"\"\nimport json\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nPOLICY_PATH = Path('docs/link-policy.json')\nCASE_PATH = Path('tests/fixtures/link-contract.md')\nEXPECTED = [\n    {'text': 'Manual', 'url': '../../README.md'},\n    {'text': 'Service status', 'url': 'https://status.example.invalid'},\n]\nPOLICY = {\n    'scope': 'local-only',\n    'network': False,\n    'reference_case': CASE_PATH.as_posix(),\n    'expected_links': EXPECTED,\n}\nCASE = '''# Extraction contract\n\n[Manual](../../README.md) and [Service status](https://status.example.invalid)\n\nThese destinations are inventory data. This example makes no network requests.\n'''\n\n\ndef inspect_contract():\n    policy = json.loads(POLICY_PATH.read_text())\n    for key, expected in POLICY.items():\n        if policy.get(key) != expected:\n            raise ValueError(f'{POLICY_PATH}: unexpected {key}')\n    completed = subprocess.run(\n        [sys.executable, 'app.py', str(CASE_PATH)],\n        capture_output=True, text=True, timeout=10,\n    )\n    if completed.returncode:\n        raise ValueError(f'consumer exited {completed.returncode}: {completed.stderr.strip()}')\n    if json.loads(completed.stdout) != policy['expected_links']:\n        raise ValueError('consumer inventory differs from docs/link-policy.json expected_links')\n    return 'policy, Markdown example, and observed consumer inventory agree'\n\n\ndef main():\n    context = json.load(sys.stdin)\n    action = sys.argv[1]\n    with Path('.author-trace.jsonl').open('a') as trace:\n        trace.write(json.dumps({\n            'publisher': 'beacon',\n            'argv': sys.argv,\n            'cwd': str(Path.cwd()),\n            'declaration': context['declaration'],\n            'selection': context['selection'],\n        }, sort_keys=True) + '\\n')\n    if action == 'fix-contract':\n        POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)\n        CASE_PATH.parent.mkdir(parents=True, exist_ok=True)\n        POLICY_PATH.write_text(json.dumps(POLICY, indent=2) + '\\n')\n        CASE_PATH.write_text(CASE)\n        return 'wrote docs/link-policy.json and tests/fixtures/link-contract.md'\n    if action == 'check-contract':\n        return inspect_contract()\n    if action == 'readiness':\n        completed = subprocess.run(\n            [sys.executable, 'app.py', '--help'],\n            capture_output=True, text=True, timeout=10,\n        )\n        if completed.returncode or not completed.stdout.strip():\n            raise ValueError('consumer must expose a working nonempty --help response')\n        return 'consumer command reference is available from --help'\n    raise ValueError(f'unknown declaration operation: {action}')\n\n\nif __name__ == '__main__':\n    try:\n        message = main()\n    except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError) as error:\n        print(json.dumps({'status': 'fail', 'message': str(error)}))\n        sys.exit(1)\n    print(json.dumps({'status': 'pass', 'message': message}))\n"
+    },
+    "files/operations-compact.toml": {
+      "sha256": "de7e59e169817328000efd6a66970d4500cdd51e79da8abd22586d7c39c15ac6",
+      "text": "# Beacon operator record: compact\n[operation]\nnetwork = false\n"
+    },
+    "guidance/readme.md": {
+      "sha256": "5f7d173d343860c983071ce823fa83b93b933657a887bc27aea22c819c25ae0f",
+      "text": "# Beacon: operator-facing README contract\n\nWrite the consumer README after inspecting its source and running\n`python3 app.py --help`. Document the command that actually exists. This is a\nsmall offline Markdown link inventory: one Markdown input file produces a JSON\narray of `text` and `url` objects. It performs no HTTP requests.\n\nOrganize the README as a concise operational reference, in this order:\n\n1. A project title followed by a one-sentence purpose.\n2. `## Command reference`: a table with invocation, input, output, and exit\n   behavior. Derive exit behavior from a real successful and a missing-file run.\n3. `## Worked inventory`: show a tiny Markdown input containing a local link\n   and an HTTPS link, the actual command, and its observed JSON output.\n4. `## Boundaries`: explain offline operation and the regex parser's actual\n   limitations, including nested Markdown. Distinguish URL extraction from\n   checking whether a target exists or a remote service responds.\n5. `## Operator notes`: show how to save output to a file and interpret an\n   empty array. If docs/link-policy.json exists, link to it as the executable\n   example contract; describe only the fields actually present.\n\nKeep it useful for someone running an existing tool. Use tables and concrete\ninputs and outputs; avoid a project origin story. All commands and behavior\nclaims must come from the consumer, not from a publisher example. The output\nis the consumer's own prose, not a copied template.\n"
+    }
+  },
+  "prerequisites": {
+    "local-link-contract/fixes/write-link-contract": [
+      {
+        "requirement": "python3",
+        "available": true
+      }
+    ],
+    "local-link-contract/checks/verify-link-contract": [
+      {
+        "requirement": "python3",
+        "available": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "fingerprint": "27698169d857e2a281b750c5247a410be6d158a60a990f31388aa0ae438a1aea",
+  "status": "complete",
+  "completed": [
+    "data-contract/fixes/atlas-data-contract-fix",
+    "data-contract/checks/atlas-data-contract-check"
+  ],
+  "installed": {
+    ".agents/skills/trace-csv": {
+      "SKILL.md": {
+        "sha256": "98dcc1da771e884ee21d862089cce4c734d36a50ae146d09f438a721e9091cf0",
+        "executable": false
+      },
+      "references/input-cases.md": {
+        "sha256": "3a268434ced26a6dfa2c6e46660a7da2ff76469c32cfb1a7dbe43cb5e2739c47",
+        "executable": false
+      }
+    },
+    ".editorconfig": {
+      ".": {
+        "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+        "executable": false
+      }
+    },
+    ".agents/skills/adopt-standards/SKILL.md": {
+      ".": {
+        "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+        "executable": false
+      }
+    },
+    ".standards/setup.py": {
+      ".": {
+        "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+        "executable": false
+      }
+    }
+  },
+  "retained_retired": [],
+  "stage": "checks-and-contextual-assessment-complete"
+}

@@ -1,0 +1,128 @@
+{
+  ".agents/skills/adopt-standards/SKILL.md": {
+    "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+    "executable": false
+  },
+  ".agents/skills/triage-links/SKILL.md": {
+    "sha256": "5914b73960361e57a1e4fd1d2dd9011ef5927e3452b48d28d703eb11e99d638d",
+    "executable": false
+  },
+  ".agents/skills/triage-links/assets/finding.md": {
+    "sha256": "b8fbb9fb5509114869f33bbb04c37cc7dac3031bc7b742cf6fa9422412bd21ab",
+    "executable": false
+  },
+  ".agents/skills/triage-links/references/extraction-cases.md": {
+    "sha256": "53a47b82ddfe79d289d92b9c673ae3801f09f7fc538b5c1c95c8039b33453967",
+    "executable": false
+  },
+  ".author-trace.jsonl": {
+    "sha256": "5e6c2dc4e3b2b58c1f89caac3366286de0c9031a57fdc863b712cc8ab8b725c8",
+    "executable": false
+  },
+  ".beacon/operations.toml": {
+    "sha256": "de7e59e169817328000efd6a66970d4500cdd51e79da8abd22586d7c39c15ac6",
+    "executable": false
+  },
+  ".standards/agent-claims.json": {
+    "sha256": "275d950bd14f68da3de41b9e397206d873942ae62c46c211387ac8328cf3342b",
+    "executable": false
+  },
+  ".standards/assessment.json": {
+    "sha256": "c90261c4dba6ea8deb0ac06dd10e85c10a1975377cba785d84ff402e521432b4",
+    "executable": false
+  },
+  ".standards/events.jsonl": {
+    "sha256": "9554ca3d9695a4d1e25d9bcbd2479aa32d14b53161347deeaa7ba1c91b4b22e6",
+    "executable": false
+  },
+  ".standards/inputs/AUTHOR.md": {
+    "sha256": "ca5f81ee9af6e64083be31e2525beccda3aeb506c94b323b09de0dca9033eb5d",
+    "executable": false
+  },
+  ".standards/inputs/files/operations-compact.toml": {
+    "sha256": "de7e59e169817328000efd6a66970d4500cdd51e79da8abd22586d7c39c15ac6",
+    "executable": false
+  },
+  ".standards/inputs/files/operations-full.toml": {
+    "sha256": "0bbd763e94def7cd7b19e0cca2894e88bb5867a92f73be46c447f5af813d9a42",
+    "executable": false
+  },
+  ".standards/inputs/guidance/contributing.md": {
+    "sha256": "c218fbb107996b2c64898eaf9b404a3a98f72baafdedb8b11ea546a119f34987",
+    "executable": false
+  },
+  ".standards/inputs/guidance/link-contract.md": {
+    "sha256": "423a55b8294258d8f0ab815e76357cab5e3837ce4ba604302c500c516238e09b",
+    "executable": false
+  },
+  ".standards/inputs/guidance/operations.md": {
+    "sha256": "9e3d0a91f53dfa4aec4a87cb7d0ec8298c387a07f3ee15003c22714bb03584ee",
+    "executable": false
+  },
+  ".standards/inputs/guidance/readme.md": {
+    "sha256": "5f7d173d343860c983071ce823fa83b93b933657a887bc27aea22c819c25ae0f",
+    "executable": false
+  },
+  ".standards/inputs/scripts/check.py": {
+    "sha256": "09df7881a7d991fb59225c1c50fdbaa78418b96d8c8644e500066e46b0e7ca8b",
+    "executable": false
+  },
+  ".standards/inputs/skills/triage-links/SKILL.md": {
+    "sha256": "5914b73960361e57a1e4fd1d2dd9011ef5927e3452b48d28d703eb11e99d638d",
+    "executable": false
+  },
+  ".standards/inputs/skills/triage-links/assets/finding.md": {
+    "sha256": "b8fbb9fb5509114869f33bbb04c37cc7dac3031bc7b742cf6fa9422412bd21ab",
+    "executable": false
+  },
+  ".standards/inputs/skills/triage-links/references/extraction-cases.md": {
+    "sha256": "53a47b82ddfe79d289d92b9c673ae3801f09f7fc538b5c1c95c8039b33453967",
+    "executable": false
+  },
+  ".standards/inputs/standards.yaml": {
+    "sha256": "ccba45a23f4bf92ea27337f9401f2f13215d8ec8fa04d0747ae7058ff93a7cc7",
+    "executable": false
+  },
+  ".standards/progress.json": {
+    "sha256": "48ce34f67833513527cd3c2eeae45565f6da726cfb13defb0155ef9c6afa26e3",
+    "executable": false
+  },
+  ".standards/selection.json": {
+    "sha256": "92a42a2cbdfc36efbfebd9852332494279a854a7d8022060e3aa823599cf26e1",
+    "executable": false
+  },
+  ".standards/setup.py": {
+    "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+    "executable": false
+  },
+  ".standards/state.json": {
+    "sha256": "2548f8f5c1b82f2b5b841b54d73d6246c5f1cba4af3d17745b646cc037ed078c",
+    "executable": false
+  },
+  ".standards/tool.json": {
+    "sha256": "e4366151f9195a7e882da710bc3f7e874c329e2d7c39df739cac6e8e126310c8",
+    "executable": false
+  },
+  "CONTRIBUTING.md": {
+    "sha256": "4be67f6069123285f6362ae2436034d6005c6d487753cec350f79d985a6f26de",
+    "executable": false
+  },
+  "README.md": {
+    "sha256": "1b2ed87873fe81baf570f880278a6b4ab5c07dd658e0105b5c8256988a6ba3f7",
+    "executable": false
+  },
+  "app.py": {
+    "sha256": "858c84c06806564376025a5d1880044d66d1723a5eed33c40e6acc2582d7342b",
+    "executable": false
+  },
+  "docs/link-policy.json": {
+    "sha256": "4930ed3b46e57e28f6c082b252e47a39202bc9a1d9e6c0ae3f930d64336b0792",
+    "executable": false
+  },
+  "tests/fixtures/link-contract.md": {
+    "sha256": "abd420407c70e9876d72fe556ac0d8bcd622238247007f2ec14c84857ecea70d",
+    "executable": false
+  },
+  "@HEAD": "56627d2ddf905eb0b6abde77f0bdb9fa7ffaab33",
+  "@index-tree": "87e77b2586f7ddd10700ad7a043bab826bfa4f64"
+}

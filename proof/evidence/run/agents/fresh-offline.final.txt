@@ -1,0 +1,15 @@
+Observed in the current app:
+
+| Input values | Default total | `--precision 2` |
+|---|---:|---:|
+| `0.1`, `0.2` | `0.30000000000000004` | `0.3` |
+| `1.234`, `2.345` | `3.579` | `3.58` |
+
+The app sums Python floats, then rounds the output. Invalid, empty, and missing values still exit with status 2 and no JSON when rounding is enabled.
+
+Provenance: setup supplied CLI `0.1.0`; retained selection is Atlas / `employer`, revision `f2cf57ea5438159b70cb58246a0d546b513e47fc`. Installed trace skill and rounding reference hashes match the retained selection. No publisher access or selection update was needed.
+
+- **Scripted evidence:** `finish --assessment .standards/agent-claims.json` returned `complete`; the transport check passed. Recorded in [events.jsonl](/private/tmp/standards-proof80-final/fresh/.standards/events.jsonl).
+- **Contextual assessment:** Actual executions support the existing README and transport documentation; no content edits were needed. See [observations](/private/tmp/standards-proof80-final/fresh/.standards/rounding-evidence.json) and [assessment](/private/tmp/standards-proof80-final/fresh/.standards/assessment.json).
+
+Project facts and employer contribution policy are preserved. HEAD is unchanged, diff whitespace checks passed, and evidence changes remain uncommitted.

@@ -1,0 +1,4 @@
+{
+  "status": "incomplete",
+  "error": "zz-recovery/fixes/second: failed; inspect .standards/events.jsonl, diagnose retained changes, then retry"
+}

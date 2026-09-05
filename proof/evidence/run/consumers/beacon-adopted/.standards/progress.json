@@ -1,0 +1,44 @@
+{
+  "fingerprint": "fb30c8d3751012ac7055d7caf7591b77d6558c84f44d30d447d90bb58f199d14",
+  "status": "complete",
+  "completed": [
+    "local-link-contract/fixes/write-link-contract",
+    "local-link-contract/checks/verify-link-contract"
+  ],
+  "installed": {
+    ".agents/skills/triage-links": {
+      "SKILL.md": {
+        "sha256": "5914b73960361e57a1e4fd1d2dd9011ef5927e3452b48d28d703eb11e99d638d",
+        "executable": false
+      },
+      "assets/finding.md": {
+        "sha256": "b8fbb9fb5509114869f33bbb04c37cc7dac3031bc7b742cf6fa9422412bd21ab",
+        "executable": false
+      },
+      "references/extraction-cases.md": {
+        "sha256": "53a47b82ddfe79d289d92b9c673ae3801f09f7fc538b5c1c95c8039b33453967",
+        "executable": false
+      }
+    },
+    ".beacon/operations.toml": {
+      ".": {
+        "sha256": "de7e59e169817328000efd6a66970d4500cdd51e79da8abd22586d7c39c15ac6",
+        "executable": false
+      }
+    },
+    ".agents/skills/adopt-standards/SKILL.md": {
+      ".": {
+        "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+        "executable": false
+      }
+    },
+    ".standards/setup.py": {
+      ".": {
+        "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+        "executable": false
+      }
+    }
+  },
+  "retained_retired": [],
+  "stage": "checks-and-contextual-assessment-complete"
+}

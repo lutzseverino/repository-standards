@@ -1,0 +1,24 @@
+{
+  ".csv-summary.json": {
+    "sha256": "a0d8f1e0116d1223557e33c2dc8b00f46fb5823cd38348e76c67bac77d0e762a",
+    "executable": false
+  },
+  ".standards/tool.json": {
+    "sha256": "e4366151f9195a7e882da710bc3f7e874c329e2d7c39df739cac6e8e126310c8",
+    "executable": false
+  },
+  "CONTRIBUTING.md": {
+    "sha256": "974b941c9cefe3445b2f3576fcf25e760f0f8a6e64bffeedd453618f3accf2d7",
+    "executable": false
+  },
+  "README.md": {
+    "sha256": "69fd8e81b76ec44a2ca81b876106aa096b70ea4a5e9e7d9b92eaf9eae69dafe4",
+    "executable": false
+  },
+  "app.py": {
+    "sha256": "7beec7909706ca295bcf24f7a2840ab56e3269bf346231673b19243b30e50bd9",
+    "executable": false
+  },
+  "@HEAD": "9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab",
+  "@index-tree": "dec71e69769111267b59a62b4e44fd97dca6566e"
+}

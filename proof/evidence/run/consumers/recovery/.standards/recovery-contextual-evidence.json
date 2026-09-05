@@ -1,0 +1,201 @@
+{
+  "observations": [
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "--help"
+      ],
+      "input": null,
+      "returncode": 0,
+      "stdout": "usage: app.py [-h] [--precision PRECISION] file column\n\nSummarize one numeric CSV column; UTF-8, comma-delimited, header required.\n\npositional arguments:\n  file\n  column\n\noptions:\n  -h, --help            show this help message and exit\n  --precision PRECISION\n                        round total to this many decimal places\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\n\"Service, monthly\",12.50\nRefund,-2\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 10.5}\n",
+      "stderr": "",
+      "case": "example"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService,1.234\nRefund,2.345\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.579}\n",
+      "stderr": "",
+      "case": "decimal-default"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "input": "item,amount\nService,1.234\nRefund,2.345\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.58}\n",
+      "stderr": "",
+      "case": "decimal-rounded"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nCaf\u00e9,2\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 1, \"total\": 2.0}\n",
+      "stderr": "",
+      "case": "utf8"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService,oops\n",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n",
+      "case": "invalid"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "input": "item,amount\nService,oops\n",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n",
+      "case": "invalid-rounded"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService,\n",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: ''\n",
+      "case": "empty"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService\n",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: float() argument must be a string or a real number, not 'NoneType'\n",
+      "case": "missing"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 0, \"total\": 0}\n",
+      "stderr": "",
+      "case": "header-only"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,value\nService,2\n",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: unknown column: amount\n",
+      "case": "unknown"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService,nan\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 1, \"total\": NaN}\n",
+      "stderr": "",
+      "case": "nan"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/input.csv",
+        "amount"
+      ],
+      "input": "item,amount\nService,inf\n",
+      "returncode": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 1, \"total\": Infinity}\n",
+      "stderr": "",
+      "case": "inf"
+    },
+    {
+      "argv": [
+        "python3",
+        "app.py",
+        "/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/absent.csv",
+        "amount"
+      ],
+      "input": null,
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: [Errno 2] No such file or directory: '/private/tmp/standards-proof80-final/recovery/.standards/examples-xiijfgr0/absent.csv'\n"
+    }
+  ],
+  "preserved_sha256": {
+    "first-fix.txt": "c992c899cd67fba2738ae2947b614b4d211570d6ad2178fc4582170f7fad911b",
+    "partial-work.txt": "b58ed768db6d65514bcb2b56f44ef1c4f27dee03e23d212c4d823953d2d5a1eb",
+    "app.py": "7f1150fa810faeebc3129517e22a4097434d0d3ccaf2fd993045c501a6a53f1c",
+    "README.md": "935ac348502b5014e1a45319145863634ccafe29b7403cc5f1313e1b24c10a72",
+    "CONTRIBUTING.md": "974b941c9cefe3445b2f3576fcf25e760f0f8a6e64bffeedd453618f3accf2d7",
+    ".csv-summary.json": "6808ad47c56094da27316386bae4f17eded9f3788ab7e04d94dd404dd11f89fe"
+  },
+  "recovery_actions": [
+    "first",
+    "second",
+    "second"
+  ],
+  "recovered": "second operation finished\n"
+}

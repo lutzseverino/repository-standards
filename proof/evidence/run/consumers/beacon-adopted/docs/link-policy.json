@@ -1,0 +1,15 @@
+{
+  "scope": "local-only",
+  "network": false,
+  "reference_case": "tests/fixtures/link-contract.md",
+  "expected_links": [
+    {
+      "text": "Manual",
+      "url": "../../README.md"
+    },
+    {
+      "text": "Service status",
+      "url": "https://status.example.invalid"
+    }
+  ]
+}

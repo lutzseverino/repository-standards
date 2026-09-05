@@ -1,0 +1,10 @@
+{
+  "scenario_commit_after_uncommitted_verification": true,
+  "publisher_unavailable": true,
+  "fresh_checkout_retained_inputs_and_checks": true,
+  "cli_installed_outside_consumer": true,
+  "routine_versions_stable": true,
+  "general_install_does_not_override_pin": true,
+  "deliberate_tool_update_preserves_standards": true,
+  "corrupt_install_rejected": true
+}

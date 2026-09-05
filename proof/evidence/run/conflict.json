@@ -1,0 +1,4 @@
+{
+  "status": "incomplete",
+  "error": "whole update blocked before mutation:\n.agents/skills/trace-csv: local installed-content edit; reconcile against .standards/state.json baseline"
+}

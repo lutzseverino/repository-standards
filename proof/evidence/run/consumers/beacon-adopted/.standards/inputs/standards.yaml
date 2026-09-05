@@ -1,0 +1,96 @@
+{
+  "publisher": "beacon",
+  "defaults": {
+    "readme": {
+      "kind": "file",
+      "mode": "contextual",
+      "target": "README.md",
+      "guidance": [
+        "guidance/readme.md"
+      ]
+    },
+    "operations-record": {
+      "kind": "file",
+      "mode": "exact",
+      "target": ".beacon/operations.toml",
+      "source": "files/operations-full.toml",
+      "guidance": [
+        "guidance/operations.md"
+      ],
+      "checks": [
+        {
+          "id": "operator-readiness",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "readiness"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "link-triage": {
+      "kind": "skill",
+      "mode": "exact",
+      "target": ".agents/skills/triage-links",
+      "source": "skills/triage-links"
+    },
+    "local-link-contract": {
+      "kind": "concern",
+      "mode": "contextual",
+      "guidance": [
+        "guidance/link-contract.md"
+      ],
+      "fixes": [
+        {
+          "id": "write-link-contract",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "fix-contract"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "verify-link-contract",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "check-contract"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "contribution-governance": {
+      "kind": "file",
+      "mode": "contextual",
+      "target": "CONTRIBUTING.md",
+      "guidance": [
+        "guidance/contributing.md"
+      ]
+    }
+  },
+  "profiles": {
+    "full": {},
+    "compact": {
+      "operations-record": {
+        "kind": "file",
+        "mode": "exact",
+        "target": ".beacon/operations.toml",
+        "source": "files/operations-compact.toml"
+      },
+      "contribution-governance": {
+        "exclude": true
+      }
+    }
+  }
+}

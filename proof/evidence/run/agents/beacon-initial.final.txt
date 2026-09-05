@@ -1,0 +1,6 @@
+Adopted the selected `compact` profile; `finish` reports `complete`.
+
+- **Scripted evidence:** contract check passed; `git diff --check` passed. [Evidence log](/private/tmp/standards-proof80-final/beacon/.standards/events.jsonl).
+- **Contextual assessment:** README reflects observed CLI behavior and parser boundaries, preserving handbook facts and the unchanged editorial contribution policy. [Assessment](/private/tmp/standards-proof80-final/beacon/.standards/assessment.json).
+
+Final diff reviewed. HEAD remains `56627d2ddf905eb0b6abde77f0bdb9fa7ffaab33`; all adoption changes remain uncommitted.

@@ -1,0 +1,112 @@
+{
+  "identity": {
+    "source": "/private/tmp/standards-proof80-final/publishers/atlas",
+    "revision": "5e8b3a60d861f0fccd4048e1db36d18463b8751c",
+    "profile": "employer",
+    "publisher": "atlas"
+  },
+  "declarations": {
+    "csv-work": {
+      "kind": "skill",
+      "mode": "exact",
+      "target": ".agents/skills/trace-csv",
+      "source": "skills/trace-csv"
+    },
+    "data-contract": {
+      "kind": "concern",
+      "mode": "contextual",
+      "guidance": [
+        "guidance/data-contract.md"
+      ],
+      "fixes": [
+        {
+          "id": "atlas-data-contract-fix",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "fix-contract",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "atlas-data-contract-check",
+          "argv": [
+            "python3",
+            "{inputs}/scripts/check.py",
+            "check-contract",
+            "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"
+          ],
+          "requires": [
+            "python3"
+          ]
+        }
+      ]
+    },
+    "editor-config": {
+      "kind": "file",
+      "mode": "exact",
+      "target": ".editorconfig",
+      "source": "assets/editor-employer"
+    },
+    "readme": {
+      "kind": "file",
+      "mode": "contextual",
+      "target": "README.md",
+      "guidance": [
+        "guidance/readme-employer.md"
+      ]
+    }
+  },
+  "resolution": {
+    "contributing": "excluded",
+    "csv-work": "inherited",
+    "data-contract": "inherited",
+    "editor-config": "replaced",
+    "readme": "replaced"
+  },
+  "material": {
+    "skills/trace-csv/SKILL.md": {
+      "sha256": "98dcc1da771e884ee21d862089cce4c734d36a50ae146d09f438a721e9091cf0",
+      "text": "---\nname: trace-csv\ndescription: Implement or debug CSV summarizer behavior by tracing a small input through its actual command-line output.\n---\n\nStart with a CSV that exposes the requested behavior. Inspect the consumer's\nentry point and run its real command with that file; save the observed result.\nFor parsing or numeric conversion changes, use the relevant cases in\n[references/input-cases.md](references/input-cases.md) to choose a boundary\nexample. Change the behavior and rerun the original example plus that boundary.\nReport the input, command, and observed result so another person can reproduce\nit. Follow the repository's CONTRIBUTING.md for review and delivery.\n"
+    },
+    "skills/trace-csv/references/input-cases.md": {
+      "sha256": "3a268434ced26a6dfa2c6e46660a7da2ff76469c32cfb1a7dbe43cb5e2739c47",
+      "text": "# Choose the smallest revealing CSV\n\nFor delimiter handling, compare a normal comma-separated row with a quoted\nfield containing a comma. For numeric conversion, compare an ordinary number\nwith an empty field and a non-numeric token. For row handling, compare a header\nplus one row with a header alone. Select cases relevant to the requested change;\nrecord current behavior before deciding whether it should change.\n"
+    },
+    "guidance/data-contract.md": {
+      "sha256": "5438479668e5c88886886e96071e41e4e0033e6cee1bb6b4301b06f70174af6d",
+      "text": "# Keep the input contract discoverable\n\nThe CSV summarizer records its transport assumptions in `.csv-summary.json`\nand explains those same assumptions in `docs/data-contract.md`: UTF-8 text,\ncomma delimiter, and a header row. This concern owns those three configuration\nfields and that document. The publisher's fix preserves unrelated configuration\nkeys. Numeric conversion and error handling remain the consumer's behavior;\nthese transport declarations do not claim additional application features.\n"
+    },
+    "scripts/check.py": {
+      "sha256": "abed5aaf1b531cfdd066cbf6c69755efd65391a576e5a0f4d73b66a4ef867de5",
+      "text": "\"\"\"Atlas's declared, literal-argv contract actions; run in the consumer cwd.\"\"\"\nimport json\nfrom pathlib import Path\nimport sys\n\nLITERAL = 'Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]'\nCONTRACT = {'encoding': 'utf-8', 'delimiter': ',', 'header': True}\nDOCUMENT = '''# CSV transport contract\n\nInput is UTF-8 text with a comma delimiter and a header row.\nSee `.csv-summary.json` for the machine-readable transport assumptions.\nNumeric conversion and error handling are defined by the summarizer itself.\n'''\n\n\ndef execute():\n    if len(sys.argv) != 3 or sys.argv[2] != LITERAL:\n        raise ValueError('Atlas literal argv was split or interpreted')\n    operation = sys.argv[1]\n    payload = json.load(sys.stdin)\n    selection = payload['selection']\n    if not all(key in selection for key in ('identity', 'declarations', 'resolution')):\n        raise ValueError('Expected resolved selection identity, declarations, and resolution')\n    declaration = payload['declaration']\n    expected = {\n        'fix-contract': 'data-contract', 'check-contract': 'data-contract',\n        'fix-contribution': 'contributing', 'check-contribution': 'contributing',\n        'obsolete': 'editor-config',\n    }\n    if expected.get(operation) != declaration:\n        raise ValueError('Wrong declaration supplied to Atlas action')\n    with Path('.author-trace.jsonl').open('a') as trace:\n        trace.write(json.dumps({'publisher': 'atlas', 'operation': operation,\n                                'declaration': declaration, 'argv': sys.argv[1:]}) + '\\n')\n    if operation == 'obsolete':\n        raise ValueError('Obsolete default check ran: complete profile replacement was lost')\n    if operation.endswith('contribution'):\n        path = Path('CONTRIBUTING.md')\n        if operation == 'fix-contribution':\n            path.write_text((Path(__file__).parent.parent / 'assets/contributing.md').read_text())\n        if 'atlas-public-review' not in path.read_text():\n            raise ValueError('Atlas public contribution policy missing (employer must exclude this declaration)')\n        return 'Atlas public contribution policy is present'\n    path = Path('.csv-summary.json')\n    values = json.loads(path.read_text()) if path.exists() else {}\n    document = Path('docs/data-contract.md')\n    if operation == 'fix-contract':\n        values.update(CONTRACT)\n        path.write_text(json.dumps(values, indent=2) + '\\n')\n        document.parent.mkdir(parents=True, exist_ok=True)\n        document.write_text(DOCUMENT)\n    if not all(values.get(key) == value for key, value in CONTRACT.items()):\n        raise ValueError('CSV transport configuration does not match Atlas assumptions')\n    if not document.exists() or document.read_text() != DOCUMENT:\n        raise ValueError('CSV transport document does not match Atlas assumptions')\n    return 'CSV transport config and documentation agree'\n\n\ntry:\n    message = execute()\nexcept (ValueError, KeyError, OSError, TypeError) as error:\n    print(json.dumps({'status': 'fail', 'message': str(error)}))\n    sys.exit(1)\nprint(json.dumps({'status': 'pass', 'message': message}))\n"
+    },
+    "assets/editor-employer": {
+      "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+      "text": "root = true\n\n[*]\ncharset = utf-8\nindent_style = space\nindent_size = 4\n"
+    },
+    "guidance/readme-employer.md": {
+      "sha256": "3d8dcf8e581b87a231e93b9b5a164a1e7f6465d2a67dfc521494988f15f1adc3",
+      "text": "# Help an internal analyst finish one task\n\nLead with a runnable CSV summarization example: input rows, actual command, and\nobserved output. Discover the interface by reading and running `app.py`.\nAfter the example, explain the implemented treatment of invalid input and give\none observed error. Use a short \"Working here\" paragraph that points to the\nexisting employer CONTRIBUTING.md for internal review procedures; preserve that\ndocument and its authority. Avoid invented contact people and process details.\n"
+    }
+  },
+  "prerequisites": {
+    "data-contract/fixes/atlas-data-contract-fix": [
+      {
+        "requirement": "python3",
+        "available": true
+      }
+    ],
+    "data-contract/checks/atlas-data-contract-check": [
+      {
+        "requirement": "python3",
+        "available": true
+      }
+    ]
+  }
+}

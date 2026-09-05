@@ -1,0 +1,23 @@
+{
+  "revisions": {
+    "atlas": "5e8b3a60d861f0fccd4048e1db36d18463b8751c",
+    "beacon": "00764165dcdb9108bbad5edb095528d600ad5b31"
+  },
+  "heads": {
+    "atlas": "9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab",
+    "beacon": "56627d2ddf905eb0b6abde77f0bdb9fa7ffaab33",
+    "recovery": "9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab",
+    "fresh": "23867fd57c569aa6991628d1f7bbc8e98773cc00"
+  },
+  "tool_versions": [
+    "0.1.0",
+    "0.2.0"
+  ],
+  "implementation_base": "b4ecfcf939cb877f69b6937911637d727c5d7bf2",
+  "cli": "/private/tmp/standards-proof80-final/installed/99bb84d15ad54df9814374f49b38b2661fe6928438e274ed5d203c97e2a50961/standards-0.1.0.pyz",
+  "malformed_revision": "bd31db3a449f7038286b73f13096fef6bb335cf1",
+  "updated_revision": "f2cf57ea5438159b70cb58246a0d546b513e47fc",
+  "recovery_revision": "9ebe94a40e319fa40205d30b508b8200c7a0ed0b",
+  "consumer_commit": "23867fd57c569aa6991628d1f7bbc8e98773cc00",
+  "offline_cli": "/private/tmp/standards-proof80-final/fresh-install/99bb84d15ad54df9814374f49b38b2661fe6928438e274ed5d203c97e2a50961/standards-0.1.0.pyz"
+}

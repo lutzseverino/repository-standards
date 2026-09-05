@@ -1,0 +1,6 @@
+Updated the `employer` profile to `f2cf57ea5438159b70cb58246a0d546b513e47fc`. `finish` reports complete.
+
+- **Scripted evidence:** Contract fix/check passed; `git diff --check` passed. Recorded in [events.jsonl](/private/tmp/standards-proof80-final/atlas/.standards/events.jsonl).
+- **Contextual assessment:** Verified actual CLI behavior and documented default total `3.579`, rounded total `3.58`, and invalid-input errors. Recorded in [assessment.json](/private/tmp/standards-proof80-final/atlas/.standards/assessment.json).
+
+Preserved project facts, the 16:00 Madrid operational note, employer contribution policy, and existing application changes. HEAD is unchanged; all adoption changes remain uncommitted.

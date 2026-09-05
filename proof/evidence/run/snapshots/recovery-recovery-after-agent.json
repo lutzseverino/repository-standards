@@ -1,0 +1,168 @@
+{
+  ".agents/skills/adopt-standards/SKILL.md": {
+    "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+    "executable": false
+  },
+  ".agents/skills/trace-csv/SKILL.md": {
+    "sha256": "f04dac5a5f7d49705af2000194db1f5621442de8dbb30960d24a842babb0dd25",
+    "executable": false
+  },
+  ".agents/skills/trace-csv/rounding.md": {
+    "sha256": "5e6e6e528939349baf0bd95e3e02d686d55f6c96611f7dfa3e421b2a0034b907",
+    "executable": false
+  },
+  ".author-trace.jsonl": {
+    "sha256": "9d4accb9e268cdc85bb87442c7a67e065df853462cde83581217cffaf4a4e0af",
+    "executable": false
+  },
+  ".csv-summary.json": {
+    "sha256": "6808ad47c56094da27316386bae4f17eded9f3788ab7e04d94dd404dd11f89fe",
+    "executable": false
+  },
+  ".editorconfig": {
+    "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+    "executable": false
+  },
+  ".recovery-trace.jsonl": {
+    "sha256": "d8f5e6779dbc9e878fe7b6dfd5e6873e9b977b3cb5abc75ad85dc4167b56d585",
+    "executable": false
+  },
+  ".standards/agent-claims.json": {
+    "sha256": "a3e3ca7e9f894e6feb883150ba6705974612f14dc18bc9786ed70c6b5189656e",
+    "executable": false
+  },
+  ".standards/assessment.json": {
+    "sha256": "af21bb8d2b12923cb0e5512cf744822d23ace70708e2da53f7f5917837dd3a35",
+    "executable": false
+  },
+  ".standards/contextual-evidence.json": {
+    "sha256": "fc796055b228d8068188a9022a4bb94a517f2d9c3dd4ce79ddd550b9cd57a659",
+    "executable": false
+  },
+  ".standards/events.jsonl": {
+    "sha256": "fff15ec579af04b1e8f07d5b5d7996a0ddeb8f7a0440d4c5c32286991723fc79",
+    "executable": false
+  },
+  ".standards/inputs/AUTHOR.md": {
+    "sha256": "617f38c1902620cf1b5cb220d1189455e02b769c1cac7f4ace0300fb116ee9ec",
+    "executable": false
+  },
+  ".standards/inputs/assets/contributing.md": {
+    "sha256": "c989af199b49adfc288f52f7414ae5c8cb4916d53619743a7e858aa1baa24ccb",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-default": {
+    "sha256": "0dc82dcb4d762fc9c8c0e41b615453ced4f415aa5c2f872f77710de21d2314da",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-employer": {
+    "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+    "executable": false
+  },
+  ".standards/inputs/assets/editor-full": {
+    "sha256": "29c380ee803b4d125d910fac64d8d4a2d7db0bda19b7dab15f81da739c290906",
+    "executable": false
+  },
+  ".standards/inputs/guidance/data-contract.md": {
+    "sha256": "5438479668e5c88886886e96071e41e4e0033e6cee1bb6b4301b06f70174af6d",
+    "executable": false
+  },
+  ".standards/inputs/guidance/readme-employer.md": {
+    "sha256": "8ee61f36b4c3eb2839a89e021dd11907eee115a21236769876348111ebaf23a7",
+    "executable": false
+  },
+  ".standards/inputs/guidance/readme.md": {
+    "sha256": "8e14fc09014c4052a539dbb6d7b9c63967106c7989d4f9330262e262a36acb1c",
+    "executable": false
+  },
+  ".standards/inputs/guidance/recovery.md": {
+    "sha256": "3502597416a0ac7347f264ea2cfa75f6e9d7988a4ba1889809e01dca5aa62319",
+    "executable": false
+  },
+  ".standards/inputs/scripts/check.py": {
+    "sha256": "abed5aaf1b531cfdd066cbf6c69755efd65391a576e5a0f4d73b66a4ef867de5",
+    "executable": false
+  },
+  ".standards/inputs/scripts/recovery.py": {
+    "sha256": "365bac95ef601ef634334bbd4271448032e35395ecc1e272372e3357dd4c014c",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv/SKILL.md": {
+    "sha256": "98dcc1da771e884ee21d862089cce4c734d36a50ae146d09f438a721e9091cf0",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv/references/input-cases.md": {
+    "sha256": "3a268434ced26a6dfa2c6e46660a7da2ff76469c32cfb1a7dbe43cb5e2739c47",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv-v2/SKILL.md": {
+    "sha256": "f04dac5a5f7d49705af2000194db1f5621442de8dbb30960d24a842babb0dd25",
+    "executable": false
+  },
+  ".standards/inputs/skills/trace-csv-v2/rounding.md": {
+    "sha256": "5e6e6e528939349baf0bd95e3e02d686d55f6c96611f7dfa3e421b2a0034b907",
+    "executable": false
+  },
+  ".standards/inputs/standards.yaml": {
+    "sha256": "fbe256b8d8c7317ccb67525f5a42c9302792d363d79cbb72d32b9e8312d7f8a1",
+    "executable": false
+  },
+  ".standards/progress.json": {
+    "sha256": "043b2ce1c290fff3aa2093aa6201423fcb8cd3c76615a45761f982d264478cfe",
+    "executable": false
+  },
+  ".standards/recovery-before.json": {
+    "sha256": "913ab520f304a2d9ff60ee68f9f849336c65e688c70f98965bb4b1956b5fa5b9",
+    "executable": false
+  },
+  ".standards/recovery-contextual-evidence.json": {
+    "sha256": "f5c38784445f8f09da191359645171de8c231ce8a4f7f31a1afc67a9d06029c0",
+    "executable": false
+  },
+  ".standards/selection.json": {
+    "sha256": "69e487bd3a8989a3ce12a5a3299fe82d0178296d7962f222de9c1e0d2f6fc5ba",
+    "executable": false
+  },
+  ".standards/setup.py": {
+    "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+    "executable": false
+  },
+  ".standards/state.json": {
+    "sha256": "ac5771da4bcfa7b30174feb31bd33949cd7db343bb887f10a308db3f2d4ac06f",
+    "executable": false
+  },
+  ".standards/tool.json": {
+    "sha256": "e4366151f9195a7e882da710bc3f7e874c329e2d7c39df739cac6e8e126310c8",
+    "executable": false
+  },
+  "CONTRIBUTING.md": {
+    "sha256": "974b941c9cefe3445b2f3576fcf25e760f0f8a6e64bffeedd453618f3accf2d7",
+    "executable": false
+  },
+  "README.md": {
+    "sha256": "935ac348502b5014e1a45319145863634ccafe29b7403cc5f1313e1b24c10a72",
+    "executable": false
+  },
+  "app.py": {
+    "sha256": "7f1150fa810faeebc3129517e22a4097434d0d3ccaf2fd993045c501a6a53f1c",
+    "executable": false
+  },
+  "docs/data-contract.md": {
+    "sha256": "3a6cd9514ccd39658443abc3440d7cb80d02453a529b52a0d3b58b6b13961e43",
+    "executable": false
+  },
+  "first-fix.txt": {
+    "sha256": "c992c899cd67fba2738ae2947b614b4d211570d6ad2178fc4582170f7fad911b",
+    "executable": false
+  },
+  "partial-work.txt": {
+    "sha256": "b58ed768db6d65514bcb2b56f44ef1c4f27dee03e23d212c4d823953d2d5a1eb",
+    "executable": false
+  },
+  "recovered.txt": {
+    "sha256": "c0f4fe5dce29a81e54123f56eedce9d711164ce97d4cb4f387d304c14e10198b",
+    "executable": false
+  },
+  "@HEAD": "9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab",
+  "@index-tree": "dec71e69769111267b59a62b4e44fd97dca6566e"
+}

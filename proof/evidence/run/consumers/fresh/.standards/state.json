@@ -1,0 +1,40 @@
+{
+  "identity": {
+    "source": "/private/tmp/standards-proof80-final/publishers/atlas",
+    "revision": "f2cf57ea5438159b70cb58246a0d546b513e47fc",
+    "profile": "employer",
+    "publisher": "atlas"
+  },
+  "tool_version": "0.1.0",
+  "baseline": {
+    ".agents/skills/trace-csv": {
+      "SKILL.md": {
+        "sha256": "f04dac5a5f7d49705af2000194db1f5621442de8dbb30960d24a842babb0dd25",
+        "executable": false
+      },
+      "rounding.md": {
+        "sha256": "5e6e6e528939349baf0bd95e3e02d686d55f6c96611f7dfa3e421b2a0034b907",
+        "executable": false
+      }
+    },
+    ".editorconfig": {
+      ".": {
+        "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+        "executable": false
+      }
+    },
+    ".agents/skills/adopt-standards/SKILL.md": {
+      ".": {
+        "sha256": "7cd43ecd50947afeece546d340d5c25f0cf14dbbcbfac20debc9e99b759fbc1a",
+        "executable": false
+      }
+    },
+    ".standards/setup.py": {
+      ".": {
+        "sha256": "3b5ccde57d1925a4112b4dc26f7131fddeea6bf67b158c596bffa1f423d48df5",
+        "executable": false
+      }
+    }
+  },
+  "retained_retired": []
+}

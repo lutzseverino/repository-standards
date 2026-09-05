@@ -1,0 +1,8 @@
+{
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+  "git": "git version 2.53.0",
+  "codex": "codex-cli 0.153.3",
+  "executed_cli_matches_tool_source": true,
+  "source_base_at_capture": "134c5f61a4163ae282d7cbe948b7eff4906d4c82"
+}

@@ -1,0 +1,6 @@
+Adopted the selected pinned `employer` profile; `finish` reports **complete**.
+
+- **Scripted evidence:** All applicable checks passed; recorded in [.standards/events.jsonl](/private/tmp/standards-proof80-final/atlas/.standards/events.jsonl). `git diff --check` passed.
+- **Contextual assessment:** README now documents verified CLI examples and errors. Assessment recorded in [.standards/assessment.json](/private/tmp/standards-proof80-final/atlas/.standards/assessment.json).
+
+Preserved project-specific facts, `department: finance`, and employer-owned `CONTRIBUTING.md`. HEAD remains `9dcb2fc40e80eb98b4b3a500e15875c4f862b1ab`; all adoption changes are uncommitted.

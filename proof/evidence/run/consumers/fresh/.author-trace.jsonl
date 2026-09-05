@@ -1,0 +1,7 @@
+{"publisher": "atlas", "operation": "fix-contract", "declaration": "data-contract", "argv": ["fix-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "check-contract", "declaration": "data-contract", "argv": ["check-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "fix-contract", "declaration": "data-contract", "argv": ["fix-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "check-contract", "declaration": "data-contract", "argv": ["check-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "check-contract", "declaration": "data-contract", "argv": ["check-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "check-contract", "declaration": "data-contract", "argv": ["check-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}
+{"publisher": "atlas", "operation": "check-contract", "declaration": "data-contract", "argv": ["check-contract", "Atlas input; $(touch SHOULD_NOT_EXIST) & [literal]"]}

@@ -1,0 +1,6 @@
+Recovered the retained adoption; `finish` reports **complete**.
+
+- **Scripted evidence:** Failed second fix retried successfully; completed fixes were skipped. Contract and recovery checks passed. Recorded in [.standards/events.jsonl](/private/tmp/standards-proof80-final/recovery/.standards/events.jsonl).
+- **Contextual assessment:** Verified CLI examples, rounding, errors, transport assumptions, and preserved recovery artifacts. All three contextual declarations assessed in [.standards/assessment.json](/private/tmp/standards-proof80-final/recovery/.standards/assessment.json).
+
+Existing project facts, operational notes, application changes, and employer contribution policy remain intact. Final diff checked; HEAD unchanged. All adoption changes remain uncommitted.

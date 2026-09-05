@@ -1,0 +1,4 @@
+{
+  "decision": "Discard the scenario-injected experiment explicitly; restore exact installed bytes and accept publisher v2 skill",
+  "target": "/private/tmp/standards-proof80-final/atlas/.agents/skills/trace-csv/SKILL.md"
+}

@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "codex",
+    "exec",
+    "--ignore-user-config",
+    "--ephemeral",
+    "-c",
+    "approval_policy=\"never\"",
+    "--sandbox",
+    "danger-full-access",
+    "--json",
+    "-C",
+    "/private/tmp/standards-proof80-final/beacon",
+    "-o",
+    "/private/tmp/standards-proof80-final/agents/beacon-initial.final.txt",
+    "-"
+  ],
+  "stdin": "Work only in this disposable consumer repository: /private/tmp/standards-proof80-final/beacon. Use the shared adoption skill at /private/tmp/standards-proof80-final/bootstrap-SKILL.md and installed CLI /private/tmp/standards-proof80-final/installed/99bb84d15ad54df9814374f49b38b2661fe6928438e274ed5d203c97e2a50961/standards-0.1.0.pyz. Adopt this selected profile: --source /private/tmp/standards-proof80-final/publishers/beacon --revision 00764165dcdb9108bbad5edb095528d600ad5b31 --profile compact.\nUse only this consumer, supplied installed tool/bootstrap, and selected publisher inputs. No planning context or product source checkout is needed. Complete required contextual work from actual project behavior. Preserve existing project-specific facts and employer-owned contribution policy. Leave adoption changes uncommitted. Use the shared skill completion contract and report scripted evidence separately from your contextual assessment.\n"
+}

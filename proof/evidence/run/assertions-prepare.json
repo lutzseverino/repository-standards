@@ -1,0 +1,6 @@
+{
+  "read_only_inspection": true,
+  "inherit_replace_exclude": true,
+  "actionable_invalid_declarations": true,
+  "prerequisite_before_mutation": true
+}

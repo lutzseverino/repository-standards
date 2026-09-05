@@ -1,0 +1,137 @@
+[
+  {
+    "case": "help",
+    "argv": [
+      "python3",
+      "app.py",
+      "--help"
+    ],
+    "returncode": 0,
+    "stdout": "usage: app.py [-h] [--precision PRECISION] file column\n\nSummarize one numeric CSV column; UTF-8, comma-delimited, header required.\n\npositional arguments:\n  file\n  column\n\noptions:\n  -h, --help            show this help message and exit\n  --precision PRECISION\n                        round total to this many decimal places\n",
+    "stderr": ""
+  },
+  {
+    "case": "example",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/example.csv",
+      "amount"
+    ],
+    "returncode": 0,
+    "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 10.5}\n",
+    "stderr": ""
+  },
+  {
+    "case": "unknown",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/example.csv",
+      "absent"
+    ],
+    "returncode": 2,
+    "stdout": "",
+    "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: unknown column: absent\n"
+  },
+  {
+    "case": "decimal",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/decimal.csv",
+      "amount"
+    ],
+    "returncode": 0,
+    "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.579}\n",
+    "stderr": ""
+  },
+  {
+    "case": "rounded",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/decimal.csv",
+      "amount",
+      "--precision",
+      "2"
+    ],
+    "returncode": 0,
+    "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.58}\n",
+    "stderr": ""
+  },
+  {
+    "case": "invalid",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/invalid.csv",
+      "amount"
+    ],
+    "returncode": 2,
+    "stdout": "",
+    "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n"
+  },
+  {
+    "case": "invalid-rounded",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/invalid.csv",
+      "amount",
+      "--precision",
+      "2"
+    ],
+    "returncode": 2,
+    "stdout": "",
+    "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n"
+  },
+  {
+    "case": "empty",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/empty.csv",
+      "amount"
+    ],
+    "returncode": 2,
+    "stdout": "",
+    "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: ''\n"
+  },
+  {
+    "case": "missing",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/missing.csv",
+      "amount"
+    ],
+    "returncode": 2,
+    "stdout": "",
+    "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: float() argument must be a string or a real number, not 'NoneType'\n"
+  },
+  {
+    "case": "header",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/header.csv",
+      "amount"
+    ],
+    "returncode": 0,
+    "stdout": "{\"column\": \"amount\", \"count\": 0, \"total\": 0}\n",
+    "stderr": ""
+  },
+  {
+    "case": "utf8",
+    "argv": [
+      "python3",
+      "app.py",
+      "/private/tmp/standards-proof80-final/atlas/.adoption-cases-q_7dfan5/utf8.csv",
+      "amount"
+    ],
+    "returncode": 0,
+    "stdout": "{\"column\": \"amount\", \"count\": 1, \"total\": 3.0}\n",
+    "stderr": ""
+  }
+]

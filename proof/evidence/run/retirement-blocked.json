@@ -1,0 +1,4 @@
+{
+  "status": "incomplete",
+  "error": "whole update blocked before mutation:\n.agents/skills/trace-csv: retired installed content; explicitly --retain-retired .agents/skills/trace-csv to preserve and relinquish ownership"
+}

@@ -1,0 +1,226 @@
+{
+  "identity": {
+    "source": "/private/tmp/standards-proof80-final/publishers/atlas",
+    "revision": "f2cf57ea5438159b70cb58246a0d546b513e47fc",
+    "profile": "employer",
+    "publisher": "atlas"
+  },
+  "observations": [
+    {
+      "case": "help",
+      "argv": [
+        "python3",
+        "app.py",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "usage: app.py [-h] [--precision PRECISION] file column\n\nSummarize one numeric CSV column; UTF-8, comma-delimited, header required.\n\npositional arguments:\n  file\n  column\n\noptions:\n  -h, --help            show this help message and exit\n  --precision PRECISION\n                        round total to this many decimal places\n",
+      "stderr": ""
+    },
+    {
+      "case": "readme-example",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/readme-example.csv",
+        "amount"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 10.5}\n",
+      "stderr": ""
+    },
+    {
+      "case": "readme-decimal",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/readme-decimal.csv",
+        "amount"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.579}\n",
+      "stderr": ""
+    },
+    {
+      "case": "readme-decimal-precision-2",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/readme-decimal.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 3.58}\n",
+      "stderr": ""
+    },
+    {
+      "case": "tiny-decimal",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/tiny-decimal.csv",
+        "amount"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 0.30000000000000004}\n",
+      "stderr": ""
+    },
+    {
+      "case": "tiny-decimal-precision-2",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/tiny-decimal.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 0.3}\n",
+      "stderr": ""
+    },
+    {
+      "case": "invalid",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/invalid.csv",
+        "amount"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n"
+    },
+    {
+      "case": "invalid-precision-2",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/invalid.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: 'oops'\n"
+    },
+    {
+      "case": "empty",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/empty.csv",
+        "amount"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: ''\n"
+    },
+    {
+      "case": "empty-precision-2",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/empty.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: could not convert string to float: ''\n"
+    },
+    {
+      "case": "missing",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/missing.csv",
+        "amount"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: float() argument must be a string or a real number, not 'NoneType'\n"
+    },
+    {
+      "case": "missing-precision-2",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/missing.csv",
+        "amount",
+        "--precision",
+        "2"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: float() argument must be a string or a real number, not 'NoneType'\n"
+    },
+    {
+      "case": "header-only",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/header-only.csv",
+        "amount"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 0, \"total\": 0}\n",
+      "stderr": ""
+    },
+    {
+      "case": "utf8-quoted",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/utf8-quoted.csv",
+        "amount"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"column\": \"amount\", \"count\": 2, \"total\": 10.5}\n",
+      "stderr": ""
+    },
+    {
+      "case": "unknown-column",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/utf8-quoted.csv",
+        "unknown"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: unknown column: unknown\n"
+    },
+    {
+      "case": "missing-file",
+      "argv": [
+        "python3",
+        "app.py",
+        ".standards/rounding-6_x7cfpz/absent.csv",
+        "amount"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "usage: app.py [-h] [--precision PRECISION] file column\napp.py: error: [Errno 2] No such file or directory: '.standards/rounding-6_x7cfpz/absent.csv'\n"
+    }
+  ],
+  "provenance": {
+    ".agents/skills/trace-csv/SKILL.md": {
+      "sha256": "f04dac5a5f7d49705af2000194db1f5621442de8dbb30960d24a842babb0dd25",
+      "matches_selected_and_retained": true
+    },
+    ".agents/skills/trace-csv/rounding.md": {
+      "sha256": "5e6e6e528939349baf0bd95e3e02d686d55f6c96611f7dfa3e421b2a0034b907",
+      "matches_selected_and_retained": true
+    },
+    ".editorconfig": {
+      "sha256": "8015d49449c0812bccd3cb06dfceb902bf4a60a4a0b241d9a22f7190330435af",
+      "matches_selected_and_retained": true
+    }
+  },
+  "note": "Fresh consumer-only observations; temporary synthetic CSV files removed after execution. Publisher checks are recorded separately by finish."
+}

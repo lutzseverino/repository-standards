@@ -325,7 +325,9 @@ def verify_recovery(root):
     assert actions.count('first') == 1 and actions.count('second') == 2
     assert read(project / '.standards/progress.json')['status'] == 'complete'
     assert (project / 'partial-work.txt').read_text() == 'actual partial work survives failure\n'
-    save(root / 'assertions-recovery.json', {'actual_partial_work_retained': True, 'completed_fix_ran_once': True,
+    assert (project / 'CONTRIBUTING.md').read_bytes() == (root / 'before/atlas/CONTRIBUTING.md').read_bytes()
+    assert snapshot(project)['@HEAD'] == read(root / 'run.json')['heads']['recovery']
+    save(root / 'assertions-recovery.json', {'employer_bytes_and_head_unchanged': True, 'actual_partial_work_retained': True, 'completed_fix_ran_once': True,
                                           'failed_fix_retried': True, 'real_agent_completed_recovery': True})
 
 
@@ -333,14 +335,23 @@ def offline(root):
     info = read(root / 'run.json')
     project = root / 'atlas'
     # Explicit scenario commit AFTER assertions established adoption did not commit.
-    info['consumer_commit'] = commit(root, project, 'Scenario only: retain verified adoption inputs')
-    git(root, root, 'clone', '-q', project, root / 'fresh')
-    shutil.move(root / 'publishers', root / 'publishers-unavailable')
+    if not (root / 'fresh').exists():
+        info['consumer_commit'] = commit(root, project, 'Scenario only: retain verified adoption inputs')
+        save(root / 'run.json', info)
+        git(root, root, 'clone', '-q', project, root / 'fresh')
+    else:
+        info['consumer_commit'] = git(root, root / 'fresh', 'rev-parse', 'HEAD')
+        assert git(root, project, 'rev-parse', 'HEAD') == info['consumer_commit']
+    if (root / 'publishers').exists():
+        (root / 'publisher-history').mkdir(exist_ok=True)
+        for publisher in sorted((root / 'publishers').iterdir()):
+            git(root, publisher, 'bundle', 'create', root / 'publisher-history' / f'{publisher.name}.bundle', '--all')
+        shutil.rmtree(root / 'publishers')
     assert not (root / 'publishers').exists()
     fresh = root / 'fresh'
     pin_before = read(fresh / '.standards/tool.json')
     installed = run(root, [sys.executable, '.standards/setup.py', '--cache', root / 'fresh-install'], fresh)
-    assert Path(installed).is_file() and not str(Path(installed)).startswith(str(fresh))
+    assert Path(installed).is_file() and not Path(installed).is_relative_to(fresh)
     info['offline_cli'] = installed
     # General installation deliberately changes, leaving project pin untouched.
     shutil.copy2(root / 'depot/standards-0.2.0.pyz', root / 'general-standards.pyz')

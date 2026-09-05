@@ -1,0 +1,4 @@
+{
+  "status": "incomplete",
+  "error": "missing prerequisites before application: {'data-contract/fixes/atlas-data-contract-fix': ['proof80-unavailable-runtime']}; install explicitly and retry"
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "agent-assessment",
+  "claims": {
+    "data-contract": "Read selected guidance/data-contract.md and scripts/check.py, current app.py, .csv-summary.json and docs/data-contract.md. Fresh app executions confirm UTF-8 and quoted commas, header-based column lookup, and numeric conversion/error behavior. Config and document match UTF-8/comma/header transport implemented by csv.DictReader; app does not read config. Preserved department=finance. Evidence: .standards/rounding-evidence.json. Publisher scripted checks independently validate transport files only.",
+    "readme": "Read selected guidance/readme-employer.md, current app.py, CLI help, README and employer CONTRIBUTING.md; file inventory contains no tests. Fresh executions reproduce README opening example (count 2, total 10.5), decimal default 3.579 and precision 2 total 3.58, and the documented oops error with exit 2 and empty stdout. Additional 0.1/0.2 example returns default 0.30000000000000004 and precision 2 total 0.3; invalid, empty and missing selected values still fail with precision enabled. Header-only, unknown-column, missing-file and UTF-8 quoted-comma behavior were observed. README already satisfies current guidance and needs no edit. Preserved Wednesday reconciliation at 16:00 Madrid, local finance exports, no customer data, and employer authority requiring two employee reviewers in the company tracker. CONTRIBUTING.md unchanged. Evidence: .standards/rounding-evidence.json; this factual assessment is separate from scripted transport checks."
+  }
+}
