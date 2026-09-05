@@ -3,13 +3,21 @@
 Durable decisions for the Repository Standards source and public repository
 environment.
 
+For replacement planning, use ADR 0017's complete
+[predecessor applicability map](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions).
+Earlier operational decisions continue to govern the existing implementation
+within that scope; their inventories and migration rules are not automatically
+requirements for independent publishers.
+
 - [Adopt one canonical skills workflow](0001-adopt-one-canonical-skills-workflow.md):
   historical decision that replaced the issue-first workflow and separated
-  GitHub delivery; superseded in part by ADR 0002, ADR 0003, and ADR 0005.
+  GitHub delivery; superseded in part by ADR 0002, ADR 0003, and ADR 0005,
+  and for replacement planning by ADR 0017.
 - [Own the workflow and distribute pinned agent skills](0002-own-workflow-and-distribute-agent-skills.md):
   distinguish repository policy from upstream skill contracts and make the
   official skill bundle available in every participating repository;
-  superseded in part by ADR 0004, ADR 0010, and ADR 0013.
+  superseded in part by ADR 0004, ADR 0010, and ADR 0013, and for
+  replacement planning by ADR 0017.
 - [Distribute dependency-free repository lifecycle skills](0003-distribute-dependency-free-repository-lifecycle-skills.md):
   ship family-owned adoption and repository-creation operations without
   coupling them to a planning or implementation workflow; superseded in part
@@ -35,7 +43,7 @@ environment.
 - [Define the public repository environment](0010-define-the-public-repository-environment.md):
   make the standards adoptable by unrelated maintainers while leaving product
   implementation and repository-owned tooling under repository ownership;
-  superseded in part by ADR 0016.
+  superseded in part by ADR 0016 and for replacement planning by ADR 0017.
 - [Advertise only operational lifecycle interfaces](0011-advertise-only-operational-lifecycle-interfaces.md):
   remove the delivery command stub, present agent-owned delivery through its
   Agent Skill, and separate concise human output from complete evidence.
@@ -45,14 +53,15 @@ environment.
 - [Curate skills and adapt harness discovery](0013-curate-skills-and-adapt-harness-discovery.md):
   distribute only the canonical workflow's transitive skill closure, retire
   former managed skills explicitly, and expose canonical artifacts to Claude
-  through drift-checked pointers; superseded in part by ADR 0016.
+  through drift-checked pointers; superseded in part by ADR 0016 and for replacement planning by ADR 0017.
 - [Compose product-neutral ecosystem profiles](0014-compose-product-neutral-ecosystem-profiles.md):
   select every applicable ecosystem profile while keeping product
   implementation and guidance outside mechanical conformance; superseded for
   replacement product planning by ADR 0017.
 - [Bootstrap through thin user-scoped skills](0015-bootstrap-through-thin-user-scoped-skills.md):
   install only the two public entry skills globally, select one immutable
-  release, and delegate lifecycle behavior to its release-pinned environment.
+  release, and delegate lifecycle behavior to its release-pinned environment;
+  superseded in part for replacement planning by ADR 0017.
 - [Separate the capability platform from policy packs](0016-separate-capability-platform-from-policy-packs.md):
   provide shared safe repository operations independently of declarative,
   selectable, authorable, and forkable policy; superseded by ADR 0017.

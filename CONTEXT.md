@@ -57,7 +57,7 @@ one complete profile at an exact publisher revision.
 _Avoid_: Merged policy pack, capability-specific interpretation
 
 **System skill**:
-A tool-version-pinned shared operation, including standards adoption, whose name
+A tool-version-pinned shared operation, including profile adoption, whose name
 and implementation are reserved against publisher replacement.
 _Avoid_: Author adoption hook, ordinary-work skill
 
@@ -66,7 +66,7 @@ A publisher-authored Agent Skill governing later repository work according to
 the selected profile; its activities are not automatically adoption tasks.
 _Avoid_: System skill, mandatory adoption checklist
 
-**Bootstrap skill**:
+**Profile bootstrap**:
 A thin first-entry skill that obtains the pinned installed tool and delegates
 to its shared adoption behavior before repository-local system skills exist.
 _Avoid_: Publisher adoption procedure, copied CLI implementation
@@ -81,7 +81,7 @@ The immutable publisher revision and single complete profile selected by a
 project, with retained inputs and provenance.
 _Avoid_: Tool version, moving source branch
 
-**Standards adoption**:
+**Profile adoption**:
 The deliberate application or update of one pinned complete profile through
 exact installation, applicable scripted operations, and contextual agent work,
 completed with verification and changes left uncommitted.
@@ -104,7 +104,7 @@ address the agent. Another language is appropriate when the subject itself
 requires it, such as quoted documents or translation content.
 _Avoid_: Input language, English-only content
 
-### Shared workflow vocabulary
+### Existing implementation workflow vocabulary
 
 **Incoming request**:
 Work proposed outside the repository's own planning flow and awaiting
@@ -151,7 +151,13 @@ A GitHub label whose exact name must exist for the canonical workflow. A
 repository can also have labels that are not required labels.
 _Avoid_: Exclusive label set
 
-## Existing release lifecycle vocabulary
+### Existing implementation lifecycle vocabulary
+
+**Bootstrap skill**:
+A thin user-scoped `create-repository` or `adopt-standards` entry skill that
+selects an immutable standards release and delegates to its release-owned
+lifecycle behavior.
+_Avoid_: Profile bootstrap, installed-tool pin
 
 **Managed absence**:
 A declared repository path that must not exist because its presence would
@@ -165,10 +171,10 @@ GitHub behavior governed by a standards release. Product implementation and
 repository-owned tooling may vary or diverge without changing that environment.
 _Avoid_: Application skeleton, product architecture, project implementation
 
-**Released standards adoption**:
-The current release's deliberate adoption or upgrade into its repository
+**Standards adoption**:
+The existing lifecycle's deliberate adoption or upgrade into its repository
 environment and declared GitHub contract, ending in a validated adoption commit.
-_Avoid_: Replacement-model adoption, uncommitted adoption
+_Avoid_: Profile adoption, uncommitted adoption
 
 **Prepared creation baseline**:
 The uncommitted local repository content, including its settled

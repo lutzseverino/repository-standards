@@ -3,10 +3,13 @@
 ## Status
 
 Superseded for replacement product planning by
-[ADR 0017](0017-independent-profiles-and-shared-adoption.md). Its single complete
-profile replaces this decision's composition of every matching ecosystem
-profile. The decision below still describes the released implementation until
-a deliberate production cutover.
+[ADR 0017](0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions):
+one complete profile replaces composition of every matching ecosystem profile;
+contextual requirements can govern project-owned content, and profiles need not
+supply automation. Advisory-only guidance, rejection of guidance-only profiles,
+and blanket exclusion of product conventions do not constrain the replacement.
+The decision below still describes the existing implementation until a deliberate
+production cutover.
 
 Originally accepted in [issue #48](https://github.com/lutzseverino/repository-standards/issues/48).
 

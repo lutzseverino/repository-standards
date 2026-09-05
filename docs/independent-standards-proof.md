@@ -32,6 +32,12 @@ or packaging decisions. Actual artifact hashes, publisher Git revisions, profile
 choices, invocation arguments, and source/consumer Git records are in its proof
 package.
 
+The glossary calls the replacement operation **Profile adoption** and its entry
+skill **Profile bootstrap**. Existing commit-producing **Standards adoption**
+and its **Bootstrap skill** keep their operational meanings. ADR 0017
+[reconciles all earlier decisions](adr/0017-independent-profiles-and-shared-adoption.md#relationship-to-earlier-decisions)
+and scopes the existing lifecycle and maintenance instructions.
+
 ## Acceptance-to-evidence map
 
 All paths below are relative to `proof/evidence/run/` in that immutable source.
@@ -53,7 +59,7 @@ runner. Script results and agent assessments have distinct owners and files.
 | Conflict blocks whole update | Identical `snapshots/conflict-before.json` and `conflict-after.json`, `conflict.json`, and `conflict-reconciliation.json`. The injected local skill edit is explicitly restored to its baseline before the coherent update proceeds. |
 | Failure and recovery | `injected-failure.json`, failure snapshots, `.standards/progress.json`, real `agents/recovery-recovery.*` execution, `.recovery-trace.jsonl`, and `assertions-recovery.json`. Actual partial files survive; the completed first fix runs once and only the failed second fix retries. No rollback is claimed. |
 | Inspectable proof package | Immutable source above, `proof/README.md`, `proof/run.py`, exact zipapp hashes/catalogue, raw command and agent records, snapshots, publisher bundles, and before/after consumer content. This is a local deterministic proof with real contextual model calls, not a public distribution rehearsal. |
-| Learning reconciled before further work | This report, ADR 0017, supersession notices on ADRs 0014 and 0016, glossary updates, and findings returned to #79. [Review-process follow-up #81](https://github.com/lutzseverino/repository-standards/issues/81) remains unready. #79 stays open without `ready-for-agent`; no downstream production tree was specified or dispatched. |
+| Learning reconciled before further work | This report, ADR 0017, its complete predecessor applicability map and linked supersession notices, glossary updates, and findings returned to #79. [Review-process follow-up #81](https://github.com/lutzseverino/repository-standards/issues/81) remains unready. #79 stays open without `ready-for-agent`; no downstream production tree was specified or dispatched. |
 
 ## Contextual usefulness assessment
 
