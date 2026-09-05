@@ -131,7 +131,7 @@ def prepare(root):
         before = snapshot(root / 'atlas')
         command = 'apply' if case == 'missing-prerequisite' else 'inspect'
         error = cli(root, 'atlas', command, *selection(root, 'atlas', rev, case), expected=1)
-        save(root / f'{case}.json', json.loads(error))
+        save(root / f'{"declaration-conflict" if case == "conflict" else case}.json', json.loads(error))
         assert before == snapshot(root / 'atlas')
     save(root / 'assertions-prepare.json', {'read_only_inspection': True, 'inherit_replace_exclude': True,
                                           'actionable_invalid_declarations': True, 'prerequisite_before_mutation': True})

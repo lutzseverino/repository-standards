@@ -325,5 +325,6 @@
   "snapshots/recovery-recovery-before-agent.json": "919bf74797b25b2db22c519c364faadc3ad9a03f27dc9c4cb5423485abc717d7",
   "snapshots/retirement-before.json": "1a13ce1848901e276d0e4740cc95f3f02c2ec7a6a6a7c90433f60f828b514e55",
   "snapshots/retirement-blocked.json": "1a13ce1848901e276d0e4740cc95f3f02c2ec7a6a6a7c90433f60f828b514e55",
-  "snapshots/retirement-retained.json": "faa7f0b141b20ae6892e5234ec05f1d4b5eeb79ffd203aa6d1cf71bc67a0a62a"
+  "snapshots/retirement-retained.json": "faa7f0b141b20ae6892e5234ec05f1d4b5eeb79ffd203aa6d1cf71bc67a0a62a",
+  "declaration-conflict.json": "d2c53ffd796d151ffbdd71caead281db7956551b39f85334163abca221226d1b"
 }
