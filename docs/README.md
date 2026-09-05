@@ -73,19 +73,28 @@ standards documentation.
   through drift-checked pointers; superseded in part by ADR 0016.
 - [Compose product-neutral ecosystem profiles](adr/0014-compose-product-neutral-ecosystem-profiles.md):
   select every applicable ecosystem profile while keeping product
-  implementation and guidance outside mechanical conformance.
+  implementation and guidance outside mechanical conformance; superseded for
+  replacement product planning by ADR 0017.
 - [Bootstrap through thin user-scoped skills](adr/0015-bootstrap-through-thin-user-scoped-skills.md):
   install only the two public entry skills globally, select one immutable
   release, and delegate lifecycle behavior to its release-pinned environment.
 - [Separate the capability platform from policy packs](adr/0016-separate-capability-platform-from-policy-packs.md):
   provide shared safe repository operations independently of declarative,
-  selectable, authorable, and forkable policy.
+  selectable, authorable, and forkable policy; superseded by ADR 0017.
+
+- [Adopt independent complete profiles through shared system skills](adr/0017-independent-profiles-and-shared-adoption.md):
+  replace the former policy matrix with independently authored complete profiles,
+  trusted author scripts, retained independent pins, and real contextual adoption.
 
 ## Design evidence
 
-- [Policy resolver model](policy-resolver-model.md): settled logical shapes,
+- [Policy resolver model](policy-resolver-model.md): historical logical shapes,
   exclusive and composed ownership rules, diagnostics, migration evidence, and
   production layout assumptions from the throwaway policy-resolution prototype.
+
+- [Independent standards authorship and adoption proof](independent-standards-proof.md):
+  real independent-author adoption, update, and recovery evidence; the complete
+  acceptance map, replacement-model findings, and remaining public-rehearsal gaps.
 
 ## Agent configuration
 

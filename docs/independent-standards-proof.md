@@ -53,7 +53,7 @@ runner. Script results and agent assessments have distinct owners and files.
 | Conflict blocks whole update | Identical `snapshots/conflict-before.json` and `conflict-after.json`, `conflict.json`, and `conflict-reconciliation.json`. The injected local skill edit is explicitly restored to its baseline before the coherent update proceeds. |
 | Failure and recovery | `injected-failure.json`, failure snapshots, `.standards/progress.json`, real `agents/recovery-recovery.*` execution, `.recovery-trace.jsonl`, and `assertions-recovery.json`. Actual partial files survive; the completed first fix runs once and only the failed second fix retries. No rollback is claimed. |
 | Inspectable proof package | Immutable source above, `proof/README.md`, `proof/run.py`, exact zipapp hashes/catalogue, raw command and agent records, snapshots, publisher bundles, and before/after consumer content. This is a local deterministic proof with real contextual model calls, not a public distribution rehearsal. |
-| Learning reconciled before further work | This report, ADR 0017, supersession notice on ADR 0016, glossary updates, and findings returned to #79. [Review-process follow-up #81](https://github.com/lutzseverino/repository-standards/issues/81) remains unready. #79 stays open without `ready-for-agent`; no downstream production tree was specified or dispatched. |
+| Learning reconciled before further work | This report, ADR 0017, supersession notices on ADRs 0014 and 0016, glossary updates, and findings returned to #79. [Review-process follow-up #81](https://github.com/lutzseverino/repository-standards/issues/81) remains unready. #79 stays open without `ready-for-agent`; no downstream production tree was specified or dispatched. |
 
 ## Contextual usefulness assessment
 

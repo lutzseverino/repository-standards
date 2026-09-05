@@ -48,14 +48,14 @@ environment.
   through drift-checked pointers; superseded in part by ADR 0016.
 - [Compose product-neutral ecosystem profiles](0014-compose-product-neutral-ecosystem-profiles.md):
   select every applicable ecosystem profile while keeping product
-  implementation and guidance outside mechanical conformance.
+  implementation and guidance outside mechanical conformance; superseded for
+  replacement product planning by ADR 0017.
 - [Bootstrap through thin user-scoped skills](0015-bootstrap-through-thin-user-scoped-skills.md):
   install only the two public entry skills globally, select one immutable
   release, and delegate lifecycle behavior to its release-pinned environment.
 - [Separate the capability platform from policy packs](0016-separate-capability-platform-from-policy-packs.md):
   provide shared safe repository operations independently of declarative,
   selectable, authorable, and forkable policy; superseded by ADR 0017.
-
 - [Adopt independent complete profiles through shared system skills](0017-independent-profiles-and-shared-adoption.md):
   replace the former policy matrix with independently authored complete profiles,
   trusted author scripts, retained independent pins, and real contextual adoption.
