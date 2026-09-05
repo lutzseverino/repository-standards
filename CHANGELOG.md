@@ -9,6 +9,10 @@ and standards releases use semantic versioning.
 
 ### Added
 
+- Record the independent-author adoption proof and reconcile the replacement
+  profile model, shared adoption boundary, retained pins, and discovery gaps
+  before production ticketing.
+
 - Record the tested policy-resolver model for independent pack and workflow
   selection, offline integrity, exclusive and composed ownership, provenance
   explanation, and exact `5.0.0` migration inputs before production schema

@@ -54,4 +54,8 @@ environment.
   release, and delegate lifecycle behavior to its release-pinned environment.
 - [Separate the capability platform from policy packs](0016-separate-capability-platform-from-policy-packs.md):
   provide shared safe repository operations independently of declarative,
-  selectable, authorable, and forkable policy.
+  selectable, authorable, and forkable policy; superseded by ADR 0017.
+
+- [Adopt independent complete profiles through shared system skills](0017-independent-profiles-and-shared-adoption.md):
+  replace the former policy matrix with independently authored complete profiles,
+  trusted author scripts, retained independent pins, and real contextual adoption.
